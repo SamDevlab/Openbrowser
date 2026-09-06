@@ -54,22 +54,61 @@ void TestUnknownTabRejectsHistoryCommands() {
     Require(engine.commands.empty(), "invalid history commands never cross engine boundary");
 }
 
+void TestDiscardedTabRejectsHistoryCommands() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(session.OpenTab(MakeTab("active", "https://active.test")), "open active tab");
+    Require(session.OpenTab(MakeTab("background", "https://background.test"), false), "open background tab");
+    Require(session.DiscardTab("background"), "discard background tab");
+    Require(session.FindTab("background")->lifecycle == openbrowser::core::TabLifecycle::Discarded, "tab is discarded");
+
+    const auto command_count_before = engine.commands.size();
+    Require(!session.GoBack("background"), "reject back for discarded tab");
+    Require(!session.GoForward("background"), "reject forward for discarded tab");
+    Require(!session.Reload("background"), "reject reload for discarded tab");
+    Require(engine.commands.size() == command_count_before, "discarded tab history commands never cross engine boundary");
+}
+
 void TestSuspendedTabResumesBeforeHistoryCommand() {
     openbrowser::tests::FakeBrowserEngine engine;
     openbrowser::core::BrowserSession session(engine);
 
     Require(session.OpenTab(MakeTab("active", "https://active.test")), "open active tab");
     Require(session.OpenTab(MakeTab("background", "https://background.test"), false), "open background tab");
-    Require(session.SuspendTab("background"), "suspend background tab");
 
-    const auto command_count_before_back = engine.commands.size();
+    // Test Back command resumes suspended tab
+    Require(session.SuspendTab("background"), "suspend background tab for back");
+    auto command_count_before = engine.commands.size();
     Require(session.GoBack("background"), "back resumes suspended tab");
-    Require(engine.commands.size() == command_count_before_back + 2, "resume and back are emitted");
-    Require(engine.commands[command_count_before_back].type == openbrowser::tests::EngineCommandType::Resume, "resume occurs before history navigation");
-    Require(engine.commands[command_count_before_back + 1].type == openbrowser::tests::EngineCommandType::GoBack, "back follows resume");
+    Require(engine.commands.size() == command_count_before + 2, "resume and back are emitted");
+    Require(engine.commands[command_count_before].type == openbrowser::tests::EngineCommandType::Resume, "resume occurs before back");
+    Require(engine.commands[command_count_before + 1].type == openbrowser::tests::EngineCommandType::GoBack, "back follows resume");
     Require(
         session.FindTab("background")->lifecycle == openbrowser::core::TabLifecycle::Background,
         "history command leaves resumed non-active tab in background lifecycle");
+
+    // Test Forward command resumes suspended tab
+    Require(session.SuspendTab("background"), "suspend background tab for forward");
+    command_count_before = engine.commands.size();
+    Require(session.GoForward("background"), "forward resumes suspended tab");
+    Require(engine.commands.size() == command_count_before + 2, "resume and forward are emitted");
+    Require(engine.commands[command_count_before].type == openbrowser::tests::EngineCommandType::Resume, "resume occurs before forward");
+    Require(engine.commands[command_count_before + 1].type == openbrowser::tests::EngineCommandType::GoForward, "forward follows resume");
+    Require(
+        session.FindTab("background")->lifecycle == openbrowser::core::TabLifecycle::Background,
+        "forward command leaves resumed non-active tab in background lifecycle");
+
+    // Test Reload command resumes suspended tab
+    Require(session.SuspendTab("background"), "suspend background tab for reload");
+    command_count_before = engine.commands.size();
+    Require(session.Reload("background"), "reload resumes suspended tab");
+    Require(engine.commands.size() == command_count_before + 2, "resume and reload are emitted");
+    Require(engine.commands[command_count_before].type == openbrowser::tests::EngineCommandType::Resume, "resume occurs before reload");
+    Require(engine.commands[command_count_before + 1].type == openbrowser::tests::EngineCommandType::Reload, "reload follows resume");
+    Require(
+        session.FindTab("background")->lifecycle == openbrowser::core::TabLifecycle::Background,
+        "reload command leaves resumed non-active tab in background lifecycle");
 }
 
 }  // namespace
@@ -77,6 +116,7 @@ void TestSuspendedTabResumesBeforeHistoryCommand() {
 int main() {
     TestHistoryCommandsReachEngine();
     TestUnknownTabRejectsHistoryCommands();
+    TestDiscardedTabRejectsHistoryCommands();
     TestSuspendedTabResumesBeforeHistoryCommand();
 
     if (failures != 0) {

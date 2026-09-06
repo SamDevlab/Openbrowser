@@ -33,6 +33,7 @@ public:
     [[nodiscard]] bool Reload(const TabId& tab_id);
     [[nodiscard]] bool SuspendTab(const TabId& tab_id);
     [[nodiscard]] bool ResumeTab(const TabId& tab_id);
+    [[nodiscard]] bool DiscardTab(const TabId& tab_id);
 
     [[nodiscard]] const Tab* FindTab(const TabId& tab_id) const;
     [[nodiscard]] const std::vector<Tab>& Tabs() const noexcept;

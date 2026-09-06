@@ -181,6 +181,18 @@ bool BrowserSession::ResumeTab(const TabId& tab_id) {
     return true;
 }
 
+bool BrowserSession::DiscardTab(const TabId& tab_id) {
+    const auto it = FindMutable(tab_id);
+    if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded || it->lifecycle == TabLifecycle::Active) {
+        return false;
+    }
+
+    engine_.CloseTab(tab_id);
+    it->lifecycle = TabLifecycle::Discarded;
+    NotifyObservers();
+    return true;
+}
+
 const Tab* BrowserSession::FindTab(const TabId& tab_id) const {
     const auto it = std::find_if(tabs_.cbegin(), tabs_.cend(), [&tab_id](const Tab& tab) { return tab.id == tab_id; });
     return it == tabs_.cend() ? nullptr : &(*it);
