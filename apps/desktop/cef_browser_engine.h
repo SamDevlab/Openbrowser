@@ -21,6 +21,9 @@ class CefBrowserEngine final : public engine::BrowserEngine, public CefBaseRefCo
 public:
     explicit CefBrowserEngine(CefRefPtr<CefPanel> browser_host);
 
+    CefBrowserEngine(const CefBrowserEngine&) = delete;
+    CefBrowserEngine& operator=(const CefBrowserEngine&) = delete;
+
     void SetEventSink(engine::BrowserEngineEventSink* sink) noexcept override;
     void CreateTab(const core::Tab& tab) override;
     void CloseTab(const core::TabId& tab_id) override;
@@ -58,6 +61,7 @@ private:
         CefRefPtr<CefBrowserView> view;
         CefRefPtr<CefClient> client;
         std::optional<std::string> queued_navigation;
+        bool browser_created{false};
         bool closing{false};
     };
 
@@ -76,9 +80,9 @@ private:
     std::size_t live_browser_count_{0};
     bool window_close_requested_{false};
     bool window_destroyed_{false};
+    bool message_loop_quit_requested_{false};
 
     IMPLEMENT_REFCOUNTING(CefBrowserEngine);
-    DISALLOW_COPY_AND_ASSIGN(CefBrowserEngine);
 };
 
 }  // namespace openbrowser::desktop
