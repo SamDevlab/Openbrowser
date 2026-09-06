@@ -16,7 +16,7 @@ class BrowserEngine {
 public:
     virtual ~BrowserEngine() = default;
 
-    virtual void SetEventSink(BrowserEngineEventSink* sink) = 0;
+    virtual void SetEventSink(BrowserEngineEventSink* sink) noexcept = 0;
     virtual void CreateTab(const core::Tab& tab) = 0;
     virtual void CloseTab(const core::TabId& tab_id) = 0;
     virtual void ActivateTab(const core::TabId& tab_id) = 0;
