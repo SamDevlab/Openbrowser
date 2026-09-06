@@ -24,6 +24,9 @@ public:
     [[nodiscard]] bool CloseTab(const TabId& tab_id);
     [[nodiscard]] bool ActivateTab(const TabId& tab_id);
     [[nodiscard]] bool Navigate(const TabId& tab_id, std::string url);
+    [[nodiscard]] bool GoBack(const TabId& tab_id);
+    [[nodiscard]] bool GoForward(const TabId& tab_id);
+    [[nodiscard]] bool Reload(const TabId& tab_id);
     [[nodiscard]] bool SuspendTab(const TabId& tab_id);
     [[nodiscard]] bool ResumeTab(const TabId& tab_id);
 
@@ -41,6 +44,7 @@ private:
     using TabIterator = std::vector<Tab>::iterator;
 
     [[nodiscard]] TabIterator FindMutable(const TabId& tab_id);
+    [[nodiscard]] bool PrepareTabForNavigationCommand(const TabId& tab_id);
     void DemoteActiveTab();
     void ActivateAfterClose(std::size_t preferred_index);
 
