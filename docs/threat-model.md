@@ -13,7 +13,9 @@ Openbrowser may eventually handle:
 - Focus Queue and workspace context;
 - custom scripts and CSS;
 - sync/configuration data;
-- network and proxy settings.
+- network and proxy settings;
+- developer network traces and captures;
+- compatibility regression artifacts and site-specific mitigation rules.
 
 ## Trust boundaries
 
@@ -36,6 +38,24 @@ Configuration packs are untrusted input. Imports require schema validation and a
 ### Transfers
 
 Torrent metadata, peers, trackers, HTTP response metadata and downloaded files are untrusted. Transfer engines should run with narrow network/filesystem permissions and write through a brokered destination policy.
+
+### Developer network traces
+
+Network traces are sensitive even when captured only from the browser. They can contain authentication headers, cookies, API payloads, internal hostnames, URLs, personal data and security tokens.
+
+Network Lab capture therefore has its own trust boundary:
+
+- capture is off/bounded by default;
+- secrets are redacted by default;
+- trace files are user-approved local artifacts;
+- imported trace files are untrusted input;
+- optional raw packet-capture helpers do not gain browser-vault authority.
+
+### Compatibility mitigations
+
+Compatibility rules can alter observable browser behavior and therefore can weaken privacy or security if over-broad.
+
+A compatibility mitigation must be scoped, versioned, reviewable and covered by a regression test. A single site breakage cannot justify silently disabling protections globally.
 
 ## Initial abuse cases
 
@@ -60,6 +80,21 @@ Torrent metadata, peers, trackers, HTTP response metadata and downloaded files a
 7. Customization weakens fingerprinting protections by leaking local UI choices to web-visible surfaces.
    - Mitigation: keep browser chrome customization separate from normalized web-exposed properties; test the boundary.
 
+8. Network Lab records credentials or session secrets and persists them indefinitely.
+   - Mitigation: sensitive-header redaction, bounded body capture, bounded in-memory buffers, explicit recording/export and stricter private-profile retention.
+
+9. A malicious trace file exploits the developer-tool parser.
+   - Mitigation: treat trace imports as untrusted, use versioned schemas, bounds checks, parser fuzzing and no implicit execution of embedded content.
+
+10. A packet-capture feature expands into a permanently privileged background process.
+    - Mitigation: raw capture is optional, explicitly started, visibly active, time/size bounded and isolated from browser vault/profile authority.
+
+11. A site-specific compatibility workaround weakens privacy/security for unrelated sites.
+    - Mitigation: origin/version scoping, privacy-impact classification, expiration/review condition and automated regression coverage.
+
+12. Compatibility telemetry uploads a user's failing URL or network trace automatically.
+    - Mitigation: compatibility artifacts remain local by default; any report submission is explicit and redacted.
+
 ## Security invariants
 
 - Browser-owned egress is attributable to a declared capability.
@@ -68,6 +103,11 @@ Torrent metadata, peers, trackers, HTTP response metadata and downloaded files a
 - Renderer compromise is assumed possible and must not grant vault or unrestricted filesystem authority.
 - Imported configuration cannot silently import secrets or executable behavior.
 - Disabling sync cannot delete or invalidate local source-of-truth state.
+- Enabling Network Lab does not grant unrestricted access to vault/autofill secrets.
+- Raw packet capture, if implemented, is never required for normal browser operation.
+- Developer traces are not silently synchronized, uploaded or included in configuration exports.
+- A compatibility exception cannot silently broaden beyond its declared origin/version scope.
+- Site compatibility does not justify globally disabling privacy/security policy without an explicit architectural decision.
 
 ## Not a claim of anonymity
 

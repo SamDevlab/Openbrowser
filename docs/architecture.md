@@ -2,7 +2,7 @@
 
 ## Goal
 
-Openbrowser must be able to adopt mature components without letting those components become the domain architecture. The renderer, sync backend, filter source, DNS implementation or transfer engine may change; browser intent and policy must remain stable.
+Openbrowser must be able to adopt mature components without letting those components become the domain architecture. The renderer, sync backend, filter source, DNS implementation, compatibility harness, developer observability source or transfer engine may change; browser intent and policy must remain stable.
 
 ## Dependency rule
 
@@ -19,9 +19,15 @@ Openbrowser core <---- provider ports / engine ports
         ^                       ^
         |                       |
 provider adapters        engine adapters
+                                |
+                       normalized observations
+                                |
+                 compatibility / developer tools
 ```
 
 The core must not include Chromium, CEF, WebView, hosted-service SDKs or platform UI headers.
+
+Compatibility and developer tooling may consume normalized engine/network observations, but they must not become an alternate source of browser-domain truth.
 
 ## Core domains
 
@@ -42,7 +48,7 @@ Initial session invariants:
 
 Horizontal tabs and vertical tabs are UI projections over this same model. They must never own competing tab lifecycle state.
 
-The current engine port is command-oriented. Normalized asynchronous engine events will be introduced before navigation commit state, crash recovery and renderer-failure handling are considered complete.
+Normalized asynchronous engine events exist before navigation commit state, crash recovery and renderer-failure handling are considered complete. Calling `Navigate()` only issues intent; engine events confirm what actually happened.
 
 ### Tabs
 
@@ -101,6 +107,69 @@ A deeper Chromium integration or maintained fork can replace CEF when privacy, p
 
 CMake is the Openbrowser core build system. A future direct Chromium adapter may use Chromium's native GN/Ninja toolchain behind this boundary.
 
+## Observation boundary
+
+Engine observations are intentionally separated from engine commands.
+
+The same normalized-observation principle extends to developer network tooling and compatibility diagnostics:
+
+```text
+CEF callbacks / CDP / Chromium diagnostics
+                  |
+                  v
+          adapter normalization
+                  |
+          +-------+--------+
+          |                |
+          v                v
+ BrowserSession events   Network Trace Model
+                             |
+                    +--------+---------+
+                    |                  |
+                    v                  v
+              Network Lab       Compatibility tests
+```
+
+A CDP request ID, CEF browser handle or Chromium net-log identifier is adapter state. It must not become a stable persisted Openbrowser identity.
+
+## Web compatibility boundary
+
+Openbrowser deliberately changes browser policy, so compatibility must be measured rather than assumed.
+
+The future compatibility system will combine:
+
+- Web Platform Tests;
+- deterministic site scenarios;
+- rendering/reftest comparisons;
+- normalized network/browser observations;
+- differential execution against a pinned upstream Chromium reference.
+
+Every reproducible difference must be classified before it becomes a permanent workaround.
+
+Compatibility mitigations are data/policy records with narrow origin/version scope. They are not arbitrary patches hidden in UI code.
+
+A compatibility fix must never silently weaken global privacy policy to repair one site.
+
+See [`web-compatibility.md`](web-compatibility.md).
+
+## Developer Network Lab boundary
+
+The future Network Lab is a native developer-observability subsystem.
+
+It operates at three possible depths:
+
+1. request/response observation;
+2. connection/transport diagnostics;
+3. optional privileged packet capture through a dedicated helper.
+
+The first two levels should work without system-wide packet capture. Browser-level data should be sourced from CEF request/resource callbacks, CDP Network events and deeper Chromium diagnostics when available, then normalized into an Openbrowser-owned trace model.
+
+Raw packet capture, if implemented, is a separate privileged adapter. It must never be a prerequisite for ordinary browsing or normal developer tools.
+
+Network Lab is also the explanation surface for native privacy/filter decisions and browser-owned egress.
+
+See [`developer-network-inspector.md`](developer-network-inspector.md).
+
 ## Persistence
 
 Local persistence will be split by sensitivity:
@@ -108,9 +177,12 @@ Local persistence will be split by sensitivity:
 - normal configuration/state;
 - browsing state/history;
 - temporary/session state;
-- secrets/vault data.
+- secrets/vault data;
+- optional developer traces/diagnostic captures.
 
 Portable configuration exports must be schema-versioned and must exclude secret classes by default.
+
+Developer traces are not configuration and must never be silently included in configuration exports.
 
 ## Browser-owned network activity
 
@@ -122,9 +194,13 @@ Browser-owned egress is separate from page network activity. Every browser-owned
 - DNS/provider traffic;
 - crash reports;
 - pack/registry access;
-- external services.
+- external services;
+- HTTP transfers;
+- BitTorrent tracker/peer traffic where supported.
 
 The long-term UI should be able to explain why Openbrowser itself initiated a connection.
+
+Network Lab consumes this attribution data so a developer/user can filter browser-owned traffic separately from page traffic.
 
 ## Dependency acquisition
 
@@ -149,3 +225,5 @@ UI -> TransferBroker -> protocol worker -> FileBroker -> approved destination
 ```
 
 A BitTorrent worker must not gain general browser-profile access merely because it runs in the browser distribution.
+
+Network Lab may observe transfer metadata through an explicit telemetry port, but observation does not grant control over transfer workers or access to unrestricted payload data.
