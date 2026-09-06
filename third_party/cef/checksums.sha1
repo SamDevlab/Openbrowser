@@ -1,0 +1,10 @@
+# Openbrowser CEF binary distribution trust anchor.
+#
+# Version: 151.3.17+gf059e67+chromium-151.0.7922.138
+# Source: https://cef-builds.spotifycdn.com
+#
+# SHA-1 is used because it is the digest format published by the official CEF
+# binary distribution service. This file is intentionally versioned so CI does
+# not trust a checksum downloaded alongside the archive in the same run.
+
+9ff369279d2c5ddfe491370ed3a10a7c756f5eca  cef_binary_151.3.17+gf059e67+chromium-151.0.7922.138_linux64.tar.bz2

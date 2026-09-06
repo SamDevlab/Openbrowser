@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/tabs/tab.h"
+#include "devtools/network/network_observation_sink.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -47,10 +48,11 @@ struct CapturePolicy {
     bool redact_sensitive_headers{true};
 };
 
-class NetworkTraceBuffer {
+class NetworkTraceBuffer final : public NetworkObservationSink {
 public:
     explicit NetworkTraceBuffer(CapturePolicy policy = {});
 
+    void OnNetworkEvent(NetworkEvent event) override;
     void Add(NetworkEvent event);
     void Clear() noexcept;
 

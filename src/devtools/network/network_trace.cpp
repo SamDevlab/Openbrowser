@@ -23,6 +23,10 @@ NetworkTraceBuffer::NetworkTraceBuffer(CapturePolicy policy) : policy_(std::move
     }
 }
 
+void NetworkTraceBuffer::OnNetworkEvent(NetworkEvent event) {
+    Add(std::move(event));
+}
+
 void NetworkTraceBuffer::Add(NetworkEvent event) {
     if (policy_.redact_sensitive_headers) {
         RedactSensitiveHeaders(event.headers);

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(Openbrowser VERSION 0.1.0 LANGUAGES CXX)
+project(Openbrowser VERSION 0.1.0 LANGUAGES C CXX)
 
 option(OPENBROWSER_BUILD_TESTS "Build Openbrowser core tests" ON)
 option(OPENBROWSER_BUILD_DESKTOP "Configure the pinned CEF desktop adapter" OFF)
@@ -43,19 +43,27 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_core_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_core_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_session_reentrant_tests tests/session_reentrant_tests.cpp)
+    target_link_libraries(openbrowser_session_reentrant_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_session_reentrant_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_session_reentrant_tests PRIVATE cxx_std_20)
+
     add_executable(openbrowser_network_trace_tests tests/network_trace_tests.cpp)
     target_link_libraries(openbrowser_network_trace_tests PRIVATE Openbrowser::NetworkTrace)
     target_compile_features(openbrowser_network_trace_tests PRIVATE cxx_std_20)
 
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_network_trace_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_network_trace_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
+    add_test(NAME openbrowser.session_reentrant COMMAND openbrowser_session_reentrant_tests)
     add_test(NAME openbrowser.network_trace COMMAND openbrowser_network_trace_tests)
 endif()
 

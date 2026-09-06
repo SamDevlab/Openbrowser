@@ -32,6 +32,11 @@ public:
 
     void CreateTab(const core::Tab& tab) override {
         commands.push_back({.type = EngineCommandType::Create, .tab_id = tab.id, .url = tab.url});
+
+        if (emit_initial_navigation_during_create && event_sink != nullptr) {
+            event_sink->OnNavigationStarted({.tab_id = tab.id, .url = tab.url});
+            event_sink->OnNavigationCommitted({.tab_id = tab.id, .url = tab.url});
+        }
     }
 
     void CloseTab(const core::TabId& tab_id) override {
@@ -104,6 +109,7 @@ public:
     }
 
     engine::BrowserEngineEventSink* event_sink{nullptr};
+    bool emit_initial_navigation_during_create{false};
     std::vector<EngineCommand> commands;
 };
 
