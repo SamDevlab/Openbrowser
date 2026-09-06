@@ -85,17 +85,17 @@ void CefTabClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
     engine_->NotifyBrowserCreated(tab_id_, browser);
 }
 
-void CefTabClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
+void CefTabClient::OnBeforeClose(CefRefPtr<CefBrowser> /*browser*/) {
     CEF_REQUIRE_UI_THREAD();
     engine_->NotifyBrowserBeforeClose(tab_id_);
 }
 
 bool CefTabClient::OnBeforeBrowse(
-    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefBrowser> /*browser*/,
     CefRefPtr<CefFrame> frame,
     CefRefPtr<CefRequest> request,
-    const bool user_gesture,
-    const bool is_redirect) {
+    const bool /*user_gesture*/,
+    const bool /*is_redirect*/) {
     CEF_REQUIRE_UI_THREAD();
     if (frame && frame->IsMain()) {
         engine_->NotifyNavigationStarted(tab_id_, request->GetURL().ToString());
@@ -104,9 +104,9 @@ bool CefTabClient::OnBeforeBrowse(
 }
 
 void CefTabClient::OnLoadStart(
-    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefBrowser> /*browser*/,
     CefRefPtr<CefFrame> frame,
-    const TransitionType transition_type) {
+    const TransitionType /*transition_type*/) {
     CEF_REQUIRE_UI_THREAD();
     if (frame && frame->IsMain()) {
         engine_->NotifyNavigationCommitted(tab_id_, frame->GetURL().ToString());
@@ -114,7 +114,7 @@ void CefTabClient::OnLoadStart(
 }
 
 void CefTabClient::OnLoadError(
-    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefBrowser> /*browser*/,
     CefRefPtr<CefFrame> frame,
     const ErrorCode error_code,
     const CefString& error_text,
@@ -129,13 +129,13 @@ void CefTabClient::OnLoadError(
     }
 }
 
-void CefTabClient::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString& title) {
+void CefTabClient::OnTitleChange(CefRefPtr<CefBrowser> /*browser*/, const CefString& title) {
     CEF_REQUIRE_UI_THREAD();
     engine_->NotifyTitleChanged(tab_id_, title.ToString());
 }
 
 void CefTabClient::OnRenderProcessTerminated(
-    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefBrowser> /*browser*/,
     const TerminationStatus status,
     const int error_code,
     const CefString& error_string) {
@@ -144,12 +144,12 @@ void CefTabClient::OnRenderProcessTerminated(
 }
 
 CefRefPtr<CefResourceRequestHandler> CefTabClient::GetResourceRequestHandler(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
-    CefRefPtr<CefRequest> request,
-    const bool is_navigation,
-    const bool is_download,
-    const CefString& request_initiator,
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefFrame> /*frame*/,
+    CefRefPtr<CefRequest> /*request*/,
+    const bool /*is_navigation*/,
+    const bool /*is_download*/,
+    const CefString& /*request_initiator*/,
     bool& disable_default_handling) {
     CEF_REQUIRE_IO_THREAD();
     disable_default_handling = false;
@@ -160,10 +160,10 @@ CefRefPtr<CefResourceRequestHandler> CefTabClient::GetResourceRequestHandler(
 }
 
 CefResourceRequestHandler::ReturnValue CefTabClient::OnBeforeResourceLoad(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefFrame> /*frame*/,
     CefRefPtr<CefRequest> request,
-    CefRefPtr<CefCallback> callback) {
+    CefRefPtr<CefCallback> /*callback*/) {
     CEF_REQUIRE_IO_THREAD();
 
     engine_->PostNetworkEvent({
@@ -179,8 +179,8 @@ CefResourceRequestHandler::ReturnValue CefTabClient::OnBeforeResourceLoad(
 }
 
 void CefTabClient::OnResourceRedirect(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefFrame> /*frame*/,
     CefRefPtr<CefRequest> request,
     CefRefPtr<CefResponse> response,
     CefString& new_url) {
@@ -198,8 +198,8 @@ void CefTabClient::OnResourceRedirect(
 }
 
 bool CefTabClient::OnResourceResponse(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefFrame> /*frame*/,
     CefRefPtr<CefRequest> request,
     CefRefPtr<CefResponse> response) {
     CEF_REQUIRE_IO_THREAD();
@@ -218,8 +218,8 @@ bool CefTabClient::OnResourceResponse(
 }
 
 void CefTabClient::OnResourceLoadComplete(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefFrame> /*frame*/,
     CefRefPtr<CefRequest> request,
     CefRefPtr<CefResponse> response,
     const URLRequestStatus status,
