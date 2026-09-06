@@ -16,7 +16,7 @@ Implemented in source:
 - optional Network Lab Level 1 resource observation behind `--network-lab`;
 - Openbrowser-owned request trace IDs instead of durable CEF IDs;
 - Linux and Windows entrypoints following CEF multi-process/sandbox bootstrap patterns;
-- an explicit CEF smoke workflow that downloads only the exact pinned stable distribution and verifies the upstream SHA-1 before compiling.
+- an explicit CEF smoke workflow that downloads only the exact pinned stable distribution and verifies it against the checksum published by the official CEF build service before compiling.
 
 ## Deliberate limitations
 
