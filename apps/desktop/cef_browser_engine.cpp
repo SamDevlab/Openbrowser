@@ -64,8 +64,6 @@ void CefBrowserEngine::CreateTab(const core::Tab& tab) {
         return;
     }
 
-    // BrowserSession will issue ActivateTab separately for the active logical
-    // tab. New surfaces remain hidden until that command arrives.
     view->SetVisible(false);
 
     auto [surface_it, inserted] = surfaces_.emplace(
@@ -107,8 +105,6 @@ void CefBrowserEngine::CloseTab(const core::TabId& tab_id) {
         return;
     }
 
-    // The BrowserView may be closed before CEF creates the underlying browser.
-    // In that case no lifespan callback will arrive, so clean up synchronously.
     browser_host_->RemoveChildView(surface->second.view);
     surfaces_.erase(surface);
     browser_host_->Layout();
@@ -149,6 +145,30 @@ void CefBrowserEngine::Navigate(const engine::NavigationRequest& request) {
     }
 }
 
+void CefBrowserEngine::GoBack(const core::TabId& tab_id) {
+    CEF_REQUIRE_UI_THREAD();
+    CefRefPtr<CefBrowser> browser = BrowserForCommand(tab_id);
+    if (browser && browser->CanGoBack()) {
+        browser->GoBack();
+    }
+}
+
+void CefBrowserEngine::GoForward(const core::TabId& tab_id) {
+    CEF_REQUIRE_UI_THREAD();
+    CefRefPtr<CefBrowser> browser = BrowserForCommand(tab_id);
+    if (browser && browser->CanGoForward()) {
+        browser->GoForward();
+    }
+}
+
+void CefBrowserEngine::Reload(const core::TabId& tab_id) {
+    CEF_REQUIRE_UI_THREAD();
+    CefRefPtr<CefBrowser> browser = BrowserForCommand(tab_id);
+    if (browser) {
+        browser->Reload();
+    }
+}
+
 void CefBrowserEngine::Suspend(const core::TabId& tab_id) {
     CEF_REQUIRE_UI_THREAD();
 
@@ -157,8 +177,6 @@ void CefBrowserEngine::Suspend(const core::TabId& tab_id) {
         return;
     }
 
-    // M1 treats suspension as a visibility/resource hint. Renderer discard is
-    // intentionally deferred until a deeper Chromium lifecycle integration.
     surface->second.view->SetVisible(false);
 }
 
@@ -348,6 +366,14 @@ CefBrowserEngine::SurfaceMap::iterator CefBrowserEngine::FindSurface(const core:
 CefBrowserEngine::SurfaceMap::const_iterator CefBrowserEngine::FindSurface(
     const core::TabId& tab_id) const {
     return surfaces_.find(tab_id);
+}
+
+CefRefPtr<CefBrowser> CefBrowserEngine::BrowserForCommand(const core::TabId& tab_id) {
+    const auto surface = FindSurface(tab_id);
+    if (surface == surfaces_.end() || surface->second.closing || !surface->second.view) {
+        return nullptr;
+    }
+    return surface->second.view->GetBrowser();
 }
 
 void CefBrowserEngine::HideActiveSurface() {
