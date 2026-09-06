@@ -26,6 +26,9 @@ class CefTabClient final : public CefClient,
 public:
     CefTabClient(core::TabId tab_id, CefRefPtr<CefBrowserEngine> engine);
 
+    CefTabClient(const CefTabClient&) = delete;
+    CefTabClient& operator=(const CefTabClient&) = delete;
+
     CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
     CefRefPtr<CefLoadHandler> GetLoadHandler() override;
@@ -111,7 +114,6 @@ private:
     std::uint64_t next_trace_request_id_{1};
 
     IMPLEMENT_REFCOUNTING(CefTabClient);
-    DISALLOW_COPY_AND_ASSIGN(CefTabClient);
 };
 
 }  // namespace openbrowser::desktop
