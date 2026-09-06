@@ -1,9 +1,12 @@
 #include "core/capabilities/capability_policy.h"
 #include "core/focus_queue/focus_queue.h"
+#include "core/session/browser_session.h"
+#include "fakes/fake_browser_engine.h"
 
 #include <iostream>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -14,6 +17,16 @@ void Require(const bool condition, const std::string& message) {
         ++failures;
         std::cerr << "FAIL: " << message << '\n';
     }
+}
+
+openbrowser::core::Tab MakeTab(std::string id, std::string url, std::string title) {
+    return openbrowser::core::Tab{
+        .id = std::move(id),
+        .url = std::move(url),
+        .title = std::move(title),
+        .lifecycle = openbrowser::core::TabLifecycle::Background,
+        .workspace_id = std::nullopt,
+    };
 }
 
 void TestFocusQueueIdentityAndOrdering() {
@@ -96,6 +109,63 @@ void TestCapabilityPrecedence() {
         "session override has highest precedence");
 }
 
+void TestBrowserSessionActivationInvariant() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(session.OpenTab(MakeTab("a", "https://a.test", "A")), "open first tab");
+    Require(session.ActiveTabId() == std::optional<openbrowser::core::TabId>{"a"}, "first tab is active");
+    Require(session.OpenTab(MakeTab("b", "https://b.test", "B")), "open second tab");
+    Require(session.ActiveTabId() == std::optional<openbrowser::core::TabId>{"b"}, "new active tab replaces previous active tab");
+
+    const auto* a = session.FindTab("a");
+    const auto* b = session.FindTab("b");
+    Require(a != nullptr && a->lifecycle == openbrowser::core::TabLifecycle::Background, "previous active tab becomes background");
+    Require(b != nullptr && b->lifecycle == openbrowser::core::TabLifecycle::Active, "new tab is active");
+}
+
+void TestBrowserSessionBackgroundAndSuspension() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(session.OpenTab(MakeTab("a", "https://a.test", "A")), "open active tab");
+    Require(session.OpenTab(MakeTab("b", "https://b.test", "B"), false), "open background tab");
+    Require(!session.SuspendTab("a"), "active tab cannot be suspended");
+    Require(session.SuspendTab("b"), "background tab can be suspended");
+    Require(session.FindTab("b")->lifecycle == openbrowser::core::TabLifecycle::Suspended, "background lifecycle becomes suspended");
+    Require(session.ActivateTab("b"), "activating suspended tab resumes it");
+    Require(session.FindTab("b")->lifecycle == openbrowser::core::TabLifecycle::Active, "resumed tab becomes active");
+    Require(engine.Count(openbrowser::tests::EngineCommandType::Resume) == 1, "engine receives resume before activation");
+}
+
+void TestBrowserSessionNavigationAndCloseFallback() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(session.OpenTab(MakeTab("a", "https://a.test", "A")), "open tab a");
+    Require(session.OpenTab(MakeTab("b", "https://b.test", "B")), "open tab b");
+    Require(session.OpenTab(MakeTab("c", "https://c.test", "C"), false), "open tab c in background");
+
+    Require(session.Navigate("b", "https://b.test/docs"), "navigate active tab");
+    Require(session.FindTab("b")->url == "https://b.test/docs", "session records requested URL");
+    Require(engine.commands.back().type == openbrowser::tests::EngineCommandType::Navigate, "engine receives navigation command");
+
+    Require(session.CloseTab("b"), "close active tab");
+    Require(session.ActiveTabId().has_value(), "closing active tab selects fallback");
+    Require(*session.ActiveTabId() == "c", "fallback prefers tab at closed index");
+    Require(session.FindTab("c")->lifecycle == openbrowser::core::TabLifecycle::Active, "fallback tab becomes active");
+}
+
+void TestBrowserSessionRejectsInvalidIdentity() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(!session.OpenTab(MakeTab("", "https://a.test", "A")), "reject empty tab id");
+    Require(!session.OpenTab(MakeTab("a", "", "A")), "reject empty URL");
+    Require(session.OpenTab(MakeTab("a", "https://a.test", "A")), "open valid tab");
+    Require(!session.OpenTab(MakeTab("a", "https://duplicate.test", "Duplicate")), "reject duplicate tab id");
+}
+
 }  // namespace
 
 int main() {
@@ -104,6 +174,10 @@ int main() {
     TestOnlyOnePromotedNowItem();
     TestCapabilitiesDenyByDefault();
     TestCapabilityPrecedence();
+    TestBrowserSessionActivationInvariant();
+    TestBrowserSessionBackgroundAndSuspension();
+    TestBrowserSessionNavigationAndCloseFallback();
+    TestBrowserSessionRejectsInvalidIdentity();
 
     if (failures != 0) {
         std::cerr << failures << " test assertion(s) failed\n";
