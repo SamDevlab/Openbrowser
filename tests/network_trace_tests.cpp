@@ -133,6 +133,101 @@ void TestClearResetsCaptureSessionCounters() {
     Require(buffer.Events().front().sequence == 1, "clear starts a new local trace sequence");
 }
 
+class TestObserver final : public openbrowser::devtools::network::NetworkTraceObserver {
+public:
+    void OnTraceEventAppended(const openbrowser::devtools::network::NetworkEvent& event) override {
+        ++appended_count;
+        last_request_id = event.request_id;
+    }
+    void OnTraceCleared() override {
+        ++cleared_count;
+    }
+    int appended_count{0};
+    int cleared_count{0};
+    std::string last_request_id;
+};
+
+void TestObserverNotifications() {
+    using openbrowser::devtools::network::NetworkTraceBuffer;
+
+    NetworkTraceBuffer buffer;
+    TestObserver observer;
+    buffer.AddObserver(&observer);
+
+    buffer.Add(MakeEvent("req-1"));
+    Require(observer.appended_count == 1, "observer notified of appended event");
+    Require(observer.last_request_id == "req-1", "observer received correct request ID");
+
+    buffer.Clear();
+    Require(observer.cleared_count == 1, "observer notified of trace clear");
+
+    buffer.RemoveObserver(&observer);
+    buffer.Add(MakeEvent("req-2"));
+    Require(observer.appended_count == 1, "unregistered observer does not receive events");
+}
+
+void TestAggregateRequests() {
+    using openbrowser::devtools::network::NetworkEventType;
+    using openbrowser::devtools::network::NetworkTraceBuffer;
+    using openbrowser::devtools::network::RequestState;
+
+    NetworkTraceBuffer buffer;
+
+    auto e1 = MakeEvent("req-1");
+    e1.tab_id = "tab-a";
+    e1.method = "GET";
+    e1.url = "https://test.com/api";
+    buffer.Add(e1);
+
+    auto e2 = MakeEvent("req-1");
+    e2.tab_id = "tab-a";
+    e2.type = NetworkEventType::ResponseReceived;
+    e2.status = 200;
+    e2.protocol = "h2";
+    buffer.Add(e2);
+
+    auto e3 = MakeEvent("req-1");
+    e3.tab_id = "tab-a";
+    e3.type = NetworkEventType::DataReceived;
+    e3.transferred_bytes = 1024;
+    buffer.Add(e3);
+
+    auto e4 = MakeEvent("req-1");
+    e4.tab_id = "tab-a";
+    e4.type = NetworkEventType::DataReceived;
+    e4.transferred_bytes = 512;
+    buffer.Add(e4);
+
+    auto e5 = MakeEvent("req-1");
+    e5.tab_id = "tab-a";
+    e5.type = NetworkEventType::RequestFinished;
+    buffer.Add(e5);
+
+    auto e6 = MakeEvent("req-2");
+    e6.tab_id = "tab-b";
+    e6.method = "POST";
+    e6.url = "https://other.com/submit";
+    e6.type = NetworkEventType::RequestFailed;
+    e6.error = "ERR_CONNECTION_REFUSED";
+    buffer.Add(e6);
+
+    const auto all = buffer.AggregateRequests();
+    Require(all.size() == 2, "aggregates 2 requests");
+    Require(all[0].request_id == "req-1", "req-1 id");
+    Require(all[0].status == std::optional<int>{200}, "req-1 status 200");
+    Require(all[0].transferred_bytes == 1536, "req-1 total transferred bytes 1536");
+    Require(all[0].state == RequestState::Finished, "req-1 finished");
+
+    Require(all[1].request_id == "req-2", "req-2 id");
+    Require(all[1].method == "POST", "req-2 method POST");
+    Require(all[1].state == RequestState::Failed, "req-2 state failed");
+    Require(all[1].error == "ERR_CONNECTION_REFUSED", "req-2 error string");
+
+    const auto filtered = buffer.AggregateRequests("tab-a");
+    Require(filtered.size() == 1, "filtered by tab-a returns 1 request");
+    Require(filtered[0].request_id == "req-1", "filtered request is req-1");
+}
+
 }  // namespace
 
 int main() {
@@ -142,6 +237,8 @@ int main() {
     TestBufferIsBoundedAndReportsDroppedEvents();
     TestZeroCapacityIsNormalizedToOne();
     TestClearResetsCaptureSessionCounters();
+    TestObserverNotifications();
+    TestAggregateRequests();
 
     if (failures != 0) {
         std::cerr << failures << " Network Lab test assertion(s) failed\n";

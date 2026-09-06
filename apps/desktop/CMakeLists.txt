@@ -13,6 +13,8 @@ set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     focus_sidebar.h
     tab_strip.cpp
     tab_strip.h
+    network_lab_panel.cpp
+    network_lab_panel.h
 )
 
 if(OS_LINUX)

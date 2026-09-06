@@ -7,6 +7,8 @@
 #include "include/views/cef_panel.h"
 #include "include/views/cef_textfield_delegate.h"
 
+#include <functional>
+
 namespace openbrowser::core {
 class BrowserSession;
 }
@@ -19,7 +21,9 @@ namespace openbrowser::desktop {
 
 class BrowserChrome final : public core::BrowserSessionObserver {
 public:
-    explicit BrowserChrome(core::BrowserSession& session);
+    explicit BrowserChrome(
+        core::BrowserSession& session,
+        std::function<void()> on_toggle_network_lab = nullptr);
     ~BrowserChrome() override;
 
     BrowserChrome(const BrowserChrome&) = delete;
@@ -34,6 +38,7 @@ private:
         Back,
         Forward,
         Reload,
+        ToggleNetworkLab,
     };
 
     class NavigationButtonDelegate;
@@ -46,15 +51,18 @@ private:
     void SyncAddressFromSession(const core::BrowserSession& session);
 
     core::BrowserSession& session_;
+    std::function<void()> on_toggle_network_lab_;
     CefRefPtr<CefPanel> toolbar_;
     CefRefPtr<CefBoxLayout> layout_;
     CefRefPtr<CefLabelButton> back_button_;
     CefRefPtr<CefLabelButton> forward_button_;
     CefRefPtr<CefLabelButton> reload_button_;
     CefRefPtr<CefTextfield> address_bar_;
+    CefRefPtr<CefLabelButton> lab_button_;
     CefRefPtr<CefButtonDelegate> back_delegate_;
     CefRefPtr<CefButtonDelegate> forward_delegate_;
     CefRefPtr<CefButtonDelegate> reload_delegate_;
+    CefRefPtr<CefButtonDelegate> lab_delegate_;
     CefRefPtr<CefTextfieldDelegate> address_delegate_;
     bool address_editing_{false};
 };

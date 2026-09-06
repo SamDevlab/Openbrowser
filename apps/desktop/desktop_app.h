@@ -7,6 +7,7 @@
 #include "core/session/browser_session_observer.h"
 #include "devtools/network/network_trace.h"
 #include "focus_sidebar.h"
+#include "network_lab_panel.h"
 #include "tab_strip.h"
 
 #include "include/cef_app.h"
@@ -38,6 +39,7 @@ private:
     [[nodiscard]] std::string StartupUrl() const;
     [[nodiscard]] std::filesystem::path SessionFilePath() const;
     void SaveCurrentSession(bool clean_shutdown);
+    void ToggleNetworkLab();
 
     CefRefPtr<CefPanel> browser_host_;
     CefRefPtr<CefBrowserEngine> engine_;
@@ -47,6 +49,7 @@ private:
     std::unique_ptr<BrowserChrome> chrome_;
     std::unique_ptr<FocusSidebar> focus_sidebar_;
     std::unique_ptr<devtools::network::NetworkTraceBuffer> network_trace_;
+    std::unique_ptr<NetworkLabPanel> network_lab_panel_;
     std::filesystem::path session_file_path_;
 
     IMPLEMENT_REFCOUNTING(DesktopApp);
