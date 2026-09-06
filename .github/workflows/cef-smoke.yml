@@ -1,0 +1,107 @@
+name: CEF Desktop Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "cmake/OpenbrowserCEF.cmake"
+      - "src/core/**"
+      - "src/devtools/network/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/cef-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "cmake/OpenbrowserCEF.cmake"
+      - "src/core/**"
+      - "src/devtools/network/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/cef-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cef-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CEF_VERSION: 151.3.17+gf059e67+chromium-151.0.7922.138
+  CEF_PLATFORM: linux64
+  CEF_BASE_URL: https://cef-builds.spotifycdn.com
+
+jobs:
+  linux-desktop:
+    name: Linux x64 / CEF 151
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgtk-3-dev ninja-build
+
+      - name: Restore CEF archive cache
+        id: cef-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/cef/*.tar.bz2
+          key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
+
+      - name: Download and verify exact CEF distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/cef
+
+          archive="cef_binary_${CEF_VERSION}_${CEF_PLATFORM}.tar.bz2"
+          encoded_archive="${archive//+/%2B}"
+          archive_path=".cache/cef/${archive}"
+          sha_path="${archive_path}.sha1"
+
+          curl --fail --show-error --silent --location \
+            --retry 3 --retry-all-errors \
+            "${CEF_BASE_URL}/${encoded_archive}.sha1" \
+            --output "${sha_path}"
+
+          upstream_sha1="$(tr -d '[:space:]' < "${sha_path}")"
+          if [[ ! "${upstream_sha1}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "Invalid CEF SHA-1 response" >&2
+            exit 1
+          fi
+
+          echo "Official CEF SHA-1: ${upstream_sha1}"
+
+          if [[ ! -f "${archive_path}" ]]; then
+            curl --fail --show-error --location \
+              --retry 3 --retry-all-errors \
+              "${CEF_BASE_URL}/${encoded_archive}" \
+              --output "${archive_path}"
+          fi
+
+          printf '%s  %s\n' "${upstream_sha1}" "${archive_path}" | sha1sum --check --strict
+
+          rm -rf .cache/cef/extracted
+          mkdir -p .cache/cef/extracted
+          tar -xjf "${archive_path}" -C .cache/cef/extracted
+
+          cef_root="${PWD}/.cache/cef/extracted/cef_binary_${CEF_VERSION}_${CEF_PLATFORM}"
+          test -f "${cef_root}/include/cef_version.h"
+          echo "CEF_ROOT=${cef_root}" >> "${GITHUB_ENV}"
+
+      - name: Configure desktop adapter
+        run: >-
+          cmake -S . -B build-cef -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DOPENBROWSER_BUILD_TESTS=OFF
+          -DOPENBROWSER_BUILD_DESKTOP=ON
+          -DCEF_ROOT="${CEF_ROOT}"
+
+      - name: Build desktop adapter
+        run: cmake --build build-cef --target openbrowser --parallel 2
