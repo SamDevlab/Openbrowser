@@ -156,6 +156,33 @@ void TestBrowserSessionNavigationAndCloseFallback() {
     Require(session.FindTab("c")->lifecycle == openbrowser::core::TabLifecycle::Active, "fallback tab becomes active");
 }
 
+void TestBrowserSessionNormalizesNewTabLifecycle() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(session.OpenTab(MakeTab("a", "https://a.test", "A")), "open active tab for lifecycle normalization");
+
+    auto suspended = MakeTab("b", "https://b.test", "B");
+    suspended.lifecycle = openbrowser::core::TabLifecycle::Suspended;
+    Require(session.OpenTab(std::move(suspended), false), "open pre-labeled suspended tab in background");
+    Require(
+        session.FindTab("b") != nullptr &&
+            session.FindTab("b")->lifecycle == openbrowser::core::TabLifecycle::Background,
+        "new background tab normalizes suspended lifecycle");
+
+    auto discarded = MakeTab("c", "https://c.test", "C");
+    discarded.lifecycle = openbrowser::core::TabLifecycle::Discarded;
+    Require(session.OpenTab(std::move(discarded), false), "open pre-labeled discarded tab in background");
+    Require(
+        session.FindTab("c") != nullptr &&
+            session.FindTab("c")->lifecycle == openbrowser::core::TabLifecycle::Background,
+        "new background tab normalizes discarded lifecycle");
+
+    Require(
+        engine.Count(openbrowser::tests::EngineCommandType::Suspend) == 0,
+        "opening normalized tabs does not emit an implicit suspend command");
+}
+
 void TestBrowserSessionRejectsInvalidIdentity() {
     openbrowser::tests::FakeBrowserEngine engine;
     openbrowser::core::BrowserSession session(engine);
@@ -177,6 +204,7 @@ int main() {
     TestBrowserSessionActivationInvariant();
     TestBrowserSessionBackgroundAndSuspension();
     TestBrowserSessionNavigationAndCloseFallback();
+    TestBrowserSessionNormalizesNewTabLifecycle();
     TestBrowserSessionRejectsInvalidIdentity();
 
     if (failures != 0) {
