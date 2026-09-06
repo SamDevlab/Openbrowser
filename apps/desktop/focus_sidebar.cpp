@@ -135,6 +135,9 @@ void FocusSidebar::RebuildQueueView() {
             case core::FocusState::Later:
                 state_prefix = "[Later] ";
                 break;
+            case core::FocusState::Paused:
+                state_prefix = "[Paused] ";
+                break;
         }
 
         auto item_panel = CefPanel::CreatePanel(nullptr);
