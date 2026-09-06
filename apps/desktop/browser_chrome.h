@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/capabilities/permission_request.h"
 #include "core/session/browser_session_observer.h"
 
 #include "include/cef_base.h"
@@ -8,6 +9,9 @@
 #include "include/views/cef_textfield_delegate.h"
 
 #include <functional>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace openbrowser::core {
 class BrowserSession;
@@ -19,10 +23,14 @@ class CefTextfield;
 
 namespace openbrowser::desktop {
 
-class BrowserChrome final : public core::BrowserSessionObserver {
+class CefBrowserEngine;
+
+class BrowserChrome final : public core::BrowserSessionObserver,
+                            public core::PermissionPromptObserver {
 public:
     explicit BrowserChrome(
         core::BrowserSession& session,
+        CefRefPtr<CefBrowserEngine> engine,
         std::function<void()> on_toggle_network_lab = nullptr);
     ~BrowserChrome() override;
 
@@ -33,38 +41,70 @@ public:
 
     void OnBrowserSessionChanged(const core::BrowserSession& session) override;
 
+    void OnPermissionPromptRequested(const core::PermissionPrompt& prompt) override;
+    void OnPermissionPromptDismissed(uint64_t prompt_id) override;
+
 private:
-    enum class NavigationAction {
+    enum class ChromeAction {
         Back,
         Forward,
         Reload,
         ToggleNetworkLab,
+        ToggleSecurityDetails,
+        AllowPermission,
+        BlockPermission,
+        DismissPermission,
+        ResetOriginPermissions,
     };
 
-    class NavigationButtonDelegate;
+    class ChromeButtonDelegate;
     class AddressFieldDelegate;
 
-    void HandleNavigationAction(NavigationAction action);
+    void HandleAction(ChromeAction action);
     bool HandleAddressKeyEvent(CefRefPtr<CefTextfield> textfield, const CefKeyEvent& event);
     void HandleAddressUserAction();
     void HandleAddressBlur();
     void SyncAddressFromSession(const core::BrowserSession& session);
+    void ShowPrompt(const core::PermissionPrompt& prompt);
+    void UpdateSecurityDetails();
 
     core::BrowserSession& session_;
+    CefRefPtr<CefBrowserEngine> engine_;
     std::function<void()> on_toggle_network_lab_;
+
+    CefRefPtr<CefPanel> container_;
+    CefRefPtr<CefBoxLayout> container_layout_;
+
     CefRefPtr<CefPanel> toolbar_;
-    CefRefPtr<CefBoxLayout> layout_;
+    CefRefPtr<CefBoxLayout> toolbar_layout_;
     CefRefPtr<CefLabelButton> back_button_;
     CefRefPtr<CefLabelButton> forward_button_;
     CefRefPtr<CefLabelButton> reload_button_;
+    CefRefPtr<CefLabelButton> security_badge_;
     CefRefPtr<CefTextfield> address_bar_;
     CefRefPtr<CefLabelButton> lab_button_;
-    CefRefPtr<CefButtonDelegate> back_delegate_;
-    CefRefPtr<CefButtonDelegate> forward_delegate_;
-    CefRefPtr<CefButtonDelegate> reload_delegate_;
-    CefRefPtr<CefButtonDelegate> lab_delegate_;
+
+    // Permission Prompt Banner
+    CefRefPtr<CefPanel> prompt_panel_;
+    CefRefPtr<CefBoxLayout> prompt_layout_;
+    CefRefPtr<CefLabelButton> prompt_label_;
+    CefRefPtr<CefLabelButton> allow_button_;
+    CefRefPtr<CefLabelButton> block_button_;
+    CefRefPtr<CefLabelButton> dismiss_button_;
+
+    // Security Details Inspector
+    CefRefPtr<CefPanel> security_details_panel_;
+    CefRefPtr<CefBoxLayout> security_details_layout_;
+    CefRefPtr<CefLabelButton> security_details_label_;
+    CefRefPtr<CefLabelButton> reset_permissions_button_;
+
+    std::vector<CefRefPtr<CefButtonDelegate>> button_delegates_;
     CefRefPtr<CefTextfieldDelegate> address_delegate_;
+
+    std::optional<uint64_t> current_prompt_id_;
     bool address_editing_{false};
+    bool show_security_details_{false};
+    std::string current_origin_;
 };
 
 }  // namespace openbrowser::desktop

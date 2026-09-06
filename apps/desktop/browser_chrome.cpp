@@ -1,5 +1,7 @@
 #include "browser_chrome.h"
 
+#include "cef_browser_engine.h"
+#include "core/capabilities/capability_policy.h"
 #include "core/navigation/address_input.h"
 #include "core/session/browser_session.h"
 
@@ -13,24 +15,24 @@
 
 namespace openbrowser::desktop {
 
-class BrowserChrome::NavigationButtonDelegate final : public CefButtonDelegate {
+class BrowserChrome::ChromeButtonDelegate final : public CefButtonDelegate {
 public:
-    NavigationButtonDelegate(BrowserChrome& chrome, const NavigationAction action)
+    ChromeButtonDelegate(BrowserChrome& chrome, const ChromeAction action)
         : chrome_(chrome), action_(action) {}
 
-    NavigationButtonDelegate(const NavigationButtonDelegate&) = delete;
-    NavigationButtonDelegate& operator=(const NavigationButtonDelegate&) = delete;
+    ChromeButtonDelegate(const ChromeButtonDelegate&) = delete;
+    ChromeButtonDelegate& operator=(const ChromeButtonDelegate&) = delete;
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        chrome_.HandleNavigationAction(action_);
+        chrome_.HandleAction(action_);
     }
 
 private:
     BrowserChrome& chrome_;
-    NavigationAction action_;
+    ChromeAction action_;
 
-    IMPLEMENT_REFCOUNTING(NavigationButtonDelegate);
+    IMPLEMENT_REFCOUNTING(ChromeButtonDelegate);
 };
 
 class BrowserChrome::AddressFieldDelegate final : public CefTextfieldDelegate {
@@ -63,69 +65,254 @@ private:
 
 BrowserChrome::BrowserChrome(
     core::BrowserSession& session,
+    CefRefPtr<CefBrowserEngine> engine,
     std::function<void()> on_toggle_network_lab)
-    : session_(session), on_toggle_network_lab_(std::move(on_toggle_network_lab)) {
+    : session_(session),
+      engine_(std::move(engine)),
+      on_toggle_network_lab_(std::move(on_toggle_network_lab)) {
     session_.AddObserver(this);
+    if (engine_) {
+        engine_->AddPermissionPromptObserver(this);
+    }
 
-    back_delegate_ = new NavigationButtonDelegate(*this, NavigationAction::Back);
-    forward_delegate_ = new NavigationButtonDelegate(*this, NavigationAction::Forward);
-    reload_delegate_ = new NavigationButtonDelegate(*this, NavigationAction::Reload);
-    lab_delegate_ = new NavigationButtonDelegate(*this, NavigationAction::ToggleNetworkLab);
     address_delegate_ = new AddressFieldDelegate(*this);
 
+    auto make_delegate = [this](ChromeAction action) {
+        CefRefPtr<CefButtonDelegate> del(new ChromeButtonDelegate(*this, action));
+        button_delegates_.push_back(del);
+        return del;
+    };
+
+    // Container Panel (Vertical)
+    container_ = CefPanel::CreatePanel(nullptr);
+    CefBoxLayoutSettings container_settings{};
+    container_settings.horizontal = 0;
+    container_settings.between_child_spacing = 2;
+    container_layout_ = container_->SetToBoxLayout(container_settings);
+
+    // Main Navigation Toolbar (Horizontal)
     toolbar_ = CefPanel::CreatePanel(nullptr);
+    CefBoxLayoutSettings toolbar_settings{};
+    toolbar_settings.horizontal = 1;
+    toolbar_settings.between_child_spacing = 6;
+    toolbar_settings.inside_border_horizontal_spacing = 8;
+    toolbar_settings.inside_border_vertical_spacing = 4;
+    toolbar_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
+    toolbar_layout_ = toolbar_->SetToBoxLayout(toolbar_settings);
 
-    CefBoxLayoutSettings settings{};
-    settings.horizontal = 1;
-    settings.between_child_spacing = 6;
-    settings.inside_border_horizontal_spacing = 8;
-    settings.inside_border_vertical_spacing = 4;
-    settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
-    layout_ = toolbar_->SetToBoxLayout(settings);
-
-    back_button_ = CefLabelButton::CreateLabelButton(back_delegate_, "Back");
-    forward_button_ = CefLabelButton::CreateLabelButton(forward_delegate_, "Forward");
-    reload_button_ = CefLabelButton::CreateLabelButton(reload_delegate_, "Reload");
+    back_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Back), "Back");
+    forward_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Forward), "Forward");
+    reload_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Reload), "Reload");
+    security_badge_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleSecurityDetails), "[ 🔒 Secure ]");
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter address");
-    lab_button_ = CefLabelButton::CreateLabelButton(lab_delegate_, "Lab");
+    lab_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleNetworkLab), "Lab");
 
     toolbar_->AddChildView(back_button_);
-    layout_->SetFlexForView(back_button_, 0);
+    toolbar_layout_->SetFlexForView(back_button_, 0);
 
     toolbar_->AddChildView(forward_button_);
-    layout_->SetFlexForView(forward_button_, 0);
+    toolbar_layout_->SetFlexForView(forward_button_, 0);
 
     toolbar_->AddChildView(reload_button_);
-    layout_->SetFlexForView(reload_button_, 0);
+    toolbar_layout_->SetFlexForView(reload_button_, 0);
+
+    toolbar_->AddChildView(security_badge_);
+    toolbar_layout_->SetFlexForView(security_badge_, 0);
 
     toolbar_->AddChildView(address_bar_);
-    layout_->SetFlexForView(address_bar_, 1);
+    toolbar_layout_->SetFlexForView(address_bar_, 1);
 
     toolbar_->AddChildView(lab_button_);
-    layout_->SetFlexForView(lab_button_, 0);
+    toolbar_layout_->SetFlexForView(lab_button_, 0);
+
+    container_->AddChildView(toolbar_);
+    container_layout_->SetFlexForView(toolbar_, 0);
+
+    // Permission Prompt Banner (Horizontal)
+    prompt_panel_ = CefPanel::CreatePanel(nullptr);
+    CefBoxLayoutSettings prompt_settings{};
+    prompt_settings.horizontal = 1;
+    prompt_settings.between_child_spacing = 6;
+    prompt_settings.inside_border_horizontal_spacing = 8;
+    prompt_settings.inside_border_vertical_spacing = 3;
+    prompt_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
+    prompt_layout_ = prompt_panel_->SetToBoxLayout(prompt_settings);
+
+    prompt_label_ = CefLabelButton::CreateLabelButton(nullptr, "[ Permission Request ]");
+    prompt_label_->SetEnabled(false);
+    allow_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::AllowPermission), "[ Allow ]");
+    block_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::BlockPermission), "[ Block ]");
+    dismiss_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::DismissPermission), "[ Dismiss ]");
+
+    prompt_panel_->AddChildView(prompt_label_);
+    prompt_layout_->SetFlexForView(prompt_label_, 1);
+
+    prompt_panel_->AddChildView(allow_button_);
+    prompt_layout_->SetFlexForView(allow_button_, 0);
+
+    prompt_panel_->AddChildView(block_button_);
+    prompt_layout_->SetFlexForView(block_button_, 0);
+
+    prompt_panel_->AddChildView(dismiss_button_);
+    prompt_layout_->SetFlexForView(dismiss_button_, 0);
+
+    prompt_panel_->SetVisible(false);
+    container_->AddChildView(prompt_panel_);
+    container_layout_->SetFlexForView(prompt_panel_, 0);
+
+    // Security Details Panel (Horizontal)
+    security_details_panel_ = CefPanel::CreatePanel(nullptr);
+    CefBoxLayoutSettings details_settings{};
+    details_settings.horizontal = 1;
+    details_settings.between_child_spacing = 6;
+    details_settings.inside_border_horizontal_spacing = 8;
+    details_settings.inside_border_vertical_spacing = 3;
+    details_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
+    security_details_layout_ = security_details_panel_->SetToBoxLayout(details_settings);
+
+    security_details_label_ = CefLabelButton::CreateLabelButton(nullptr, "[ Site Security Info ]");
+    security_details_label_->SetEnabled(false);
+    reset_permissions_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ResetOriginPermissions), "[ Reset Rules ]");
+
+    security_details_panel_->AddChildView(security_details_label_);
+    security_details_layout_->SetFlexForView(security_details_label_, 1);
+
+    security_details_panel_->AddChildView(reset_permissions_button_);
+    security_details_layout_->SetFlexForView(reset_permissions_button_, 0);
+
+    security_details_panel_->SetVisible(false);
+    container_->AddChildView(security_details_panel_);
+    container_layout_->SetFlexForView(security_details_panel_, 0);
 
     SyncAddressFromSession(session_);
 }
 
 BrowserChrome::~BrowserChrome() {
+    if (engine_) {
+        engine_->RemovePermissionPromptObserver(this);
+    }
     session_.RemoveObserver(this);
 }
 
 CefRefPtr<CefPanel> BrowserChrome::View() const noexcept {
-    return toolbar_;
+    return container_;
 }
 
 void BrowserChrome::OnBrowserSessionChanged(const core::BrowserSession& session) {
     CEF_REQUIRE_UI_THREAD();
     SyncAddressFromSession(session);
+
+    const auto& active_id = session.ActiveTabId();
+    if (active_id.has_value() && engine_) {
+        const auto prompt = engine_->FindPromptForTab(*active_id);
+        if (prompt.has_value()) {
+            ShowPrompt(*prompt);
+        } else if (current_prompt_id_.has_value()) {
+            current_prompt_id_.reset();
+            prompt_panel_->SetVisible(false);
+            container_->Layout();
+        }
+    }
 }
 
-void BrowserChrome::HandleNavigationAction(const NavigationAction action) {
+void BrowserChrome::OnPermissionPromptRequested(const core::PermissionPrompt& prompt) {
     CEF_REQUIRE_UI_THREAD();
-    if (action == NavigationAction::ToggleNetworkLab) {
+    const auto& active_id = session_.ActiveTabId();
+    if (active_id.has_value() && *active_id == prompt.tab_id) {
+        ShowPrompt(prompt);
+    }
+}
+
+void BrowserChrome::OnPermissionPromptDismissed(const uint64_t prompt_id) {
+    CEF_REQUIRE_UI_THREAD();
+    if (current_prompt_id_.has_value() && *current_prompt_id_ == prompt_id) {
+        current_prompt_id_.reset();
+        prompt_panel_->SetVisible(false);
+        container_->Layout();
+    }
+}
+
+void BrowserChrome::ShowPrompt(const core::PermissionPrompt& prompt) {
+    current_prompt_id_ = prompt.prompt_id;
+    std::string caps_str;
+    for (std::size_t i = 0; i < prompt.capabilities.size(); ++i) {
+        if (i > 0) {
+            caps_str += ", ";
+        }
+        caps_str += core::ToString(prompt.capabilities[i]);
+    }
+    prompt_label_->SetText("[ Permission ] " + prompt.origin + " wants access to: " + caps_str);
+    prompt_panel_->SetVisible(true);
+    container_->Layout();
+}
+
+void BrowserChrome::UpdateSecurityDetails() {
+    if (!show_security_details_) {
+        security_details_panel_->SetVisible(false);
+        return;
+    }
+
+    std::string text = "[ Site ] " + (current_origin_.empty() ? "No Origin" : current_origin_);
+    if (engine_ && engine_->Policy() && !current_origin_.empty()) {
+        const auto rules = engine_->Policy()->GetOriginRules(current_origin_);
+        if (!rules.empty()) {
+            text += " | Custom Origin Rules: ";
+            for (const auto& [cap, dec] : rules) {
+                text += std::string(core::ToString(cap)) + ": " +
+                    (dec == core::CapabilityDecision::Allow ? "Allow " : (dec == core::CapabilityDecision::Deny ? "Deny " : "Ask "));
+            }
+        } else {
+            text += " | Default Permissions Policy (Privacy Standard)";
+        }
+    }
+    security_details_label_->SetText(text);
+    security_details_panel_->SetVisible(true);
+}
+
+void BrowserChrome::HandleAction(const ChromeAction action) {
+    CEF_REQUIRE_UI_THREAD();
+
+    if (action == ChromeAction::ToggleNetworkLab) {
         if (on_toggle_network_lab_) {
             on_toggle_network_lab_();
+        }
+        return;
+    }
+
+    if (action == ChromeAction::ToggleSecurityDetails) {
+        show_security_details_ = !show_security_details_;
+        UpdateSecurityDetails();
+        container_->Layout();
+        return;
+    }
+
+    if (action == ChromeAction::AllowPermission) {
+        if (current_prompt_id_.has_value() && engine_) {
+            engine_->RespondToPermission(*current_prompt_id_, core::PermissionResponse::Allow, true);
+        }
+        return;
+    }
+
+    if (action == ChromeAction::BlockPermission) {
+        if (current_prompt_id_.has_value() && engine_) {
+            engine_->RespondToPermission(*current_prompt_id_, core::PermissionResponse::Block, true);
+        }
+        return;
+    }
+
+    if (action == ChromeAction::DismissPermission) {
+        if (current_prompt_id_.has_value() && engine_) {
+            engine_->RespondToPermission(*current_prompt_id_, core::PermissionResponse::Dismiss, false);
+        }
+        return;
+    }
+
+    if (action == ChromeAction::ResetOriginPermissions) {
+        if (engine_ && engine_->MutablePolicy() && !current_origin_.empty()) {
+            engine_->MutablePolicy()->ClearOriginRules(current_origin_);
+            UpdateSecurityDetails();
+            container_->Layout();
         }
         return;
     }
@@ -136,16 +323,16 @@ void BrowserChrome::HandleNavigationAction(const NavigationAction action) {
     }
 
     switch (action) {
-        case NavigationAction::Back:
+        case ChromeAction::Back:
             static_cast<void>(session_.GoBack(*active_id));
             break;
-        case NavigationAction::Forward:
+        case ChromeAction::Forward:
             static_cast<void>(session_.GoForward(*active_id));
             break;
-        case NavigationAction::Reload:
+        case ChromeAction::Reload:
             static_cast<void>(session_.Reload(*active_id));
             break;
-        case NavigationAction::ToggleNetworkLab:
+        default:
             break;
     }
 }
@@ -215,17 +402,36 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
     const auto& active_id = session.ActiveTabId();
     if (!active_id.has_value()) {
         address_bar_->SetText("");
+        current_origin_.clear();
+        security_badge_->SetText("[ 🌐 Web ]");
+        UpdateSecurityDetails();
         return;
     }
 
     const auto* tab = session.FindTab(*active_id);
     if (tab == nullptr) {
         address_bar_->SetText("");
+        current_origin_.clear();
+        security_badge_->SetText("[ 🌐 Web ]");
+        UpdateSecurityDetails();
         return;
     }
 
     const std::string& display_url = tab->pending_url.has_value() ? *tab->pending_url : tab->url;
     address_bar_->SetText(display_url);
+
+    current_origin_ = core::CapabilityPolicy::ExtractOrigin(display_url).value_or("");
+    if (display_url.rfind("https://", 0) == 0) {
+        security_badge_->SetText("[ 🔒 Secure ]");
+    } else if (display_url.rfind("http://", 0) == 0) {
+        security_badge_->SetText("[ ⚠ Insecure ]");
+    } else if (display_url.rfind("about:", 0) == 0) {
+        security_badge_->SetText("[ ⚙ System ]");
+    } else {
+        security_badge_->SetText("[ 🌐 Web ]");
+    }
+
+    UpdateSecurityDetails();
 }
 
 }  // namespace openbrowser::desktop

@@ -1,12 +1,14 @@
 #pragma once
 
 #include "core/capabilities/capability_policy.h"
+#include "core/capabilities/permission_request.h"
 #include "devtools/network/network_observation_sink.h"
 #include "engine/browser_engine.h"
 
 #include "include/cef_base.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
+#include "include/cef_permission_handler.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_panel.h"
 
@@ -39,8 +41,35 @@ public:
     void SetNetworkObservationSink(devtools::network::NetworkObservationSink* sink) noexcept;
     [[nodiscard]] bool NetworkObservationEnabled() const noexcept;
 
-    void SetCapabilityPolicy(const core::CapabilityPolicy* policy) noexcept;
+    void SetCapabilityPolicy(core::CapabilityPolicy* policy) noexcept;
     [[nodiscard]] const core::CapabilityPolicy* Policy() const noexcept;
+    [[nodiscard]] core::CapabilityPolicy* MutablePolicy() const noexcept;
+
+    void AddPermissionPromptObserver(core::PermissionPromptObserver* observer);
+    void RemovePermissionPromptObserver(core::PermissionPromptObserver* observer) noexcept;
+
+    void RegisterPermissionPrompt(
+        uint64_t prompt_id,
+        core::TabId tab_id,
+        std::string origin,
+        std::vector<core::Capability> capabilities,
+        CefRefPtr<CefPermissionPromptCallback> callback);
+
+    void RegisterMediaAccessPrompt(
+        core::TabId tab_id,
+        std::string origin,
+        uint32_t requested_permissions,
+        std::vector<core::Capability> capabilities,
+        CefRefPtr<CefMediaAccessCallback> callback);
+
+    void DismissPermissionPrompt(uint64_t prompt_id);
+
+    void RespondToPermission(
+        uint64_t prompt_id,
+        core::PermissionResponse response,
+        bool remember_for_origin);
+
+    [[nodiscard]] std::optional<core::PermissionPrompt> FindPromptForTab(const core::TabId& tab_id) const;
 
     void NotifyBrowserCreated(const core::TabId& tab_id, CefRefPtr<CefBrowser> browser);
     void NotifyBrowserBeforeClose(const core::TabId& tab_id);
@@ -80,12 +109,22 @@ private:
     void HideActiveSurface();
     void MaybeQuitAfterClose();
 
+    struct PendingPrompt {
+        core::PermissionPrompt info;
+        CefRefPtr<CefPermissionPromptCallback> permission_callback;
+        CefRefPtr<CefMediaAccessCallback> media_callback;
+        uint32_t requested_media_permissions{0};
+    };
+
     CefRefPtr<CefPanel> browser_host_;
     SurfaceMap surfaces_;
     std::optional<core::TabId> active_tab_id_;
     engine::BrowserEngineEventSink* event_sink_{nullptr};
     std::atomic<devtools::network::NetworkObservationSink*> network_sink_{nullptr};
-    std::atomic<const core::CapabilityPolicy*> capability_policy_{nullptr};
+    std::atomic<core::CapabilityPolicy*> capability_policy_{nullptr};
+    std::unordered_map<uint64_t, PendingPrompt> pending_prompts_;
+    std::vector<core::PermissionPromptObserver*> prompt_observers_;
+    uint64_t next_media_prompt_id_{0x8000000000000000ULL};
     std::size_t live_browser_count_{0};
     bool window_close_requested_{false};
     bool window_destroyed_{false};

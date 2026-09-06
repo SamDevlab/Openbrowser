@@ -76,8 +76,155 @@ CefRefPtr<CefLoadHandler> CefTabClient::GetLoadHandler() {
     return this;
 }
 
+CefRefPtr<CefPermissionHandler> CefTabClient::GetPermissionHandler() {
+    return this;
+}
+
 CefRefPtr<CefRequestHandler> CefTabClient::GetRequestHandler() {
     return this;
+}
+
+bool CefTabClient::OnRequestMediaAccessPermission(
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefFrame> /*frame*/,
+    const CefString& requesting_origin,
+    const uint32_t requested_permissions,
+    CefRefPtr<CefMediaAccessCallback> callback) {
+    CEF_REQUIRE_UI_THREAD();
+
+    const std::string origin = requesting_origin.ToString();
+    const auto* policy = engine_->Policy();
+
+    std::vector<core::Capability> caps;
+    if ((requested_permissions & CEF_MEDIA_PERMISSION_DEVICE_AUDIO_CAPTURE) != 0) {
+        caps.push_back(core::Capability::Microphone);
+    }
+    if ((requested_permissions & CEF_MEDIA_PERMISSION_DEVICE_VIDEO_CAPTURE) != 0) {
+        caps.push_back(core::Capability::Camera);
+    }
+
+    if (caps.empty() || policy == nullptr) {
+        if (callback) {
+            callback->Cancel();
+        }
+        return true;
+    }
+
+    bool all_allow = true;
+    bool any_deny = false;
+    for (const auto cap : caps) {
+        const auto decision = policy->Resolve(cap, {.origin = origin});
+        if (decision == core::CapabilityDecision::Deny) {
+            any_deny = true;
+            all_allow = false;
+            break;
+        }
+        if (decision != core::CapabilityDecision::Allow) {
+            all_allow = false;
+        }
+    }
+
+    if (any_deny) {
+        if (callback) {
+            callback->Cancel();
+        }
+        return true;
+    }
+
+    if (all_allow) {
+        if (callback) {
+            callback->Continue(requested_permissions);
+        }
+        return true;
+    }
+
+    engine_->RegisterMediaAccessPrompt(
+        tab_id_,
+        origin,
+        requested_permissions,
+        std::move(caps),
+        callback);
+    return true;
+}
+
+bool CefTabClient::OnShowPermissionPrompt(
+    CefRefPtr<CefBrowser> /*browser*/,
+    const uint64_t prompt_id,
+    const CefString& requesting_origin,
+    const uint32_t requested_permissions,
+    CefRefPtr<CefPermissionPromptCallback> callback) {
+    CEF_REQUIRE_UI_THREAD();
+
+    const std::string origin = requesting_origin.ToString();
+    const auto* policy = engine_->Policy();
+
+    std::vector<core::Capability> caps;
+    if ((requested_permissions & CEF_PERMISSION_TYPE_CAMERA_STREAM) != 0) {
+        caps.push_back(core::Capability::Camera);
+    }
+    if ((requested_permissions & CEF_PERMISSION_TYPE_MIC_STREAM) != 0) {
+        caps.push_back(core::Capability::Microphone);
+    }
+    if ((requested_permissions & CEF_PERMISSION_TYPE_GEOLOCATION) != 0) {
+        caps.push_back(core::Capability::Geolocation);
+    }
+    if ((requested_permissions & CEF_PERMISSION_TYPE_NOTIFICATIONS) != 0) {
+        caps.push_back(core::Capability::Notifications);
+    }
+    if ((requested_permissions & CEF_PERMISSION_TYPE_CLIPBOARD) != 0) {
+        caps.push_back(core::Capability::ClipboardRead);
+    }
+
+    if (caps.empty() || policy == nullptr) {
+        if (callback) {
+            callback->Continue(CEF_PERMISSION_RESULT_DENY);
+        }
+        return true;
+    }
+
+    bool all_allow = true;
+    bool any_deny = false;
+    for (const auto cap : caps) {
+        const auto decision = policy->Resolve(cap, {.origin = origin});
+        if (decision == core::CapabilityDecision::Deny) {
+            any_deny = true;
+            all_allow = false;
+            break;
+        }
+        if (decision != core::CapabilityDecision::Allow) {
+            all_allow = false;
+        }
+    }
+
+    if (any_deny) {
+        if (callback) {
+            callback->Continue(CEF_PERMISSION_RESULT_DENY);
+        }
+        return true;
+    }
+
+    if (all_allow) {
+        if (callback) {
+            callback->Continue(CEF_PERMISSION_RESULT_ACCEPT);
+        }
+        return true;
+    }
+
+    engine_->RegisterPermissionPrompt(
+        prompt_id,
+        tab_id_,
+        origin,
+        std::move(caps),
+        callback);
+    return true;
+}
+
+void CefTabClient::OnDismissPermissionPrompt(
+    CefRefPtr<CefBrowser> /*browser*/,
+    const uint64_t prompt_id,
+    const cef_permission_request_result_t /*result*/) {
+    CEF_REQUIRE_UI_THREAD();
+    engine_->DismissPermissionPrompt(prompt_id);
 }
 
 void CefTabClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
