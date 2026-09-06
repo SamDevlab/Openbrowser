@@ -1,8 +1,8 @@
 #pragma once
 
-#include "devtools/network/network_trace.h"
-
 namespace openbrowser::devtools::network {
+
+struct NetworkEvent;
 
 class NetworkObservationSink {
 public:
