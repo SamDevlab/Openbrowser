@@ -3,6 +3,7 @@
 #include "fakes/fake_browser_engine.h"
 
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>

@@ -95,11 +95,15 @@ std::optional<std::string> NormalizeAddressInput(std::string input) {
         return input;
     }
 
+    if (IsLoopbackAddress(input)) {
+        return "http://" + input;
+    }
+
     if (HasExplicitScheme(input)) {
         return std::nullopt;
     }
 
-    return std::string{IsLoopbackAddress(input) ? "http://" : "https://"} + input;
+    return "https://" + input;
 }
 
 }  // namespace openbrowser::core::navigation
