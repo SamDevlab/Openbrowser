@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(Openbrowser VERSION 0.1.0 LANGUAGES CXX)
+project(Openbrowser VERSION 0.1.0 LANGUAGES C CXX)
 
 option(OPENBROWSER_BUILD_TESTS "Build Openbrowser core tests" ON)
 option(OPENBROWSER_BUILD_DESKTOP "Configure the pinned CEF desktop adapter" OFF)
