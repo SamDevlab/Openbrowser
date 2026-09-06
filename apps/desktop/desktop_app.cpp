@@ -1,6 +1,7 @@
 #include "desktop_app.h"
 
 #include "include/cef_command_line.h"
+#include "include/views/cef_fill_layout.h"
 #include "include/views/cef_window.h"
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_helpers.h"
