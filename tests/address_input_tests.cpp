@@ -31,6 +31,10 @@ void TestHttpsIsDefault() {
         openbrowser::core::navigation::NormalizeAddressInput("  example.com/docs  ") ==
             std::optional<std::string>{"https://example.com/docs"},
         "trim and default public host to HTTPS");
+    Require(
+        openbrowser::core::navigation::NormalizeAddressInput("github.com/openai") ==
+            std::optional<std::string>{"https://github.com/openai"},
+        "default path-based host to HTTPS");
 }
 
 void TestLoopbackUsesHttpForLocalDevelopment() {
@@ -43,6 +47,10 @@ void TestLoopbackUsesHttpForLocalDevelopment() {
             std::optional<std::string>{"http://127.0.0.1:8080"},
         "IPv4 loopback defaults to HTTP");
     Require(
+        openbrowser::core::navigation::NormalizeAddressInput("127.0.0.1:5173") ==
+            std::optional<std::string>{"http://127.0.0.1:5173"},
+        "IPv4 Vite dev port defaults to HTTP");
+    Require(
         openbrowser::core::navigation::NormalizeAddressInput("[::1]:8080") ==
             std::optional<std::string>{"http://[::1]:8080"},
         "IPv6 loopback defaults to HTTP");
@@ -50,10 +58,14 @@ void TestLoopbackUsesHttpForLocalDevelopment() {
 
 void TestUnexpectedSchemesAndWhitespaceAreRejected() {
     Require(!openbrowser::core::navigation::NormalizeAddressInput("file:///tmp/test.html").has_value(), "reject file scheme");
+    Require(!openbrowser::core::navigation::NormalizeAddressInput("file:///etc/passwd").has_value(), "reject file scheme etc passwd");
     Require(!openbrowser::core::navigation::NormalizeAddressInput("javascript:alert(1)").has_value(), "reject javascript scheme");
     Require(!openbrowser::core::navigation::NormalizeAddressInput("data:text/plain,hello").has_value(), "reject data scheme");
+    Require(!openbrowser::core::navigation::NormalizeAddressInput("data:text/html,<h1>test</h1>").has_value(), "reject data html scheme");
+    Require(!openbrowser::core::navigation::NormalizeAddressInput("custom://protocol").has_value(), "reject custom scheme");
     Require(!openbrowser::core::navigation::NormalizeAddressInput("example.com/a b").has_value(), "reject embedded whitespace");
-    Require(!openbrowser::core::navigation::NormalizeAddressInput("   ").has_value(), "reject empty address");
+    Require(!openbrowser::core::navigation::NormalizeAddressInput("   ").has_value(), "reject whitespace-only address");
+    Require(!openbrowser::core::navigation::NormalizeAddressInput("").has_value(), "reject empty address");
 }
 
 }  // namespace
