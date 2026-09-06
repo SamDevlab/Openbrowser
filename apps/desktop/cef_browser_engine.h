@@ -29,6 +29,9 @@ public:
     void CloseTab(const core::TabId& tab_id) override;
     void ActivateTab(const core::TabId& tab_id) override;
     void Navigate(const engine::NavigationRequest& request) override;
+    void GoBack(const core::TabId& tab_id) override;
+    void GoForward(const core::TabId& tab_id) override;
+    void Reload(const core::TabId& tab_id) override;
     void Suspend(const core::TabId& tab_id) override;
     void Resume(const core::TabId& tab_id) override;
 
@@ -69,6 +72,7 @@ private:
 
     [[nodiscard]] SurfaceMap::iterator FindSurface(const core::TabId& tab_id);
     [[nodiscard]] SurfaceMap::const_iterator FindSurface(const core::TabId& tab_id) const;
+    [[nodiscard]] CefRefPtr<CefBrowser> BrowserForCommand(const core::TabId& tab_id);
     void HideActiveSurface();
     void MaybeQuitAfterClose();
 
