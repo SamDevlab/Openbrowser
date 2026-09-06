@@ -2,7 +2,7 @@
 
 Openbrowser is an experimental open-source desktop browser focused on local control, privacy-by-architecture, deep customization, intentional tab management, and native capabilities that normally require extensions.
 
-> Status: **pre-alpha / architecture bootstrap**. The repository is being built from the core outward. It is not yet a daily-use browser.
+> Status: **pre-alpha / M1 browser-shell work**. The engine-independent core is executable and tested; the Chromium/CEF desktop adapter is the next integration step.
 
 ## Engineering direction
 
@@ -16,11 +16,34 @@ Openbrowser follows a few non-negotiable architectural rules:
 6. **Sensitive exports are deny-by-default.** Portable configuration must not silently include credentials, cookies, tokens, sessions or vault secrets.
 7. **Differences are intentional and testable.** Where Openbrowser diverges from upstream browser behavior, the divergence should be classified, reproducible and covered by tests.
 
+## Current core
+
+The current C++20 core already contains executable models for:
+
+- tab identity and lifecycle;
+- `BrowserSession` orchestration;
+- Focus Queue ordering and priority state;
+- browser/page capability policy;
+- replaceable engine/provider boundaries.
+
+`BrowserSession` owns the logical tab collection. Horizontal tabs and vertical tabs will therefore be two projections of the same model rather than separate tab systems.
+
+Current session invariants include:
+
+- unique, non-empty tab IDs;
+- non-empty navigation targets at the application boundary;
+- at most one active tab;
+- opening/activating a tab demotes the previous active tab;
+- active tabs cannot be suspended;
+- activating a suspended tab resumes it first;
+- closing the active tab deterministically selects a surviving fallback;
+- engine handles never become Openbrowser `TabId` values.
+
 ## Product concepts
 
 ### Tabs and vertical tabs
 
-Openbrowser will support conventional horizontal tabs and conventional vertical tabs. These remain normal views of the set of open tabs.
+Openbrowser will support conventional horizontal tabs and conventional vertical tabs. Both are views over the same browser-session state.
 
 ### Focus Queue
 
@@ -31,9 +54,11 @@ Planned behavior:
 - multi-select tabs and enqueue them;
 - reorder with drag-and-drop or keyboard controls;
 - queue a URL without keeping a live tab allocated;
-- optional states such as `now`, `next`, `later` and `paused`;
+- states such as `now`, `next`, `later` and `paused`;
 - workspace-aware and optionally global queues;
 - optional resource hints so lower-priority queued items can be suspended while the next item can be prepared.
+
+The core already allows a Focus Queue item to exist without a live tab.
 
 ### Deep customization
 
@@ -84,6 +109,11 @@ Torrent functionality is for legitimate peer-to-peer distribution. The browser d
                      application commands
                                |
                  +-------------v-------------+
+                 |      BrowserSession       |
+                 | active tab / lifecycle    |
+                 +-------------+-------------+
+                               |
+                 +-------------v-------------+
                  |      Openbrowser Core     |
                  | tabs / focus / policies   |
                  | profiles / config / state |
@@ -93,33 +123,50 @@ Torrent functionality is for legitimate peer-to-peer distribution. The browser d
                         |      |
               +---------v--+  +-v----------------+
               | Providers  |  | Engine Adapter   |
-              | local/self |  | Chromium-family |
-              | hosted opt |  | implementation  |
+              | local/self |  | CEF -> Chromium  |
+              | hosted opt |  | deeper later     |
               +------------+  +------------------+
 ```
 
-The first code milestone intentionally builds the engine-independent core before binding it to a renderer.
-
 See [`docs/architecture.md`](docs/architecture.md), [`docs/threat-model.md`](docs/threat-model.md) and the ADRs in [`docs/adr/`](docs/adr/).
+
+## Bootstrap stack
+
+### Openbrowser core
+
+- **C++20**
+- **CMake 3.24+**
+- **CTest**
+
+C++ keeps the core close to the native Chromium/CEF boundary without requiring a mandatory FFI layer. CEF/Chromium types are still forbidden inside `src/core/`.
+
+### First browser engine
+
+The first desktop adapter is planned around **Chromium Embedded Framework (CEF)**. CEF provides the mature Chromium rendering/runtime surface while Openbrowser remains responsible for browser-session state, custom UI, policies, Focus Queue and configuration.
+
+The initial shell will prefer CEF's current Chromium/Chrome runtime and CEF Views where useful. If deeper privacy, process-model, networking, extension or fingerprinting requirements exceed the CEF API, the adapter boundary allows migration to a deeper Chromium integration.
+
+CMake remains the build system for the Openbrowser core. A future direct Chromium integration may use Chromium's native GN/Ninja toolchain behind the adapter boundary.
+
+See [`docs/adr/0002-license-and-bootstrap-stack.md`](docs/adr/0002-license-and-bootstrap-stack.md).
 
 ## Repository layout
 
 ```text
-apps/desktop/              desktop browser shell (future engine integration)
-src/core/                  engine-independent domain logic
+apps/desktop/              desktop browser shell / CEF integration
+src/core/session/          browser-session orchestration
+src/core/tabs/             engine-independent tab domain
+src/core/focus_queue/      intent/priority queue
+src/core/capabilities/     page and browser capability policy
 src/providers/             replaceable local/remote provider interfaces
 src/engine/                rendering-engine ports/adapters
+tests/fakes/               deterministic engine test doubles
 tests/                     executable invariants and core tests
 docs/architecture.md       system boundaries and data flow
 docs/threat-model.md       initial security model
 docs/adr/                  architecture decision records
+THIRD_PARTY.md             dependency/license ledger
 ```
-
-## Bootstrap stack
-
-The core starts in **C++20** with CMake/CTest. Keeping the core in the same language family as Chromium reduces unnecessary FFI at the browser boundary while still allowing isolated components to use other languages later when that provides a concrete safety or maintenance advantage.
-
-The renderer integration is intentionally behind an `Engine` port. The first desktop bring-up is expected to target a Chromium-family adapter; direct upstream coupling is not allowed inside core domain modules.
 
 ## Build the current core
 
@@ -134,23 +181,29 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+Core CI runs on Linux, Windows and macOS.
+
 ## Initial milestones
 
 ### M0 — Architecture bootstrap
 
 - [x] define local-first boundaries and invariants;
-- [ ] executable core model for tabs, Focus Queue and capabilities;
-- [ ] provider interfaces for replaceable services;
-- [ ] cross-platform core CI;
-- [ ] threat model and engine ADR.
+- [x] executable core model for tabs, Focus Queue and capabilities;
+- [x] provider interfaces for replaceable services;
+- [x] cross-platform core CI;
+- [x] threat model and engine ADR;
+- [x] select MPL-2.0 and start third-party license tracking.
 
 ### M1 — Browser shell
 
-- engine adapter and basic navigation;
-- horizontal + vertical tab models;
-- session persistence and crash recovery contract;
-- permission/capability enforcement boundary;
-- local configuration store.
+- [x] `BrowserSession` lifecycle/orchestration model;
+- [x] deterministic fake engine and session tests;
+- [ ] CEF adapter and basic navigation;
+- [ ] first desktop window and address bar;
+- [ ] horizontal + vertical tab projections;
+- [ ] session persistence and crash-recovery contract;
+- [ ] permission/capability enforcement at the engine boundary;
+- [ ] local configuration store.
 
 ### M2 — Focus and organization
 
@@ -187,8 +240,10 @@ ctest --test-dir build --output-on-failure
 
 This repository is intentionally strict about architectural boundaries. Changes that introduce undeclared browser egress, direct provider dependencies inside the core, or silent persistence of sensitive state should be treated as design regressions.
 
-See `CONTRIBUTING.md` and `SECURITY.md` as they are added during M0.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md) and [`THIRD_PARTY.md`](THIRD_PARTY.md).
 
 ## License
 
-A project license will be selected explicitly before the first distributable browser release. Until then, do not assume rights beyond what GitHub's repository access permits.
+Openbrowser-authored source code is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. See [`LICENSE`](LICENSE).
+
+Third-party components remain under their respective licenses and notices; see [`THIRD_PARTY.md`](THIRD_PARTY.md).
