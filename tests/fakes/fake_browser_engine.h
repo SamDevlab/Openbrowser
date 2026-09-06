@@ -14,6 +14,9 @@ enum class EngineCommandType {
     Close,
     Activate,
     Navigate,
+    GoBack,
+    GoForward,
+    Reload,
     Suspend,
     Resume,
 };
@@ -49,6 +52,18 @@ public:
 
     void Navigate(const engine::NavigationRequest& request) override {
         commands.push_back({.type = EngineCommandType::Navigate, .tab_id = request.tab_id, .url = request.url});
+    }
+
+    void GoBack(const core::TabId& tab_id) override {
+        commands.push_back({.type = EngineCommandType::GoBack, .tab_id = tab_id, .url = {}});
+    }
+
+    void GoForward(const core::TabId& tab_id) override {
+        commands.push_back({.type = EngineCommandType::GoForward, .tab_id = tab_id, .url = {}});
+    }
+
+    void Reload(const core::TabId& tab_id) override {
+        commands.push_back({.type = EngineCommandType::Reload, .tab_id = tab_id, .url = {}});
     }
 
     void Suspend(const core::TabId& tab_id) override {

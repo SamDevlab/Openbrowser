@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/session/browser_session_observer.h"
 #include "core/tabs/tab.h"
 #include "engine/browser_engine.h"
 #include "engine/browser_engine_events.h"
@@ -20,12 +21,19 @@ public:
     BrowserSession(BrowserSession&&) = delete;
     BrowserSession& operator=(BrowserSession&&) = delete;
 
+    void AddObserver(BrowserSessionObserver* observer);
+    void RemoveObserver(BrowserSessionObserver* observer) noexcept;
+
     [[nodiscard]] bool OpenTab(Tab tab, bool activate = true);
     [[nodiscard]] bool CloseTab(const TabId& tab_id);
     [[nodiscard]] bool ActivateTab(const TabId& tab_id);
     [[nodiscard]] bool Navigate(const TabId& tab_id, std::string url);
+    [[nodiscard]] bool GoBack(const TabId& tab_id);
+    [[nodiscard]] bool GoForward(const TabId& tab_id);
+    [[nodiscard]] bool Reload(const TabId& tab_id);
     [[nodiscard]] bool SuspendTab(const TabId& tab_id);
     [[nodiscard]] bool ResumeTab(const TabId& tab_id);
+    [[nodiscard]] bool DiscardTab(const TabId& tab_id);
 
     [[nodiscard]] const Tab* FindTab(const TabId& tab_id) const;
     [[nodiscard]] const std::vector<Tab>& Tabs() const noexcept;
@@ -41,12 +49,15 @@ private:
     using TabIterator = std::vector<Tab>::iterator;
 
     [[nodiscard]] TabIterator FindMutable(const TabId& tab_id);
+    [[nodiscard]] bool PrepareTabForNavigationCommand(const TabId& tab_id);
+    void NotifyObservers();
     void DemoteActiveTab();
     void ActivateAfterClose(std::size_t preferred_index);
 
     engine::BrowserEngine& engine_;
     std::vector<Tab> tabs_;
     std::optional<TabId> active_tab_id_;
+    std::vector<BrowserSessionObserver*> observers_;
 };
 
 }  // namespace openbrowser::core

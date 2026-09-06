@@ -1,6 +1,8 @@
 set(OPENBROWSER_DESKTOP_TARGET "openbrowser")
 
 set(OPENBROWSER_DESKTOP_COMMON_SOURCES
+    browser_chrome.cpp
+    browser_chrome.h
     cef_browser_engine.cpp
     cef_browser_engine.h
     cef_tab_client.cpp

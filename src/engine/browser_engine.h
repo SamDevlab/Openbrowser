@@ -21,6 +21,9 @@ public:
     virtual void CloseTab(const core::TabId& tab_id) = 0;
     virtual void ActivateTab(const core::TabId& tab_id) = 0;
     virtual void Navigate(const NavigationRequest& request) = 0;
+    virtual void GoBack(const core::TabId& tab_id) = 0;
+    virtual void GoForward(const core::TabId& tab_id) = 0;
+    virtual void Reload(const core::TabId& tab_id) = 0;
     virtual void Suspend(const core::TabId& tab_id) = 0;
     virtual void Resume(const core::TabId& tab_id) = 0;
 };
