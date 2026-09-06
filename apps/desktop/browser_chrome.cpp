@@ -61,12 +61,16 @@ private:
     IMPLEMENT_REFCOUNTING(AddressFieldDelegate);
 };
 
-BrowserChrome::BrowserChrome(core::BrowserSession& session) : session_(session) {
+BrowserChrome::BrowserChrome(
+    core::BrowserSession& session,
+    std::function<void()> on_toggle_network_lab)
+    : session_(session), on_toggle_network_lab_(std::move(on_toggle_network_lab)) {
     session_.AddObserver(this);
 
     back_delegate_ = new NavigationButtonDelegate(*this, NavigationAction::Back);
     forward_delegate_ = new NavigationButtonDelegate(*this, NavigationAction::Forward);
     reload_delegate_ = new NavigationButtonDelegate(*this, NavigationAction::Reload);
+    lab_delegate_ = new NavigationButtonDelegate(*this, NavigationAction::ToggleNetworkLab);
     address_delegate_ = new AddressFieldDelegate(*this);
 
     toolbar_ = CefPanel::CreatePanel(nullptr);
@@ -84,6 +88,7 @@ BrowserChrome::BrowserChrome(core::BrowserSession& session) : session_(session) 
     reload_button_ = CefLabelButton::CreateLabelButton(reload_delegate_, "Reload");
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter address");
+    lab_button_ = CefLabelButton::CreateLabelButton(lab_delegate_, "Lab");
 
     toolbar_->AddChildView(back_button_);
     layout_->SetFlexForView(back_button_, 0);
@@ -96,6 +101,9 @@ BrowserChrome::BrowserChrome(core::BrowserSession& session) : session_(session) 
 
     toolbar_->AddChildView(address_bar_);
     layout_->SetFlexForView(address_bar_, 1);
+
+    toolbar_->AddChildView(lab_button_);
+    layout_->SetFlexForView(lab_button_, 0);
 
     SyncAddressFromSession(session_);
 }
@@ -115,6 +123,13 @@ void BrowserChrome::OnBrowserSessionChanged(const core::BrowserSession& session)
 
 void BrowserChrome::HandleNavigationAction(const NavigationAction action) {
     CEF_REQUIRE_UI_THREAD();
+    if (action == NavigationAction::ToggleNetworkLab) {
+        if (on_toggle_network_lab_) {
+            on_toggle_network_lab_();
+        }
+        return;
+    }
+
     const auto& active_id = session_.ActiveTabId();
     if (!active_id.has_value()) {
         return;
@@ -129,6 +144,8 @@ void BrowserChrome::HandleNavigationAction(const NavigationAction action) {
             break;
         case NavigationAction::Reload:
             static_cast<void>(session_.Reload(*active_id));
+            break;
+        case NavigationAction::ToggleNetworkLab:
             break;
     }
 }

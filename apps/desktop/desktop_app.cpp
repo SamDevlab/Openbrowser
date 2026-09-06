@@ -24,11 +24,13 @@ public:
         CefRefPtr<CefPanel> chrome_panel,
         CefRefPtr<CefPanel> focus_sidebar_panel,
         CefRefPtr<CefPanel> browser_host,
+        CefRefPtr<CefPanel> network_lab_panel,
         CefRefPtr<CefBrowserEngine> engine)
         : tab_strip_panel_(std::move(tab_strip_panel)),
           chrome_panel_(std::move(chrome_panel)),
           focus_sidebar_panel_(std::move(focus_sidebar_panel)),
           browser_host_(std::move(browser_host)),
+          network_lab_panel_(std::move(network_lab_panel)),
           engine_(std::move(engine)) {}
 
     DesktopWindowDelegate(const DesktopWindowDelegate&) = delete;
@@ -73,6 +75,11 @@ public:
         root_panel->AddChildView(body_panel);
         root_layout->SetFlexForView(body_panel, 1);
 
+        if (network_lab_panel_) {
+            root_panel->AddChildView(network_lab_panel_);
+            root_layout->SetFlexForView(network_lab_panel_, 0);
+        }
+
         window->AddChildView(root_panel);
         root_panel->Layout();
         window->Show();
@@ -85,6 +92,7 @@ public:
         chrome_panel_ = nullptr;
         focus_sidebar_panel_ = nullptr;
         browser_host_ = nullptr;
+        network_lab_panel_ = nullptr;
         engine_ = nullptr;
     }
 
@@ -103,6 +111,7 @@ private:
     CefRefPtr<CefPanel> chrome_panel_;
     CefRefPtr<CefPanel> focus_sidebar_panel_;
     CefRefPtr<CefPanel> browser_host_;
+    CefRefPtr<CefPanel> network_lab_panel_;
     CefRefPtr<CefBrowserEngine> engine_;
 
     IMPLEMENT_REFCOUNTING(DesktopWindowDelegate);
@@ -122,11 +131,8 @@ void DesktopApp::OnContextInitialized() {
 
     engine_ = new CefBrowserEngine(browser_host_);
 
-    CefRefPtr<CefCommandLine> command_line = CefCommandLine::GetGlobalCommandLine();
-    if (command_line && command_line->HasSwitch("network-lab")) {
-        network_trace_ = std::make_unique<devtools::network::NetworkTraceBuffer>();
-        engine_->SetNetworkObservationSink(network_trace_.get());
-    }
+    network_trace_ = std::make_unique<devtools::network::NetworkTraceBuffer>();
+    engine_->SetNetworkObservationSink(network_trace_.get());
 
     focus_queue_ = std::make_unique<core::FocusQueue>();
     session_ = std::make_unique<core::BrowserSession>(*engine_);
@@ -155,8 +161,16 @@ void DesktopApp::OnContextInitialized() {
     }
 
     tab_strip_ = std::make_unique<TabStrip>(*session_);
-    chrome_ = std::make_unique<BrowserChrome>(*session_);
+    chrome_ = std::make_unique<BrowserChrome>(*session_, [this]() {
+        ToggleNetworkLab();
+    });
     focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);
+    network_lab_panel_ = std::make_unique<NetworkLabPanel>(*network_trace_, *session_);
+
+    CefRefPtr<CefCommandLine> command_line = CefCommandLine::GetGlobalCommandLine();
+    const bool show_network_lab = command_line && command_line->HasSwitch("network-lab");
+    network_lab_panel_->SetVisible(show_network_lab);
+
     session_->AddObserver(this);
 
     // Persist running session with clean_shutdown = false for crash detection
@@ -168,6 +182,7 @@ void DesktopApp::OnContextInitialized() {
             chrome_->View(),
             focus_sidebar_->View(),
             browser_host_,
+            network_lab_panel_->View(),
             engine_));
 }
 
@@ -182,6 +197,7 @@ void DesktopApp::ShutdownRuntime() {
         engine_->SetNetworkObservationSink(nullptr);
     }
 
+    network_lab_panel_.reset();
     focus_sidebar_.reset();
     chrome_.reset();
     tab_strip_.reset();
@@ -195,6 +211,13 @@ void DesktopApp::ShutdownRuntime() {
 void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
     CEF_REQUIRE_UI_THREAD();
     SaveCurrentSession(false);
+}
+
+void DesktopApp::ToggleNetworkLab() {
+    CEF_REQUIRE_UI_THREAD();
+    if (network_lab_panel_) {
+        network_lab_panel_->ToggleVisibility();
+    }
 }
 
 std::filesystem::path DesktopApp::SessionFilePath() const {
