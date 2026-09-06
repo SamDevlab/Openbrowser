@@ -11,6 +11,7 @@ add_library(openbrowser_core
     src/core/navigation/address_input.cpp
     src/core/session/browser_session.cpp
     src/core/session/focus_session_controller.cpp
+    src/core/session/session_persistence.cpp
 )
 
 add_library(Openbrowser::Core ALIAS openbrowser_core)
@@ -73,6 +74,11 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_focus_session_controller_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_focus_session_controller_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_session_persistence_tests tests/session_persistence_tests.cpp)
+    target_link_libraries(openbrowser_session_persistence_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_session_persistence_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_session_persistence_tests PRIVATE cxx_std_20)
+
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
@@ -81,6 +87,7 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_network_trace_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_observer_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_focus_session_controller_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_session_persistence_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
@@ -89,6 +96,7 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_network_trace_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_observer_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_focus_session_controller_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_session_persistence_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
@@ -98,6 +106,7 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.network_trace COMMAND openbrowser_network_trace_tests)
     add_test(NAME openbrowser.session_observer COMMAND openbrowser_session_observer_tests)
     add_test(NAME openbrowser.focus_session_controller COMMAND openbrowser_focus_session_controller_tests)
+    add_test(NAME openbrowser.session_persistence COMMAND openbrowser_session_persistence_tests)
 endif()
 
 if(OPENBROWSER_BUILD_DESKTOP)
