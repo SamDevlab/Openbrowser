@@ -34,8 +34,11 @@ bool BrowserSession::OpenTab(Tab tab, const bool activate) {
     tab.last_error.reset();
     tab.renderer_crashed = false;
 
-    engine_.CreateTab(tab);
+    // Register domain state before crossing the engine boundary. An adapter is
+    // allowed to synchronously emit lifecycle/navigation callbacks from
+    // CreateTab(), and those callbacks must already be able to resolve TabId.
     tabs_.push_back(std::move(tab));
+    engine_.CreateTab(tabs_.back());
 
     if (should_activate) {
         engine_.ActivateTab(*active_tab_id_);
