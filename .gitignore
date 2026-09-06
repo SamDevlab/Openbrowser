@@ -1,0 +1,37 @@
+# CMake
+/build/
+/cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+Testing/
+
+# Compiler output
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+
+# IDE / editor
+.vscode/
+.idea/
+.vs/
+*.user
+*.suo
+.DS_Store
+
+# Local runtime/profile data
+/.openbrowser/
+/profile/
+profiles/
+*.local.json
+
+# Secrets / environment
+.env
+.env.*
+!.env.example
