@@ -30,20 +30,20 @@ public:
         window->Show();
     }
 
-    void OnWindowDestroyed(CefRefPtr<CefWindow> window) override {
+    void OnWindowDestroyed(CefRefPtr<CefWindow> /*window*/) override {
         CEF_REQUIRE_UI_THREAD();
         engine_->NotifyWindowDestroyed();
         browser_host_ = nullptr;
         engine_ = nullptr;
     }
 
-    bool CanClose(CefRefPtr<CefWindow> window) override {
+    bool CanClose(CefRefPtr<CefWindow> /*window*/) override {
         CEF_REQUIRE_UI_THREAD();
         engine_->BeginWindowClose();
         return engine_->CanCloseWindow();
     }
 
-    CefSize GetPreferredSize(CefRefPtr<CefView> view) override {
+    CefSize GetPreferredSize(CefRefPtr<CefView> /*view*/) override {
         return CefSize(1280, 800);
     }
 
