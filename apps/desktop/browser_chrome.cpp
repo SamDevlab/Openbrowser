@@ -122,13 +122,13 @@ void BrowserChrome::HandleNavigationAction(const NavigationAction action) {
 
     switch (action) {
         case NavigationAction::Back:
-            session_.GoBack(*active_id);
+            static_cast<void>(session_.GoBack(*active_id));
             break;
         case NavigationAction::Forward:
-            session_.GoForward(*active_id);
+            static_cast<void>(session_.GoForward(*active_id));
             break;
         case NavigationAction::Reload:
-            session_.Reload(*active_id);
+            static_cast<void>(session_.Reload(*active_id));
             break;
     }
 }
@@ -151,7 +151,7 @@ bool BrowserChrome::HandleAddressKeyEvent(
             if (normalized.has_value()) {
                 const auto& active_id = session_.ActiveTabId();
                 if (active_id.has_value()) {
-                    session_.Navigate(*active_id, *normalized);
+                    static_cast<void>(session_.Navigate(*active_id, *normalized));
                 }
             } else {
                 SyncAddressFromSession(session_);
