@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.24)
 project(Openbrowser VERSION 0.1.0 LANGUAGES CXX)
 
 option(OPENBROWSER_BUILD_TESTS "Build Openbrowser core tests" ON)
+option(OPENBROWSER_BUILD_DESKTOP "Configure the pinned CEF desktop adapter" OFF)
 
 add_library(openbrowser_core
     src/core/focus_queue/focus_queue.cpp
@@ -37,4 +38,15 @@ if(OPENBROWSER_BUILD_TESTS)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
+endif()
+
+if(OPENBROWSER_BUILD_DESKTOP)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/OpenbrowserCEF.cmake")
+    openbrowser_configure_cef()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop/CMakeLists.txt")
+        add_subdirectory(apps/desktop)
+    else()
+        message(STATUS "CEF bootstrap validated; apps/desktop target has not been added yet")
+    endif()
 endif()
