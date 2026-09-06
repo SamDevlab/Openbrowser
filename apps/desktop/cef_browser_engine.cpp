@@ -203,6 +203,15 @@ bool CefBrowserEngine::NetworkObservationEnabled() const noexcept {
     return network_sink_.load(std::memory_order_acquire) != nullptr;
 }
 
+void CefBrowserEngine::SetCapabilityPolicy(
+    const core::CapabilityPolicy* policy) noexcept {
+    capability_policy_.store(policy, std::memory_order_release);
+}
+
+const core::CapabilityPolicy* CefBrowserEngine::Policy() const noexcept {
+    return capability_policy_.load(std::memory_order_acquire);
+}
+
 void CefBrowserEngine::NotifyBrowserCreated(
     const core::TabId& tab_id,
     CefRefPtr<CefBrowser> browser) {

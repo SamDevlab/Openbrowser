@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/capabilities/capability_policy.h"
 #include "devtools/network/network_observation_sink.h"
 #include "engine/browser_engine.h"
 
@@ -37,6 +38,9 @@ public:
 
     void SetNetworkObservationSink(devtools::network::NetworkObservationSink* sink) noexcept;
     [[nodiscard]] bool NetworkObservationEnabled() const noexcept;
+
+    void SetCapabilityPolicy(const core::CapabilityPolicy* policy) noexcept;
+    [[nodiscard]] const core::CapabilityPolicy* Policy() const noexcept;
 
     void NotifyBrowserCreated(const core::TabId& tab_id, CefRefPtr<CefBrowser> browser);
     void NotifyBrowserBeforeClose(const core::TabId& tab_id);
@@ -81,6 +85,7 @@ private:
     std::optional<core::TabId> active_tab_id_;
     engine::BrowserEngineEventSink* event_sink_{nullptr};
     std::atomic<devtools::network::NetworkObservationSink*> network_sink_{nullptr};
+    std::atomic<const core::CapabilityPolicy*> capability_policy_{nullptr};
     std::size_t live_browser_count_{0};
     bool window_close_requested_{false};
     bool window_destroyed_{false};
