@@ -15,6 +15,8 @@ Openbrowser follows a few non-negotiable architectural rules:
 5. **External services are replaceable.** Sync, filters, update sources, DNS and registries sit behind provider interfaces so self-hosted implementations can replace hosted ones.
 6. **Sensitive exports are deny-by-default.** Portable configuration must not silently include credentials, cookies, tokens, sessions or vault secrets.
 7. **Differences are intentional and testable.** Where Openbrowser diverges from upstream browser behavior, the divergence should be classified, reproducible and covered by tests.
+8. **Compatibility is continuously measured.** Privacy/product changes must not silently become unexplained site breakage.
+9. **Developer observability is native and local.** Network activity should be inspectable without requiring a third-party extension or hidden remote service.
 
 ## Current core
 
@@ -83,6 +85,36 @@ Privacy is treated as a core policy system, not an optional skin over the browse
 
 Openbrowser does **not** define privacy as anonymity. Features such as BitTorrent have protocol-level privacy characteristics that the UI and documentation must make explicit.
 
+### Web compatibility system
+
+Openbrowser will eventually include a compatibility subsystem that continuously checks whether Openbrowser-specific privacy/product changes introduce unintended site regressions.
+
+The planned system combines:
+
+- Web Platform Tests (WPT);
+- rendering/reftest checks;
+- deterministic site scenarios;
+- differential runs against a pinned Chromium reference;
+- classified, versioned and narrowly scoped compatibility mitigations.
+
+A site-specific fix must not silently disable global privacy controls. Differences are classified as standards regressions, engine regressions, Openbrowser regressions, intentional privacy/product divergences, site assumptions or unknowns.
+
+See [`docs/web-compatibility.md`](docs/web-compatibility.md).
+
+### Developer Network Lab
+
+Openbrowser will include a native developer network inspector designed to expose request, connection and policy behavior without requiring an extension.
+
+The default mode observes Openbrowser-owned/browser page traffic and can evolve from:
+
+1. request/response inspection;
+2. connection/transport diagnostics;
+3. optional privileged raw packet capture in a separate helper process.
+
+Planned views include a request table, timing waterfall, connection graph, TLS/protocol metadata, WebSocket activity, privacy/filter decisions and safe local trace export. Sensitive headers and bodies are redacted or disabled by default.
+
+See [`docs/developer-network-inspector.md`](docs/developer-network-inspector.md).
+
 ### Transfers
 
 The long-term transfer architecture unifies HTTP(S) downloads and BitTorrent under a common broker while keeping protocol engines isolated.
@@ -126,6 +158,13 @@ Torrent functionality is for legitimate peer-to-peer distribution. The browser d
               | local/self |  | CEF -> Chromium  |
               | hosted opt |  | deeper later     |
               +------------+  +------------------+
+                                   |
+                         normalized observations
+                                   |
+                     +-------------v-------------+
+                     | Compatibility / Network   |
+                     | tests + developer traces  |
+                     +---------------------------+
 ```
 
 See [`docs/architecture.md`](docs/architecture.md), [`docs/threat-model.md`](docs/threat-model.md) and the ADRs in [`docs/adr/`](docs/adr/).
@@ -153,19 +192,21 @@ See [`docs/adr/0002-license-and-bootstrap-stack.md`](docs/adr/0002-license-and-b
 ## Repository layout
 
 ```text
-apps/desktop/              desktop browser shell / CEF integration
-src/core/session/          browser-session orchestration
-src/core/tabs/             engine-independent tab domain
-src/core/focus_queue/      intent/priority queue
-src/core/capabilities/     page and browser capability policy
-src/providers/             replaceable local/remote provider interfaces
-src/engine/                rendering-engine ports/adapters
-tests/fakes/               deterministic engine test doubles
-tests/                     executable invariants and core tests
-docs/architecture.md       system boundaries and data flow
-docs/threat-model.md       initial security model
-docs/adr/                  architecture decision records
-THIRD_PARTY.md             dependency/license ledger
+apps/desktop/                         desktop browser shell / CEF integration
+src/core/session/                     browser-session orchestration
+src/core/tabs/                        engine-independent tab domain
+src/core/focus_queue/                 intent/priority queue
+src/core/capabilities/                page and browser capability policy
+src/providers/                        replaceable local/remote provider interfaces
+src/engine/                           rendering-engine ports/adapters
+tests/fakes/                          deterministic engine test doubles
+tests/                                executable invariants and core tests
+docs/architecture.md                  system boundaries and data flow
+docs/threat-model.md                  initial security model
+docs/web-compatibility.md             future compatibility/regression system
+docs/developer-network-inspector.md   native developer network observability
+docs/adr/                             architecture decision records
+THIRD_PARTY.md                        dependency/license ledger
 ```
 
 ## Build the current core
@@ -236,9 +277,29 @@ Core CI runs on Linux, Windows and macOS.
 - magnet/torrent UI;
 - bandwidth, integrity and privacy controls.
 
+### M6 — Web compatibility engineering
+
+- WPT runner integration;
+- pinned Chromium reference builds;
+- deterministic site scenario runner;
+- normalized differential observations;
+- rendering/reftest comparisons;
+- compatibility regression classification;
+- narrowly scoped compatibility profiles/mitigations.
+
+### M7 — Developer Network Lab
+
+- native request/response trace model;
+- Network/CDP and CEF observation adapters;
+- waterfall and structured filters;
+- connection/TLS/protocol diagnostics;
+- privacy/filter decision explanation;
+- local `.obtrace` and HAR export;
+- optional isolated raw packet-capture helper as a later advanced capability.
+
 ## Contributing and security
 
-This repository is intentionally strict about architectural boundaries. Changes that introduce undeclared browser egress, direct provider dependencies inside the core, or silent persistence of sensitive state should be treated as design regressions.
+This repository is intentionally strict about architectural boundaries. Changes that introduce undeclared browser egress, direct provider dependencies inside the core, silent persistence of sensitive state, unclassified compatibility divergences or unsafe trace capture should be treated as design regressions.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md) and [`THIRD_PARTY.md`](THIRD_PARTY.md).
 
