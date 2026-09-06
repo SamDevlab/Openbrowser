@@ -3,6 +3,7 @@
 #include "cef_tab_client.h"
 #include "devtools/network/network_trace.h"
 
+#include "include/cef_app.h"
 #include "include/cef_frame.h"
 #include "include/cef_task.h"
 #include "include/wrapper/cef_helpers.h"
@@ -361,7 +362,8 @@ void CefBrowserEngine::HideActiveSurface() {
 }
 
 void CefBrowserEngine::MaybeQuitAfterClose() {
-    if (!window_close_requested_ || live_browser_count_ != 0 || message_loop_quit_requested_) {
+    if (!window_close_requested_ || !window_destroyed_ || live_browser_count_ != 0 ||
+        message_loop_quit_requested_) {
         return;
     }
 
