@@ -51,7 +51,7 @@ jobs:
 
       - name: Restore CEF archive cache
         id: cef-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .cache/cef/*.tar.bz2
           key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
@@ -110,6 +110,13 @@ jobs:
           cef_root="${PWD}/.cache/cef/extracted/cef_binary_${CEF_VERSION}_${CEF_PLATFORM}"
           test -f "${cef_root}/include/cef_version.h"
           echo "CEF_ROOT=${cef_root}" >> "${GITHUB_ENV}"
+
+      - name: Save verified CEF archive cache
+        if: steps.cef-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/cef/*.tar.bz2
+          key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
 
       - name: Configure desktop adapter
         run: >-
