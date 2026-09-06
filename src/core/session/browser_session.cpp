@@ -7,7 +7,13 @@
 
 namespace openbrowser::core {
 
-BrowserSession::BrowserSession(engine::BrowserEngine& engine) noexcept : engine_(engine) {}
+BrowserSession::BrowserSession(engine::BrowserEngine& engine) noexcept : engine_(engine) {
+    engine_.SetEventSink(this);
+}
+
+BrowserSession::~BrowserSession() {
+    engine_.SetEventSink(nullptr);
+}
 
 bool BrowserSession::OpenTab(Tab tab, const bool activate) {
     if (tab.id.empty() || tab.url.empty() || FindTab(tab.id) != nullptr) {
@@ -22,6 +28,11 @@ bool BrowserSession::OpenTab(Tab tab, const bool activate) {
     } else {
         tab.lifecycle = TabLifecycle::Background;
     }
+
+    tab.pending_url = tab.url;
+    tab.navigation_state = NavigationState::Requested;
+    tab.last_error.reset();
+    tab.renderer_crashed = false;
 
     engine_.CreateTab(tab);
     tabs_.push_back(std::move(tab));
@@ -89,7 +100,10 @@ bool BrowserSession::Navigate(const TabId& tab_id, std::string url) {
         it->lifecycle = TabLifecycle::Background;
     }
 
-    it->url = url;
+    it->pending_url = url;
+    it->navigation_state = NavigationState::Requested;
+    it->last_error.reset();
+    it->renderer_crashed = false;
     engine_.Navigate(engine::NavigationRequest{.tab_id = tab_id, .url = std::move(url)});
     return true;
 }
@@ -142,6 +156,63 @@ const std::vector<Tab>& BrowserSession::Tabs() const noexcept {
 
 const std::optional<TabId>& BrowserSession::ActiveTabId() const noexcept {
     return active_tab_id_;
+}
+
+void BrowserSession::OnNavigationStarted(const engine::NavigationStartedEvent& event) {
+    const auto it = FindMutable(event.tab_id);
+    if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded) {
+        return;
+    }
+
+    it->pending_url = event.url;
+    it->navigation_state = NavigationState::Loading;
+    it->last_error.reset();
+    it->renderer_crashed = false;
+}
+
+void BrowserSession::OnNavigationCommitted(const engine::NavigationCommittedEvent& event) {
+    const auto it = FindMutable(event.tab_id);
+    if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded) {
+        return;
+    }
+
+    it->url = event.url;
+    it->pending_url.reset();
+    it->navigation_state = NavigationState::Idle;
+    it->last_error.reset();
+    it->renderer_crashed = false;
+}
+
+void BrowserSession::OnNavigationFailed(const engine::NavigationFailedEvent& event) {
+    const auto it = FindMutable(event.tab_id);
+    if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded) {
+        return;
+    }
+
+    it->pending_url = event.url;
+    it->navigation_state = NavigationState::Failed;
+    it->last_error = event.error_text.empty() ? std::string{"navigation failed"} : event.error_text;
+    it->renderer_crashed = false;
+}
+
+void BrowserSession::OnTitleChanged(const engine::TitleChangedEvent& event) {
+    const auto it = FindMutable(event.tab_id);
+    if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded) {
+        return;
+    }
+
+    it->title = event.title;
+}
+
+void BrowserSession::OnRendererCrashed(const engine::RendererCrashedEvent& event) {
+    const auto it = FindMutable(event.tab_id);
+    if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded) {
+        return;
+    }
+
+    it->renderer_crashed = true;
+    it->navigation_state = NavigationState::Failed;
+    it->last_error = event.reason.empty() ? std::string{"renderer crashed"} : event.reason;
 }
 
 BrowserSession::TabIterator BrowserSession::FindMutable(const TabId& tab_id) {
