@@ -5,6 +5,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace openbrowser::core {
 
@@ -43,12 +44,22 @@ struct CapabilityContext {
 
 class CapabilityPolicy {
 public:
+    [[nodiscard]] static CapabilityPolicy CreateDefault();
+    [[nodiscard]] static std::optional<std::string> ExtractOrigin(std::string_view url);
+    [[nodiscard]] static std::optional<std::string> ExtractScheme(std::string_view url);
+
     void SetGlobal(Capability capability, CapabilityDecision decision);
     void SetWorkspace(const WorkspaceId& workspace_id, Capability capability, CapabilityDecision decision);
     void SetOrigin(const std::string& origin, Capability capability, CapabilityDecision decision);
     void SetSession(const std::string& session_id, Capability capability, CapabilityDecision decision);
 
     [[nodiscard]] CapabilityDecision Resolve(Capability capability, const CapabilityContext& context) const;
+
+    [[nodiscard]] bool CanNavigate(const std::string& url, const CapabilityContext& context = {}) const;
+    [[nodiscard]] bool CanLoadResource(
+        const std::string& url,
+        const std::string& initiator = {},
+        const CapabilityContext& context = {}) const;
 
 private:
     using RuleSet = std::map<Capability, CapabilityDecision>;

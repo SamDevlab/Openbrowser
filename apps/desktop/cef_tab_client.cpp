@@ -97,8 +97,22 @@ bool CefTabClient::OnBeforeBrowse(
     const bool /*user_gesture*/,
     const bool /*is_redirect*/) {
     CEF_REQUIRE_UI_THREAD();
+
+    const std::string url = request ? request->GetURL().ToString() : std::string{};
+    const auto* policy = engine_->Policy();
+    if (policy != nullptr && !policy->CanNavigate(url)) {
+        if (frame && frame->IsMain()) {
+            engine_->NotifyNavigationFailed(
+                tab_id_,
+                url,
+                -102,
+                "Blocked by Openbrowser capability policy");
+        }
+        return true;
+    }
+
     if (frame && frame->IsMain()) {
-        engine_->NotifyNavigationStarted(tab_id_, request->GetURL().ToString());
+        engine_->NotifyNavigationStarted(tab_id_, url);
     }
     return false;
 }
@@ -153,7 +167,7 @@ CefRefPtr<CefResourceRequestHandler> CefTabClient::GetResourceRequestHandler(
     bool& disable_default_handling) {
     CEF_REQUIRE_IO_THREAD();
     disable_default_handling = false;
-    if (!engine_->NetworkObservationEnabled()) {
+    if (!engine_->NetworkObservationEnabled() && engine_->Policy() == nullptr) {
         return nullptr;
     }
     return this;
@@ -166,13 +180,42 @@ CefResourceRequestHandler::ReturnValue CefTabClient::OnBeforeResourceLoad(
     CefRefPtr<CefCallback> /*callback*/) {
     CEF_REQUIRE_IO_THREAD();
 
+    const std::string url = request ? request->GetURL().ToString() : std::string{};
+    const std::string initiator = request && request->GetReferrerURL().length() > 0
+        ? request->GetReferrerURL().ToString()
+        : std::string{};
+
+    const auto* policy = engine_->Policy();
+    if (policy != nullptr && !policy->CanLoadResource(url, initiator)) {
+        const std::string request_id = TraceRequestId(request);
+        const std::string method = request ? request->GetMethod().ToString() : "GET";
+        engine_->PostNetworkEvent({
+            .request_id = request_id,
+            .tab_id = tab_id_,
+            .type = devtools::network::NetworkEventType::RequestStarted,
+            .url = url,
+            .method = method,
+            .headers = request ? RequestHeaders(request) : std::vector<devtools::network::Header>{},
+        });
+        engine_->PostNetworkEvent({
+            .request_id = request_id,
+            .tab_id = tab_id_,
+            .type = devtools::network::NetworkEventType::RequestFailed,
+            .url = url,
+            .method = method,
+            .error = "BLOCKED_BY_CAPABILITY_POLICY",
+        });
+        ForgetTraceRequest(request);
+        return RV_CANCEL;
+    }
+
     engine_->PostNetworkEvent({
         .request_id = TraceRequestId(request),
         .tab_id = tab_id_,
         .type = devtools::network::NetworkEventType::RequestStarted,
-        .url = request->GetURL().ToString(),
-        .method = request->GetMethod().ToString(),
-        .headers = RequestHeaders(request),
+        .url = url,
+        .method = request ? request->GetMethod().ToString() : "GET",
+        .headers = request ? RequestHeaders(request) : std::vector<devtools::network::Header>{},
     });
 
     return RV_CONTINUE;

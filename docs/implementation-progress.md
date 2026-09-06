@@ -16,24 +16,26 @@ Implemented in source:
 - optional Network Lab Level 1 resource observation behind `--network-lab`;
 - Openbrowser-owned request trace IDs instead of durable CEF IDs;
 - Linux and Windows entrypoints following CEF multi-process/sandbox bootstrap patterns;
-- an explicit CEF smoke workflow that downloads only the exact pinned stable distribution and verifies it against the checksum published by the official CEF build service before compiling.
+- an explicit CEF smoke workflow that downloads only the exact pinned stable distribution and verifies it against the checksum published by the official CEF build service before compiling;
+- address bar and navigation chrome controls;
+- dual tab projection (horizontal `TabStrip` + vertical `FocusSidebar` over `BrowserSession`);
+- session persistence, atomic disk snapshots, and clean shutdown crash detection;
+- Network Lab request observation panel drawer toggleable from chrome and `--network-lab`;
+- capability enforcement at the engine and network boundary (`CapabilityPolicy`, `OnBeforeBrowse`, `OnBeforeResourceLoad`).
 
 ## Deliberate limitations
 
 The current M1 shell is not yet a usable daily browser:
 
-- the initial page is selected with `--url=<url>`; an address bar is next;
-- tab chrome is not implemented yet;
 - `Suspend` is currently a visibility/resource hint, not renderer discard;
-- Network Lab has a trace core and CEF request bridge but no developer UI yet;
 - macOS core remains tested, but the CEF desktop target is intentionally blocked until the required helper-app bundle layout is implemented correctly;
+- dynamic capability consent UI prompts ("Ask" decisions) will be expanded in M2;
 - desktop runtime support is not considered validated until the dedicated CEF smoke build passes against the pinned distribution.
 
-## Next after runtime compile validation
+## Next steps (M2 roadmap)
 
-1. address bar and navigation commands;
-2. horizontal tab projection;
-3. vertical tab projection over the same `BrowserSession` state;
-4. first Network Lab request table;
-5. session persistence/crash recovery contract;
-6. capability enforcement at the engine/network boundary.
+1. Interactive capability permission prompts and security badge UI;
+2. Focus session timer and attention metrics;
+3. Advanced Network Lab inspection (body preview, header filtering);
+4. Renderer discard and memory pressure lifecycle policies;
+5. Workspace isolation for cookies and storage partitions.

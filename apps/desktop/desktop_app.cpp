@@ -131,6 +131,10 @@ void DesktopApp::OnContextInitialized() {
 
     engine_ = new CefBrowserEngine(browser_host_);
 
+    capability_policy_ = std::make_unique<core::CapabilityPolicy>(
+        core::CapabilityPolicy::CreateDefault());
+    engine_->SetCapabilityPolicy(capability_policy_.get());
+
     network_trace_ = std::make_unique<devtools::network::NetworkTraceBuffer>();
     engine_->SetNetworkObservationSink(network_trace_.get());
 
@@ -194,6 +198,7 @@ void DesktopApp::ShutdownRuntime() {
     SaveCurrentSession(true);
 
     if (engine_) {
+        engine_->SetCapabilityPolicy(nullptr);
         engine_->SetNetworkObservationSink(nullptr);
     }
 
@@ -204,6 +209,7 @@ void DesktopApp::ShutdownRuntime() {
     session_.reset();
     focus_queue_.reset();
     network_trace_.reset();
+    capability_policy_.reset();
     engine_ = nullptr;
     browser_host_ = nullptr;
 }

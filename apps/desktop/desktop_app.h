@@ -2,6 +2,7 @@
 
 #include "browser_chrome.h"
 #include "cef_browser_engine.h"
+#include "core/capabilities/capability_policy.h"
 #include "core/focus_queue/focus_queue.h"
 #include "core/session/browser_session.h"
 #include "core/session/browser_session_observer.h"
@@ -50,6 +51,7 @@ private:
     std::unique_ptr<FocusSidebar> focus_sidebar_;
     std::unique_ptr<devtools::network::NetworkTraceBuffer> network_trace_;
     std::unique_ptr<NetworkLabPanel> network_lab_panel_;
+    std::unique_ptr<core::CapabilityPolicy> capability_policy_;
     std::filesystem::path session_file_path_;
 
     IMPLEMENT_REFCOUNTING(DesktopApp);
