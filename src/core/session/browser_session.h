@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/session/browser_session_observer.h"
 #include "core/tabs/tab.h"
 #include "engine/browser_engine.h"
 #include "engine/browser_engine_events.h"
@@ -19,6 +20,9 @@ public:
     BrowserSession& operator=(const BrowserSession&) = delete;
     BrowserSession(BrowserSession&&) = delete;
     BrowserSession& operator=(BrowserSession&&) = delete;
+
+    void AddObserver(BrowserSessionObserver* observer);
+    void RemoveObserver(BrowserSessionObserver* observer) noexcept;
 
     [[nodiscard]] bool OpenTab(Tab tab, bool activate = true);
     [[nodiscard]] bool CloseTab(const TabId& tab_id);
@@ -45,12 +49,14 @@ private:
 
     [[nodiscard]] TabIterator FindMutable(const TabId& tab_id);
     [[nodiscard]] bool PrepareTabForNavigationCommand(const TabId& tab_id);
+    void NotifyObservers();
     void DemoteActiveTab();
     void ActivateAfterClose(std::size_t preferred_index);
 
     engine::BrowserEngine& engine_;
     std::vector<Tab> tabs_;
     std::optional<TabId> active_tab_id_;
+    std::vector<BrowserSessionObserver*> observers_;
 };
 
 }  // namespace openbrowser::core
