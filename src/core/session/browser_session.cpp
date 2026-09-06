@@ -19,7 +19,7 @@ bool BrowserSession::OpenTab(Tab tab, const bool activate) {
         DemoteActiveTab();
         tab.lifecycle = TabLifecycle::Active;
         active_tab_id_ = tab.id;
-    } else if (tab.lifecycle == TabLifecycle::Active) {
+    } else {
         tab.lifecycle = TabLifecycle::Background;
     }
 
