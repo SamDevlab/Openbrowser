@@ -8,6 +8,7 @@ option(OPENBROWSER_BUILD_DESKTOP "Configure the pinned CEF desktop adapter" OFF)
 add_library(openbrowser_core
     src/core/focus_queue/focus_queue.cpp
     src/core/capabilities/capability_policy.cpp
+    src/core/navigation/address_input.cpp
     src/core/session/browser_session.cpp
 )
 
@@ -53,6 +54,10 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_navigation_command_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_navigation_command_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_address_input_tests tests/address_input_tests.cpp)
+    target_link_libraries(openbrowser_address_input_tests PRIVATE Openbrowser::Core)
+    target_compile_features(openbrowser_address_input_tests PRIVATE cxx_std_20)
+
     add_executable(openbrowser_network_trace_tests tests/network_trace_tests.cpp)
     target_link_libraries(openbrowser_network_trace_tests PRIVATE Openbrowser::NetworkTrace)
     target_compile_features(openbrowser_network_trace_tests PRIVATE cxx_std_20)
@@ -61,17 +66,20 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_navigation_command_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_address_input_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_network_trace_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_navigation_command_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_address_input_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_network_trace_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
     add_test(NAME openbrowser.session_reentrant COMMAND openbrowser_session_reentrant_tests)
     add_test(NAME openbrowser.navigation_commands COMMAND openbrowser_navigation_command_tests)
+    add_test(NAME openbrowser.address_input COMMAND openbrowser_address_input_tests)
     add_test(NAME openbrowser.network_trace COMMAND openbrowser_network_trace_tests)
 endif()
 
