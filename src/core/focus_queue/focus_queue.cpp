@@ -56,6 +56,16 @@ bool FocusQueue::SetState(const std::string& item_id, const FocusState state) {
     return true;
 }
 
+bool FocusQueue::SetTabId(const std::string& item_id, std::optional<TabId> tab_id) {
+    const auto it = FindMutable(item_id);
+    if (it == items_.end()) {
+        return false;
+    }
+
+    it->tab_id = std::move(tab_id);
+    return true;
+}
+
 bool FocusQueue::PromoteToNow(const std::string& item_id) {
     const auto selected = FindMutable(item_id);
     if (selected == items_.end()) {

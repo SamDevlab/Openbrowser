@@ -9,6 +9,10 @@ set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     cef_tab_client.h
     desktop_app.cpp
     desktop_app.h
+    focus_sidebar.cpp
+    focus_sidebar.h
+    tab_strip.cpp
+    tab_strip.h
 )
 
 if(OS_LINUX)

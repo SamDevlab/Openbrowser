@@ -30,6 +30,7 @@ public:
     [[nodiscard]] bool Remove(const std::string& item_id);
     [[nodiscard]] bool Move(const std::string& item_id, std::size_t new_index);
     [[nodiscard]] bool SetState(const std::string& item_id, FocusState state);
+    [[nodiscard]] bool SetTabId(const std::string& item_id, std::optional<TabId> tab_id);
     [[nodiscard]] bool PromoteToNow(const std::string& item_id);
 
     [[nodiscard]] bool Contains(const std::string& item_id) const;
