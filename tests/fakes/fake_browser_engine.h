@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace openbrowser::tests {
