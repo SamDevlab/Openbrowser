@@ -28,11 +28,7 @@ void NetworkTraceBuffer::Add(NetworkEvent event) {
         RedactSensitiveHeaders(event.headers);
     }
 
-    if (event.sequence == 0) {
-        event.sequence = next_sequence_++;
-    } else if (event.sequence >= next_sequence_) {
-        next_sequence_ = event.sequence + 1;
-    }
+    event.sequence = next_sequence_++;
 
     while (events_.size() >= policy_.max_events) {
         events_.pop_front();
@@ -68,6 +64,8 @@ bool NetworkTraceBuffer::IsSensitiveHeaderName(const std::string& name) {
         "set-cookie",
         "x-api-key",
         "x-auth-token",
+        "x-csrf-token",
+        "x-xsrf-token",
     };
 
     const auto normalized = LowerAscii(name);
