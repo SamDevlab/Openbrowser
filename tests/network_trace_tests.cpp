@@ -1,7 +1,9 @@
 #include "devtools/network/network_trace.h"
 
 #include <iostream>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -40,6 +42,7 @@ void TestSensitiveHeadersAreRedactedByDefault() {
     event.headers = {
         Header{.name = "Authorization", .value = "Bearer secret"},
         Header{.name = "cookie", .value = "session=secret"},
+        Header{.name = "X-Csrf-Token", .value = "csrf-secret"},
         Header{.name = "Content-Type", .value = "application/json"},
     };
 
@@ -48,7 +51,8 @@ void TestSensitiveHeadersAreRedactedByDefault() {
     const auto& headers = buffer.Events().front().headers;
     Require(headers[0].value == "<redacted>", "authorization is redacted case-insensitively");
     Require(headers[1].value == "<redacted>", "cookie is redacted");
-    Require(headers[2].value == "application/json", "non-sensitive header is preserved");
+    Require(headers[2].value == "<redacted>", "CSRF token is redacted");
+    Require(headers[3].value == "application/json", "non-sensitive header is preserved");
 }
 
 void TestExplicitRawHeaderPolicyIsPossible() {
@@ -65,6 +69,22 @@ void TestExplicitRawHeaderPolicyIsPossible() {
     Require(
         buffer.Events().front().headers.front().value == "explicit-secret",
         "explicit raw-header policy preserves sensitive values");
+}
+
+void TestBufferOwnsMonotonicSequence() {
+    using openbrowser::devtools::network::NetworkTraceBuffer;
+
+    NetworkTraceBuffer buffer;
+    auto first = MakeEvent("request-1");
+    first.sequence = 999;
+    auto second = MakeEvent("request-2");
+    second.sequence = 42;
+
+    buffer.Add(std::move(first));
+    buffer.Add(std::move(second));
+
+    Require(buffer.Events()[0].sequence == 1, "adapter-provided sequence is ignored");
+    Require(buffer.Events()[1].sequence == 2, "trace buffer owns monotonic sequence");
 }
 
 void TestBufferIsBoundedAndReportsDroppedEvents() {
@@ -118,6 +138,7 @@ void TestClearResetsCaptureSessionCounters() {
 int main() {
     TestSensitiveHeadersAreRedactedByDefault();
     TestExplicitRawHeaderPolicyIsPossible();
+    TestBufferOwnsMonotonicSequence();
     TestBufferIsBoundedAndReportsDroppedEvents();
     TestZeroCapacityIsNormalizedToOne();
     TestClearResetsCaptureSessionCounters();
