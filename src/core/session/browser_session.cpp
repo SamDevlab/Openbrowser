@@ -111,6 +111,33 @@ bool BrowserSession::Navigate(const TabId& tab_id, std::string url) {
     return true;
 }
 
+bool BrowserSession::GoBack(const TabId& tab_id) {
+    if (!PrepareTabForNavigationCommand(tab_id)) {
+        return false;
+    }
+
+    engine_.GoBack(tab_id);
+    return true;
+}
+
+bool BrowserSession::GoForward(const TabId& tab_id) {
+    if (!PrepareTabForNavigationCommand(tab_id)) {
+        return false;
+    }
+
+    engine_.GoForward(tab_id);
+    return true;
+}
+
+bool BrowserSession::Reload(const TabId& tab_id) {
+    if (!PrepareTabForNavigationCommand(tab_id)) {
+        return false;
+    }
+
+    engine_.Reload(tab_id);
+    return true;
+}
+
 bool BrowserSession::SuspendTab(const TabId& tab_id) {
     const auto it = FindMutable(tab_id);
     if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded) {
@@ -222,6 +249,20 @@ BrowserSession::TabIterator BrowserSession::FindMutable(const TabId& tab_id) {
     return std::find_if(tabs_.begin(), tabs_.end(), [&tab_id](const Tab& tab) {
         return tab.id == tab_id;
     });
+}
+
+bool BrowserSession::PrepareTabForNavigationCommand(const TabId& tab_id) {
+    const auto it = FindMutable(tab_id);
+    if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded) {
+        return false;
+    }
+
+    if (it->lifecycle == TabLifecycle::Suspended) {
+        engine_.Resume(tab_id);
+        it->lifecycle = TabLifecycle::Background;
+    }
+
+    return true;
 }
 
 void BrowserSession::DemoteActiveTab() {
