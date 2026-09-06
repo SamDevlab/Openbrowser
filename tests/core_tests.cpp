@@ -146,8 +146,14 @@ void TestBrowserSessionNavigationAndCloseFallback() {
     Require(session.OpenTab(MakeTab("b", "https://b.test", "B")), "open tab b");
     Require(session.OpenTab(MakeTab("c", "https://c.test", "C"), false), "open tab c in background");
 
-    Require(session.Navigate("b", "https://b.test/docs"), "navigate active tab");
-    Require(session.FindTab("b")->url == "https://b.test/docs", "session records requested URL");
+    Require(session.Navigate("b", "https://b.test/docs"), "request navigation on active tab");
+    Require(session.FindTab("b")->url == "https://b.test", "request does not overwrite confirmed/display URL before engine commit");
+    Require(
+        session.FindTab("b")->pending_url == std::optional<std::string>{"https://b.test/docs"},
+        "session records pending navigation target");
+    Require(
+        session.FindTab("b")->navigation_state == openbrowser::core::NavigationState::Requested,
+        "navigation enters requested state before engine confirmation");
     Require(engine.commands.back().type == openbrowser::tests::EngineCommandType::Navigate, "engine receives navigation command");
 
     Require(session.CloseTab("b"), "close active tab");
@@ -183,6 +189,67 @@ void TestBrowserSessionNormalizesNewTabLifecycle() {
         "opening normalized tabs does not emit an implicit suspend command");
 }
 
+void TestEngineNavigationEventsAreAuthoritative() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(session.OpenTab(MakeTab("a", "https://a.test", "A")), "open event test tab");
+    Require(session.FindTab("a")->navigation_state == openbrowser::core::NavigationState::Requested, "new tab starts with requested navigation");
+    Require(session.FindTab("a")->pending_url == std::optional<std::string>{"https://a.test"}, "initial target is pending");
+
+    engine.EmitNavigationStarted("a", "https://a.test");
+    Require(session.FindTab("a")->navigation_state == openbrowser::core::NavigationState::Loading, "engine start moves tab to loading");
+
+    engine.EmitNavigationCommitted("a", "https://a.test/home");
+    Require(session.FindTab("a")->url == "https://a.test/home", "engine commit updates confirmed URL");
+    Require(!session.FindTab("a")->pending_url.has_value(), "commit clears pending URL");
+    Require(session.FindTab("a")->navigation_state == openbrowser::core::NavigationState::Idle, "commit returns navigation to idle");
+
+    Require(session.Navigate("a", "https://a.test/next"), "request second navigation");
+    Require(session.FindTab("a")->url == "https://a.test/home", "second request preserves last committed URL");
+
+    engine.EmitNavigationStarted("a", "https://redirect.test/step");
+    Require(session.FindTab("a")->pending_url == std::optional<std::string>{"https://redirect.test/step"}, "engine redirect updates pending target");
+
+    engine.EmitNavigationCommitted("a", "https://final.test/page");
+    Require(session.FindTab("a")->url == "https://final.test/page", "final engine commit wins over requested URL");
+}
+
+void TestEngineFailureTitleAndCrashEvents() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(session.OpenTab(MakeTab("a", "https://a.test", "Original")), "open failure event tab");
+    engine.EmitNavigationCommitted("a", "https://a.test");
+
+    Require(session.Navigate("a", "https://offline.test"), "request failing navigation");
+    engine.EmitNavigationFailed("a", "https://offline.test", -105, "name not resolved");
+    Require(session.FindTab("a")->url == "https://a.test", "failed navigation preserves last committed URL");
+    Require(session.FindTab("a")->pending_url == std::optional<std::string>{"https://offline.test"}, "failed target remains inspectable");
+    Require(session.FindTab("a")->navigation_state == openbrowser::core::NavigationState::Failed, "failure event marks navigation failed");
+    Require(session.FindTab("a")->last_error == std::optional<std::string>{"name not resolved"}, "failure reason is normalized into tab state");
+
+    engine.EmitTitleChanged("a", "Updated title");
+    Require(session.FindTab("a")->title == "Updated title", "title changes are engine-confirmed");
+
+    engine.EmitRendererCrashed("a", "renderer process terminated");
+    Require(session.FindTab("a")->renderer_crashed, "renderer crash is visible in core state");
+    Require(session.FindTab("a")->navigation_state == openbrowser::core::NavigationState::Failed, "renderer crash leaves tab in failed navigation state");
+    Require(session.FindTab("a")->last_error == std::optional<std::string>{"renderer process terminated"}, "renderer crash reason is retained");
+}
+
+void TestEngineEventSinkLifetime() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    Require(engine.event_sink == nullptr, "fake engine starts without event sink");
+
+    {
+        openbrowser::core::BrowserSession session(engine);
+        Require(engine.event_sink != nullptr, "session registers itself as engine event sink");
+    }
+
+    Require(engine.event_sink == nullptr, "session destruction detaches engine event sink");
+}
+
 void TestBrowserSessionRejectsInvalidIdentity() {
     openbrowser::tests::FakeBrowserEngine engine;
     openbrowser::core::BrowserSession session(engine);
@@ -205,6 +272,9 @@ int main() {
     TestBrowserSessionBackgroundAndSuspension();
     TestBrowserSessionNavigationAndCloseFallback();
     TestBrowserSessionNormalizesNewTabLifecycle();
+    TestEngineNavigationEventsAreAuthoritative();
+    TestEngineFailureTitleAndCrashEvents();
+    TestEngineEventSinkLifetime();
     TestBrowserSessionRejectsInvalidIdentity();
 
     if (failures != 0) {

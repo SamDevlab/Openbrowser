@@ -2,6 +2,7 @@
 
 #include "core/tabs/tab.h"
 #include "engine/browser_engine.h"
+#include "engine/browser_engine_events.h"
 
 #include <optional>
 #include <string>
@@ -9,9 +10,15 @@
 
 namespace openbrowser::core {
 
-class BrowserSession {
+class BrowserSession final : public engine::BrowserEngineEventSink {
 public:
     explicit BrowserSession(engine::BrowserEngine& engine) noexcept;
+    ~BrowserSession() override;
+
+    BrowserSession(const BrowserSession&) = delete;
+    BrowserSession& operator=(const BrowserSession&) = delete;
+    BrowserSession(BrowserSession&&) = delete;
+    BrowserSession& operator=(BrowserSession&&) = delete;
 
     [[nodiscard]] bool OpenTab(Tab tab, bool activate = true);
     [[nodiscard]] bool CloseTab(const TabId& tab_id);
@@ -23,6 +30,12 @@ public:
     [[nodiscard]] const Tab* FindTab(const TabId& tab_id) const;
     [[nodiscard]] const std::vector<Tab>& Tabs() const noexcept;
     [[nodiscard]] const std::optional<TabId>& ActiveTabId() const noexcept;
+
+    void OnNavigationStarted(const engine::NavigationStartedEvent& event) override;
+    void OnNavigationCommitted(const engine::NavigationCommittedEvent& event) override;
+    void OnNavigationFailed(const engine::NavigationFailedEvent& event) override;
+    void OnTitleChanged(const engine::TitleChangedEvent& event) override;
+    void OnRendererCrashed(const engine::RendererCrashedEvent& event) override;
 
 private:
     using TabIterator = std::vector<Tab>::iterator;
