@@ -1,5 +1,7 @@
 #include "desktop_app.h"
 
+#include "core/session/session_persistence.h"
+
 #include "include/cef_command_line.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_fill_layout.h"
@@ -128,23 +130,37 @@ void DesktopApp::OnContextInitialized() {
 
     focus_queue_ = std::make_unique<core::FocusQueue>();
     session_ = std::make_unique<core::BrowserSession>(*engine_);
+    session_file_path_ = SessionFilePath();
+
+    bool restored = false;
+    const auto snapshot = core::SessionPersistence::LoadFromFile(session_file_path_);
+    if (snapshot.has_value() && !snapshot->tabs.empty()) {
+        restored = core::SessionPersistence::RestoreSession(*session_, *focus_queue_, *snapshot);
+    }
+
+    if (!restored || session_->Tabs().empty()) {
+        const bool opened = session_->OpenTab({
+            .id = "initial",
+            .url = StartupUrl(),
+            .title = "New tab",
+            .lifecycle = core::TabLifecycle::Active,
+            .workspace_id = std::nullopt,
+        });
+
+        if (!opened) {
+            engine_->BeginWindowClose();
+            CefQuitMessageLoop();
+            return;
+        }
+    }
+
     tab_strip_ = std::make_unique<TabStrip>(*session_);
     chrome_ = std::make_unique<BrowserChrome>(*session_);
     focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);
+    session_->AddObserver(this);
 
-    const bool opened = session_->OpenTab({
-        .id = "initial",
-        .url = StartupUrl(),
-        .title = "New tab",
-        .lifecycle = core::TabLifecycle::Active,
-        .workspace_id = std::nullopt,
-    });
-
-    if (!opened) {
-        engine_->BeginWindowClose();
-        CefQuitMessageLoop();
-        return;
-    }
+    // Persist running session with clean_shutdown = false for crash detection
+    SaveCurrentSession(false);
 
     CefWindow::CreateTopLevelWindow(
         new DesktopWindowDelegate(
@@ -156,6 +172,12 @@ void DesktopApp::OnContextInitialized() {
 }
 
 void DesktopApp::ShutdownRuntime() {
+    if (session_) {
+        session_->RemoveObserver(this);
+    }
+
+    SaveCurrentSession(true);
+
     if (engine_) {
         engine_->SetNetworkObservationSink(nullptr);
     }
@@ -168,6 +190,33 @@ void DesktopApp::ShutdownRuntime() {
     network_trace_.reset();
     engine_ = nullptr;
     browser_host_ = nullptr;
+}
+
+void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
+    CEF_REQUIRE_UI_THREAD();
+    SaveCurrentSession(false);
+}
+
+std::filesystem::path DesktopApp::SessionFilePath() const {
+    CefRefPtr<CefCommandLine> command_line = CefCommandLine::GetGlobalCommandLine();
+    if (command_line && command_line->HasSwitch("session-file")) {
+        const auto configured = command_line->GetSwitchValue("session-file").ToString();
+        if (!configured.empty()) {
+            return configured;
+        }
+    }
+
+    return "openbrowser_session.json";
+}
+
+void DesktopApp::SaveCurrentSession(const bool clean_shutdown) {
+    if (!session_ || !focus_queue_ || session_file_path_.empty()) {
+        return;
+    }
+
+    const auto snapshot = core::SessionPersistence::CaptureSnapshot(
+        *session_, *focus_queue_, clean_shutdown);
+    static_cast<void>(core::SessionPersistence::SaveToFile(session_file_path_, snapshot));
 }
 
 std::string DesktopApp::StartupUrl() const {
