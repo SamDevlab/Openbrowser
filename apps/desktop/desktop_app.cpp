@@ -169,10 +169,10 @@ void DesktopApp::OnContextInitialized() {
     engine_->SetContentFilter(content_filter_.get());
 
     history_manager_ = std::make_unique<core::HistoryManager>();
-    history_manager_->LoadFromFile(StorageDirectory() / "history.json");
+    static_cast<void>(history_manager_->LoadFromFile(StorageDirectory() / "history.json"));
 
     bookmark_manager_ = std::make_unique<core::BookmarkManager>();
-    bookmark_manager_->LoadFromFile(StorageDirectory() / "bookmarks.json");
+    static_cast<void>(bookmark_manager_->LoadFromFile(StorageDirectory() / "bookmarks.json"));
 
     sync_provider_ = std::make_unique<core::LocalFilesystemSyncProvider>(
         StorageDirectory() / "sync", "desktop-main");
@@ -388,10 +388,10 @@ void DesktopApp::ShutdownRuntime() {
     if (!is_ephemeral) {
         SaveCurrentSession(true);
         if (history_manager_) {
-            history_manager_->SaveToFile(StorageDirectory() / "history.json");
+            static_cast<void>(history_manager_->SaveToFile(StorageDirectory() / "history.json"));
         }
         if (bookmark_manager_) {
-            bookmark_manager_->SaveToFile(StorageDirectory() / "bookmarks.json");
+            static_cast<void>(bookmark_manager_->SaveToFile(StorageDirectory() / "bookmarks.json"));
         }
     }
 
@@ -550,7 +550,7 @@ void DesktopApp::ToggleLiveTraceRecording() {
              profile_manager_->GetActiveProfile()->IsEphemeral());
         if (!is_private) {
             const auto trace_path = StorageDirectory() / "live_trace.obtrace";
-            obtrace_recorder_->StartRecording(trace_path.string());
+            static_cast<void>(obtrace_recorder_->StartRecording(trace_path.string()));
         }
     }
 }
