@@ -234,6 +234,7 @@ jobs:
 
           $exe = Join-Path $root 'openbrowser.exe'
           $env:OPENBROWSER_NONINTERACTIVE = '1'
+          $env:OPENBROWSER_SYMBOL_PATH = Join-Path $PWD 'build-windows/apps/desktop/Release'
 
           # The diagnostic probe goes through the final bootstrap EXE and DLL.
           # It returns zero only after native SID comparison confirms both the
@@ -295,6 +296,7 @@ jobs:
               & taskkill.exe /PID $process.Id /T /F | Out-Null
             }
             Remove-Item Env:OPENBROWSER_NONINTERACTIVE -ErrorAction SilentlyContinue
+            Remove-Item Env:OPENBROWSER_SYMBOL_PATH -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $smokeStorage -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $verifyDir -ErrorAction SilentlyContinue
           }
