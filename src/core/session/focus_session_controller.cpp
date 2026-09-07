@@ -87,4 +87,33 @@ void FocusSessionController::SynchronizeTabClosures(
     }
 }
 
+bool FocusSessionController::IsActiveTabInFocusQueue(
+    const BrowserSession& session,
+    const FocusQueue& queue) {
+    const auto& active_id = session.ActiveTabId();
+    if (!active_id.has_value()) {
+        return false;
+    }
+
+    const auto* tab = session.FindTab(*active_id);
+    for (const auto& item : queue.Items()) {
+        if (item.tab_id.has_value() && *item.tab_id == *active_id) {
+            return true;
+        }
+        if (tab != nullptr && !tab->url.empty() && item.url == tab->url) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool FocusSessionController::RecordSprintTick(
+    FocusSprint& sprint,
+    const BrowserSession& session,
+    const FocusQueue& queue,
+    const uint32_t delta_seconds) {
+    const bool is_focused = IsActiveTabInFocusQueue(session, queue);
+    return sprint.Tick(delta_seconds, is_focused);
+}
+
 }  // namespace openbrowser::core

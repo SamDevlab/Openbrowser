@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/focus_queue/focus_queue.h"
+#include "core/focus_queue/focus_sprint.h"
 #include "core/session/browser_session.h"
 
 #include <string>
@@ -29,6 +30,18 @@ public:
     static void SynchronizeTabClosures(
         const BrowserSession& session,
         FocusQueue& queue);
+
+    // Checks whether the currently active tab in the browser session matches an item in the focus queue.
+    [[nodiscard]] static bool IsActiveTabInFocusQueue(
+        const BrowserSession& session,
+        const FocusQueue& queue);
+
+    // Records dwell time onto the sprint: attributes delta_seconds to focused if active tab is in queue, else distracted.
+    static bool RecordSprintTick(
+        FocusSprint& sprint,
+        const BrowserSession& session,
+        const FocusQueue& queue,
+        uint32_t delta_seconds = 1);
 };
 
 }  // namespace openbrowser::core

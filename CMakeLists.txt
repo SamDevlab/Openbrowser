@@ -7,6 +7,7 @@ option(OPENBROWSER_BUILD_DESKTOP "Configure the pinned CEF desktop adapter" OFF)
 
 add_library(openbrowser_core
     src/core/focus_queue/focus_queue.cpp
+    src/core/focus_queue/focus_sprint.cpp
     src/core/capabilities/capability_policy.cpp
     src/core/navigation/address_input.cpp
     src/core/session/browser_session.cpp
@@ -89,6 +90,11 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_capability_permission_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_capability_permission_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_focus_sprint_tests tests/focus_sprint_tests.cpp)
+    target_link_libraries(openbrowser_focus_sprint_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_focus_sprint_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_focus_sprint_tests PRIVATE cxx_std_20)
+
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
@@ -100,6 +106,7 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_session_persistence_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_capability_policy_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_capability_permission_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_focus_sprint_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
@@ -111,6 +118,7 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_session_persistence_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_capability_policy_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_capability_permission_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_focus_sprint_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
@@ -123,6 +131,7 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.session_persistence COMMAND openbrowser_session_persistence_tests)
     add_test(NAME openbrowser.capability_policy COMMAND openbrowser_capability_policy_tests)
     add_test(NAME openbrowser.capability_permission COMMAND openbrowser_capability_permission_tests)
+    add_test(NAME openbrowser.focus_sprint COMMAND openbrowser_focus_sprint_tests)
 endif()
 
 if(OPENBROWSER_BUILD_DESKTOP)
