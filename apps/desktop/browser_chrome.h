@@ -50,6 +50,7 @@ public:
     void OnPermissionPromptDismissed(uint64_t prompt_id) override;
 
     void SetProfileLabel(const std::string& label);
+    void SetPrivateMode(bool enabled);
     void FocusAddressBar();
     void SetSearchProvider(core::navigation::SearchProvider provider);
 
@@ -60,9 +61,9 @@ private:
         Reload,
         ToggleNetworkLab,
         ToggleSecurityDetails,
-        AllowPermission,
+        AllowPermissionOnce,
+        AlwaysAllowPermission,
         BlockPermission,
-        DismissPermission,
         ResetOriginPermissions,
         ToggleCommandPalette,
         ToggleBookmarksBar,
@@ -80,6 +81,7 @@ private:
     void SyncAddressFromSession(const core::BrowserSession& session);
     void ShowPrompt(const core::PermissionPrompt& prompt);
     void UpdateSecurityDetails();
+    void UpdatePrivatePresentation();
 
     core::BrowserSession& session_;
     CefRefPtr<CefBrowserEngine> engine_;
@@ -109,9 +111,9 @@ private:
     CefRefPtr<CefPanel> prompt_panel_;
     CefRefPtr<CefBoxLayout> prompt_layout_;
     CefRefPtr<CefLabelButton> prompt_label_;
-    CefRefPtr<CefLabelButton> allow_button_;
+    CefRefPtr<CefLabelButton> allow_once_button_;
+    CefRefPtr<CefLabelButton> always_allow_button_;
     CefRefPtr<CefLabelButton> block_button_;
-    CefRefPtr<CefLabelButton> dismiss_button_;
 
     // Security Details Inspector
     CefRefPtr<CefPanel> security_details_panel_;
@@ -125,6 +127,7 @@ private:
     std::optional<uint64_t> current_prompt_id_;
     bool address_editing_{false};
     bool show_security_details_{false};
+    bool private_mode_{false};
     std::string current_origin_;
     core::navigation::SearchProvider search_provider_;
 };
