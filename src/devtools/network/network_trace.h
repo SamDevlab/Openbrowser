@@ -41,6 +41,7 @@ struct NetworkEvent {
     std::vector<Header> headers;
     std::size_t transferred_bytes{0};
     std::string error;
+    std::string body_preview;
 };
 
 struct CapturePolicy {
@@ -64,6 +65,17 @@ struct NetworkRequestSummary {
     std::size_t transferred_bytes{0};
     RequestState state{RequestState::Active};
     std::string error;
+    std::vector<Header> request_headers;
+    std::vector<Header> response_headers;
+    std::string body_preview;
+};
+
+struct NetworkTraceFilter {
+    std::optional<core::TabId> tab_id{std::nullopt};
+    std::string search_query{};
+    std::string method_filter{};   // "ALL", "GET", "POST", etc. Empty means ALL.
+    std::string status_filter{};   // "ALL", "2XX", "3XX", "4XX", "5XX", "ERR". Empty means ALL.
+    std::string header_name{};     // Header name substring or match if non-empty.
 };
 
 class NetworkTraceObserver {
@@ -91,6 +103,12 @@ public:
 
     [[nodiscard]] std::vector<NetworkRequestSummary> AggregateRequests(
         const std::optional<core::TabId>& filter_tab_id = std::nullopt) const;
+
+    [[nodiscard]] std::vector<NetworkRequestSummary> QueryRequests(
+        const NetworkTraceFilter& filter) const;
+
+    [[nodiscard]] std::optional<NetworkRequestSummary> FindRequest(
+        const std::string& request_id) const;
 
     [[nodiscard]] static bool IsSensitiveHeaderName(const std::string& name);
     static void RedactSensitiveHeaders(std::vector<Header>& headers);

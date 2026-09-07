@@ -37,6 +37,36 @@ std::vector<devtools::network::Header> ResponseHeaders(CefRefPtr<CefResponse> re
     return ConvertHeaders(headers);
 }
 
+std::string RequestBodyPreview(CefRefPtr<CefRequest> request) {
+    if (!request) {
+        return {};
+    }
+    auto post_data = request->GetPostData();
+    if (!post_data) {
+        return {};
+    }
+    CefPostData::ElementVector elements;
+    post_data->GetElements(elements);
+    std::string preview;
+    for (const auto& el : elements) {
+        if (!el || el->GetType() != PDE_TYPE_BYTES) {
+            continue;
+        }
+        const std::size_t bytes = el->GetBytesCount();
+        if (bytes == 0) {
+            continue;
+        }
+        const std::size_t read_bytes = std::min(bytes, static_cast<std::size_t>(512));
+        std::vector<char> buf(read_bytes);
+        el->GetBytes(read_bytes, buf.data());
+        preview.append(buf.data(), read_bytes);
+        if (preview.size() >= 512) {
+            break;
+        }
+    }
+    return preview;
+}
+
 std::size_t ToTransferredBytes(const int64_t length) noexcept {
     if (length <= 0) {
         return 0;
@@ -363,6 +393,7 @@ CefResourceRequestHandler::ReturnValue CefTabClient::OnBeforeResourceLoad(
         .url = url,
         .method = request ? request->GetMethod().ToString() : "GET",
         .headers = request ? RequestHeaders(request) : std::vector<devtools::network::Header>{},
+        .body_preview = RequestBodyPreview(request),
     });
 
     return RV_CONTINUE;

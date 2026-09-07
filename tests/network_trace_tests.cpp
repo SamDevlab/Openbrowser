@@ -228,6 +228,94 @@ void TestAggregateRequests() {
     Require(filtered[0].request_id == "req-1", "filtered request is req-1");
 }
 
+void TestAdvancedNetworkLabQueryAndDetails() {
+    using openbrowser::devtools::network::Header;
+    using openbrowser::devtools::network::NetworkEventType;
+    using openbrowser::devtools::network::NetworkTraceBuffer;
+    using openbrowser::devtools::network::NetworkTraceFilter;
+
+    NetworkTraceBuffer buffer;
+
+    // Request 1: GET 200 with headers
+    auto req1_start = MakeEvent("req-1");
+    req1_start.method = "GET";
+    req1_start.url = "https://api.example.com/v1/users";
+    req1_start.headers = {Header{.name = "Accept", .value = "application/json"}};
+    buffer.Add(req1_start);
+
+    auto req1_res = MakeEvent("req-1");
+    req1_res.type = NetworkEventType::ResponseReceived;
+    req1_res.status = 200;
+    req1_res.headers = {Header{.name = "Content-Type", .value = "application/json; charset=utf-8"}};
+    buffer.Add(req1_res);
+
+    auto req1_fin = MakeEvent("req-1");
+    req1_fin.type = NetworkEventType::RequestFinished;
+    buffer.Add(req1_fin);
+
+    // Request 2: POST 404 with body preview
+    auto req2_start = MakeEvent("req-2");
+    req2_start.method = "POST";
+    req2_start.url = "https://api.example.com/v1/login";
+    req2_start.body_preview = "{\"username\":\"samuel\",\"remember\":true}";
+    req2_start.headers = {Header{.name = "Content-Type", .value = "application/json"}};
+    buffer.Add(req2_start);
+
+    auto req2_res = MakeEvent("req-2");
+    req2_res.type = NetworkEventType::ResponseReceived;
+    req2_res.status = 404;
+    buffer.Add(req2_res);
+
+    auto req2_fin = MakeEvent("req-2");
+    req2_fin.type = NetworkEventType::RequestFinished;
+    buffer.Add(req2_fin);
+
+    // 1. FindRequest & Detail Integrity
+    const auto details1 = buffer.FindRequest("req-1");
+    Require(details1.has_value(), "FindRequest finds req-1");
+    Require(details1->request_headers.size() == 1, "req-1 has 1 request header");
+    Require(details1->request_headers[0].name == "Accept", "request header name");
+    Require(details1->response_headers.size() == 1, "req-1 has 1 response header");
+    Require(details1->response_headers[0].name == "Content-Type", "response header name");
+    Require(details1->body_preview.empty(), "req-1 has empty body preview");
+
+    const auto details2 = buffer.FindRequest("req-2");
+    Require(details2.has_value(), "FindRequest finds req-2");
+    Require(details2->body_preview == "{\"username\":\"samuel\",\"remember\":true}", "req-2 preserves body preview");
+
+    // 2. Method filtering
+    const auto post_only = buffer.QueryRequests(NetworkTraceFilter{.method_filter = "POST"});
+    Require(post_only.size() == 1, "method filter POST returns 1 result");
+    Require(post_only[0].request_id == "req-2", "post filter matches req-2");
+
+    const auto get_only = buffer.QueryRequests(NetworkTraceFilter{.method_filter = "GET"});
+    Require(get_only.size() == 1, "method filter GET returns 1 result");
+    Require(get_only[0].request_id == "req-1", "get filter matches req-1");
+
+    // 3. Status filtering
+    const auto status_2xx = buffer.QueryRequests(NetworkTraceFilter{.status_filter = "2XX"});
+    Require(status_2xx.size() == 1, "status 2XX returns 1 result");
+    Require(status_2xx[0].request_id == "req-1", "status 2XX matches req-1");
+
+    const auto status_err = buffer.QueryRequests(NetworkTraceFilter{.status_filter = "ERR"});
+    Require(status_err.size() == 1, "status ERR matches 404 response");
+    Require(status_err[0].request_id == "req-2", "status ERR matches req-2");
+
+    // 4. Search query on URL, header, and body preview
+    const auto search_url = buffer.QueryRequests(NetworkTraceFilter{.search_query = "users"});
+    Require(search_url.size() == 1 && search_url[0].request_id == "req-1", "search by URL substring");
+
+    const auto search_body = buffer.QueryRequests(NetworkTraceFilter{.search_query = "samuel"});
+    Require(search_body.size() == 1 && search_body[0].request_id == "req-2", "search by body preview snippet");
+
+    const auto search_hdr = buffer.QueryRequests(NetworkTraceFilter{.search_query = "charset"});
+    Require(search_hdr.size() == 1 && search_hdr[0].request_id == "req-1", "search by response header value");
+
+    // 5. Header name filter
+    const auto filter_hdr = buffer.QueryRequests(NetworkTraceFilter{.header_name = "Accept"});
+    Require(filter_hdr.size() == 1 && filter_hdr[0].request_id == "req-1", "header name filter matches");
+}
+
 }  // namespace
 
 int main() {
@@ -239,6 +327,7 @@ int main() {
     TestClearResetsCaptureSessionCounters();
     TestObserverNotifications();
     TestAggregateRequests();
+    TestAdvancedNetworkLabQueryAndDetails();
 
     if (failures != 0) {
         std::cerr << failures << " Network Lab test assertion(s) failed\n";
@@ -248,3 +337,4 @@ int main() {
     std::cout << "Openbrowser Network Lab trace invariants: PASS\n";
     return 0;
 }
+

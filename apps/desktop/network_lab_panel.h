@@ -7,6 +7,7 @@
 #include "include/views/cef_panel.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,10 @@ public:
 private:
     enum class PanelAction {
         ToggleScope,
+        CycleMethod,
+        CycleStatus,
+        SelectRequest,
+        DeselectRequest,
         Clear,
         Close,
     };
@@ -54,12 +59,18 @@ private:
     class PanelActionDelegate;
     class PanelDelegate;
 
-    void HandleAction(PanelAction action);
+    void HandleAction(PanelAction action, const std::string& request_id = {});
     void RebuildView();
+    void BuildTableView(const std::vector<devtools::network::NetworkRequestSummary>& requests);
+    void BuildDetailsView(const devtools::network::NetworkRequestSummary& request);
 
     devtools::network::NetworkTraceBuffer& trace_buffer_;
     core::BrowserSession& session_;
     bool filter_active_tab_{false};
+    std::string method_filter_{"ALL"};
+    std::string status_filter_{"ALL"};
+    std::string search_query_{};
+    std::optional<std::string> selected_request_id_{std::nullopt};
 
     CefRefPtr<CefPanelDelegate> panel_delegate_;
     CefRefPtr<CefPanel> panel_;
@@ -68,3 +79,4 @@ private:
 };
 
 }  // namespace openbrowser::desktop
+
