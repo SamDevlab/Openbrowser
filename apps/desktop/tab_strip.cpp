@@ -105,8 +105,18 @@ void TabStrip::RebuildTabs() {
 
     for (const auto& tab : tabs) {
         const bool is_active = (active_id.has_value() && *active_id == tab.id);
-        std::string label = is_active ? "[ " + (tab.title.empty() ? tab.url : tab.title) + " ]"
-                                      : (tab.title.empty() ? tab.url : tab.title);
+        const bool is_discarded = (tab.lifecycle == core::TabLifecycle::Discarded);
+        const std::string title_text = tab.title.empty() ? tab.url : tab.title;
+
+        std::string label;
+        if (is_active) {
+            label = "[ " + title_text + " ]";
+        } else if (is_discarded) {
+            label = "💤 " + title_text;
+        } else {
+            label = title_text;
+        }
+
         if (label.size() > 25) {
             label = label.substr(0, 22) + "...";
             if (is_active) {

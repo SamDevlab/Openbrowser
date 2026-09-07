@@ -32,6 +32,8 @@ struct Tab {
     NavigationState navigation_state{NavigationState::Idle};
     std::optional<std::string> last_error;
     bool renderer_crashed{false};
+    std::uint64_t last_activated_sequence{0};
+    bool is_playing_audio{false};
 };
 
 }  // namespace openbrowser::core
