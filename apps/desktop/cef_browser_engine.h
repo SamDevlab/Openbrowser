@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>

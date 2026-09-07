@@ -9,6 +9,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include <filesystem>
+#include <functional>
 #include <system_error>
 #include <utility>
 #include <vector>
