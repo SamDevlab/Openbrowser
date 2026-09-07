@@ -18,9 +18,9 @@ namespace {
 
 std::string SecurityBadgeLabel(const bool private_mode, std::string_view state) {
     if (private_mode) {
-        return "[ 🕶 Private · " + std::string(state) + " ]";
+        return "🕶 " + std::string(state);
     }
-    return "[ " + std::string(state) + " ]";
+    return std::string(state);
 }
 
 class PassiveButtonDelegate final : public CefButtonDelegate {
@@ -119,29 +119,33 @@ BrowserChrome::BrowserChrome(
     container_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings container_settings{};
     container_settings.horizontal = 0;
-    container_settings.between_child_spacing = 2;
+    container_settings.between_child_spacing = 1;
     container_layout_ = container_->SetToBoxLayout(container_settings);
 
     toolbar_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings toolbar_settings{};
     toolbar_settings.horizontal = 1;
-    toolbar_settings.between_child_spacing = 6;
+    toolbar_settings.between_child_spacing = 4;
     toolbar_settings.inside_border_horizontal_spacing = 8;
-    toolbar_settings.inside_border_vertical_spacing = 4;
+    toolbar_settings.inside_border_vertical_spacing = 5;
     toolbar_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     toolbar_layout_ = toolbar_->SetToBoxLayout(toolbar_settings);
 
-    back_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Back), "Back");
-    forward_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Forward), "Forward");
-    reload_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Reload), "Reload");
-    security_badge_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleSecurityDetails), "[ 🔒 Secure ]");
+    back_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Back), "←");
+    forward_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Forward), "→");
+    reload_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Reload), "↻");
+    security_badge_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ToggleSecurityDetails), "🔒");
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter address");
-    palette_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleCommandPalette), "⌘");
-    bookmarks_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleBookmarksBar), "★");
-    downloads_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleDownloadsPanel), "📥");
-    profile_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleProfile), "[👤 Default]");
-    lab_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleNetworkLab), "Lab");
+    bookmarks_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ToggleBookmarksBar), "☆");
+    downloads_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ToggleDownloadsPanel), "↓");
+    profile_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ToggleProfile), "👤");
+    palette_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ToggleCommandPalette), "⋮");
 
     toolbar_->AddChildView(back_button_);
     toolbar_layout_->SetFlexForView(back_button_, 0);
@@ -153,16 +157,14 @@ BrowserChrome::BrowserChrome(
     toolbar_layout_->SetFlexForView(security_badge_, 0);
     toolbar_->AddChildView(address_bar_);
     toolbar_layout_->SetFlexForView(address_bar_, 1);
-    toolbar_->AddChildView(palette_button_);
-    toolbar_layout_->SetFlexForView(palette_button_, 0);
     toolbar_->AddChildView(bookmarks_button_);
     toolbar_layout_->SetFlexForView(bookmarks_button_, 0);
     toolbar_->AddChildView(downloads_button_);
     toolbar_layout_->SetFlexForView(downloads_button_, 0);
     toolbar_->AddChildView(profile_button_);
     toolbar_layout_->SetFlexForView(profile_button_, 0);
-    toolbar_->AddChildView(lab_button_);
-    toolbar_layout_->SetFlexForView(lab_button_, 0);
+    toolbar_->AddChildView(palette_button_);
+    toolbar_layout_->SetFlexForView(palette_button_, 0);
 
     container_->AddChildView(toolbar_);
     container_layout_->SetFlexForView(toolbar_, 0);
@@ -177,14 +179,14 @@ BrowserChrome::BrowserChrome(
     prompt_layout_ = prompt_panel_->SetToBoxLayout(prompt_settings);
 
     prompt_label_ = CefLabelButton::CreateLabelButton(
-        new PassiveButtonDelegate(), "[ Permission Request ]");
+        new PassiveButtonDelegate(), "Permission request");
     prompt_label_->SetEnabled(false);
     allow_once_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::AllowPermissionOnce), "[ Allow once ]");
+        make_delegate(ChromeAction::AllowPermissionOnce), "Allow once");
     always_allow_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::AlwaysAllowPermission), "[ Always allow ]");
+        make_delegate(ChromeAction::AlwaysAllowPermission), "Always allow");
     block_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::BlockPermission), "[ Block ]");
+        make_delegate(ChromeAction::BlockPermission), "Block");
 
     prompt_panel_->AddChildView(prompt_label_);
     prompt_layout_->SetFlexForView(prompt_label_, 1);
@@ -209,10 +211,10 @@ BrowserChrome::BrowserChrome(
     security_details_layout_ = security_details_panel_->SetToBoxLayout(details_settings);
 
     security_details_label_ = CefLabelButton::CreateLabelButton(
-        new PassiveButtonDelegate(), "[ Site Security Info ]");
+        new PassiveButtonDelegate(), "Site security");
     security_details_label_->SetEnabled(false);
     reset_permissions_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ResetOriginPermissions), "[ Reset Rules ]");
+        make_delegate(ChromeAction::ResetOriginPermissions), "Reset rules");
 
     security_details_panel_->AddChildView(security_details_label_);
     security_details_layout_->SetFlexForView(security_details_label_, 1);
@@ -282,10 +284,10 @@ void BrowserChrome::ShowPrompt(const core::PermissionPrompt& prompt) {
         caps_str += core::ToString(prompt.capabilities[i]);
     }
 
-    const std::string prefix = private_mode_ ? "[ Private Permission ] " : "[ Permission ] ";
+    const std::string prefix = private_mode_ ? "Private permission: " : "Permission: ";
     prompt_label_->SetText(prefix + prompt.origin + " wants access to: " + caps_str);
     always_allow_button_->SetEnabled(!private_mode_);
-    block_button_->SetText(private_mode_ ? "[ Block once ]" : "[ Block ]");
+    block_button_->SetText(private_mode_ ? "Block once" : "Block");
     prompt_panel_->SetVisible(true);
     container_->Layout();
 }
@@ -296,21 +298,21 @@ void BrowserChrome::UpdateSecurityDetails() {
         return;
     }
 
-    std::string text = "[ Site ] " + (current_origin_.empty() ? "No Origin" : current_origin_);
+    std::string text = "Site: " + (current_origin_.empty() ? "No origin" : current_origin_);
     if (private_mode_) {
         text += " | Private session: permission choices are not persisted";
     }
     if (engine_ && engine_->Policy() && !current_origin_.empty()) {
         const auto rules = engine_->Policy()->GetOriginRules(current_origin_);
         if (!rules.empty()) {
-            text += " | Remembered Origin Rules: ";
+            text += " | Remembered origin rules: ";
             for (const auto& [cap, dec] : rules) {
                 text += std::string(core::ToString(cap)) + ": " +
                     (dec == core::CapabilityDecision::Allow ? "Allow " :
                      (dec == core::CapabilityDecision::Deny ? "Deny " : "Ask "));
             }
         } else {
-            text += " | Default Permissions Policy";
+            text += " | Default permissions policy";
         }
     }
     security_details_label_->SetText(text);
@@ -440,7 +442,7 @@ void BrowserChrome::SetPrivateMode(const bool enabled) {
 
 void BrowserChrome::UpdatePrivatePresentation() {
     if (profile_button_) {
-        profile_button_->SetText(private_mode_ ? "[🕶 Private]" : "[👤 Default]");
+        profile_button_->SetText(private_mode_ ? "🕶" : "👤");
     }
     if (address_bar_) {
         address_bar_->SetPlaceholderText(
@@ -450,7 +452,7 @@ void BrowserChrome::UpdatePrivatePresentation() {
         always_allow_button_->SetEnabled(!private_mode_);
     }
     if (block_button_) {
-        block_button_->SetText(private_mode_ ? "[ Block once ]" : "[ Block ]");
+        block_button_->SetText(private_mode_ ? "Block once" : "Block");
     }
     if (reset_permissions_button_) {
         reset_permissions_button_->SetEnabled(!private_mode_ && !current_origin_.empty());
@@ -536,9 +538,9 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
     if (!active_id.has_value()) {
         address_bar_->SetText("");
         current_origin_.clear();
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐 Web"));
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐"));
         if (reload_button_) {
-            reload_button_->SetText("Reload");
+            reload_button_->SetText("↻");
         }
         UpdateSecurityDetails();
         return;
@@ -548,9 +550,9 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
     if (tab == nullptr) {
         address_bar_->SetText("");
         current_origin_.clear();
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐 Web"));
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐"));
         if (reload_button_) {
-            reload_button_->SetText("Reload");
+            reload_button_->SetText("↻");
         }
         UpdateSecurityDetails();
         return;
@@ -558,7 +560,7 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
 
     const bool is_loading = (tab->navigation_state == core::NavigationState::Loading);
     if (reload_button_) {
-        reload_button_->SetText(is_loading ? "[ ⏳ ]" : "Reload");
+        reload_button_->SetText(is_loading ? "⏳" : "↻");
     }
 
     const std::string& display_url = tab->pending_url.has_value() ? *tab->pending_url : tab->url;
@@ -566,13 +568,13 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
 
     current_origin_ = core::CapabilityPolicy::ExtractOrigin(display_url).value_or("");
     if (display_url.rfind("https://", 0) == 0) {
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🔒 HTTPS"));
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🔒"));
     } else if (display_url.rfind("http://", 0) == 0) {
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "⚠ HTTP"));
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "⚠"));
     } else if (display_url.rfind("about:", 0) == 0) {
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "⚙ System"));
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "⚙"));
     } else {
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐 Web"));
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐"));
     }
 
     UpdateSecurityDetails();
