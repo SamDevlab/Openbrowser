@@ -25,6 +25,18 @@ std::string ToLower(const std::string_view s) {
     return out;
 }
 
+bool IsValidHistoryDocument(const std::string_view content) {
+    const auto root = storage::ParseJson(content);
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+        return false;
+    }
+    if (root->GetSizeT("schema_version", 0) != 1) {
+        return false;
+    }
+    const auto* entries = root->Find("entries");
+    return entries != nullptr && entries->type == storage::JsonValue::Type::Array;
+}
+
 }  // namespace
 
 void HistoryManager::SetAutoSavePath(std::filesystem::path path) {
@@ -51,7 +63,6 @@ void HistoryManager::RecordVisit(
 
     const auto now = NowEpochMs();
 
-    // Check if URL was already recorded in this workspace
     const auto it = std::find_if(entries_.begin(), entries_.end(), [&](const HistoryEntry& entry) {
         return entry.url == url && entry.workspace_id == workspace_id;
     });
@@ -108,7 +119,6 @@ std::vector<HistoryEntry> HistoryManager::Search(
         }
     }
 
-    // Sort by visit count descending, then by last visit time descending
     std::sort(matches.begin(), matches.end(), [](const HistoryEntry& a, const HistoryEntry& b) {
         if (a.visit_count != b.visit_count) {
             return a.visit_count > b.visit_count;
@@ -185,7 +195,8 @@ bool HistoryManager::Deserialize(const std::string_view json) {
     }
 
     const auto root = storage::ParseJson(json);
-    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object ||
+        root->GetSizeT("schema_version", 0) != 1) {
         return false;
     }
 
@@ -236,10 +247,7 @@ bool HistoryManager::SaveToFile(const std::filesystem::path& path) const {
 
 bool HistoryManager::LoadFromFile(const std::filesystem::path& path) {
     if (path.empty()) return false;
-    const auto result = storage::ReadFileWithBackupRecovery(path, [](std::string_view content) {
-        const auto root = storage::ParseJson(content);
-        return root.has_value() && root->type == storage::JsonValue::Type::Object;
-    });
+    const auto result = storage::ReadFileWithBackupRecovery(path, IsValidHistoryDocument);
 
     if (!result.success) {
         return false;
