@@ -38,7 +38,6 @@ public:
 
 private:
     enum class FocusAction {
-        ToggleExpanded,
         EnqueueActiveTab,
         ActivateItem,
         PromoteItem,
@@ -63,7 +62,6 @@ private:
     core::FocusSprint sprint_;
     std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
     bool timer_running_{false};
-    bool expanded_{false};
 
     CefRefPtr<CefPanelDelegate> panel_delegate_;
     CefRefPtr<CefPanel> panel_;
