@@ -255,15 +255,14 @@ void TestSessionHistoryBridgeSemantics() {
     tab_a.url = "https://site-a.com";
     tab_a.title = "Site A";
     tab_a.is_ephemeral = false;
-    tab_a.navigation_state = NavigationState::Requested; // Not committed yet
     static_cast<void>(session.OpenTab(std::move(tab_a), true));
-
-    Require(history.TotalEntries() == 0, "No visit while navigation state is Requested");
-
-    // Navigation commit A
-    session.OnNavigationCommitted({.tab_id = "tab-a", .url = "https://site-a.com"});
-    Require(history.TotalEntries() == 1, "Committed navigation records 1 visit");
+    Require(history.TotalEntries() == 1, "Initial tab open records 1 visit");
     Require(history.ListHistory()[0].visit_count == 1, "Visit count is 1");
+
+    // Commit for A with same URL does NOT duplicate visit
+    session.OnNavigationCommitted({.tab_id = "tab-a", .url = "https://site-a.com"});
+    Require(history.TotalEntries() == 1, "Same URL commit does not increment visit count");
+    Require(history.ListHistory()[0].visit_count == 1, "Visit count is still 1");
 
     // Title change for A
     session.OnTitleChanged({.tab_id = "tab-a", .title = "Site A - New Title"});
