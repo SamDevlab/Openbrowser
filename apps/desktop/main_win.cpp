@@ -275,33 +275,6 @@ int FailStorageInitialization() {
     return static_cast<int>(ERROR_CANNOT_MAKE);
 }
 
-class TracingDesktopApp final : public CefApp,
-                                public CefBrowserProcessHandler {
-public:
-    TracingDesktopApp()
-        : delegate_(new openbrowser::desktop::DesktopApp()) {}
-
-    CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
-        AppendStartupTrace("primary:get-browser-process-handler");
-        return this;
-    }
-
-    void OnContextInitialized() override {
-        AppendStartupTrace("primary:on-context-initialized-enter");
-        delegate_->OnContextInitialized();
-        AppendStartupTrace("primary:on-context-initialized-exit");
-    }
-
-    void ShutdownRuntime() {
-        delegate_->ShutdownRuntime();
-    }
-
-private:
-    CefRefPtr<openbrowser::desktop::DesktopApp> delegate_;
-
-    IMPLEMENT_REFCOUNTING(TracingDesktopApp);
-};
-
 int RunMain(HINSTANCE instance, void* sandbox_info) {
     const bool primary_process = IsPrimaryBrowserProcess();
     if (primary_process) {
@@ -358,7 +331,8 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
         AppendStartupTrace("primary:storage-configured");
     }
 
-    CefRefPtr<TracingDesktopApp> app(new TracingDesktopApp());
+    CefRefPtr<openbrowser::desktop::DesktopApp> app(
+        new openbrowser::desktop::DesktopApp());
     if (primary_process) {
         AppendStartupTrace("primary:before-cef-initialize");
     }
