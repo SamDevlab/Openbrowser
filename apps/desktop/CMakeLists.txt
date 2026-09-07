@@ -115,6 +115,10 @@ if(OS_WINDOWS)
         # silently disabling the sandbox.
         add_library(${OPENBROWSER_DESKTOP_TARGET} SHARED ${OPENBROWSER_DESKTOP_SOURCES})
         SET_LIBRARY_TARGET_PROPERTIES(${OPENBROWSER_DESKTOP_TARGET})
+        target_compile_definitions(
+            ${OPENBROWSER_DESKTOP_TARGET}
+            PRIVATE OPENBROWSER_WINDOWS_SANDBOX=1
+        )
         COPY_SINGLE_FILE(
             ${OPENBROWSER_DESKTOP_TARGET}
             "${CEF_BINARY_DIR}/bootstrap.exe"
