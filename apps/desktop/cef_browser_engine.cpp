@@ -9,6 +9,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <system_error>
 #include <utility>
@@ -52,6 +53,30 @@ private:
 
     IMPLEMENT_REFCOUNTING(ActionTask);
 };
+
+void AppendLifecycleTrace(
+    const std::filesystem::path& storage_root,
+    const std::string& message) {
+    if (storage_root.empty()) {
+        return;
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(storage_root, ec);
+    if (ec) {
+        return;
+    }
+
+    std::ofstream trace(
+        storage_root / "lifecycle-shutdown.log",
+        std::ios::out | std::ios::app);
+    if (!trace.is_open()) {
+        return;
+    }
+
+    trace << message << '\n';
+    trace.flush();
+}
 
 }  // namespace
 
@@ -106,7 +131,6 @@ CefRefPtr<CefRequestContext> CefBrowserEngine::GetOrCreateRequestContext(
     if (is_ephemeral || IsEphemeralMode()) {
         if (!ephemeral_context_) {
             CefRequestContextSettings settings{};
-            // Empty cache_path forces an isolated, non-persistent in-memory context.
             settings.persist_session_cookies = 0;
             ephemeral_context_ = CefRequestContext::CreateContext(settings, nullptr);
         }
@@ -547,15 +571,19 @@ void CefBrowserEngine::NotifyBrowserCreated(
 void CefBrowserEngine::NotifyBrowserBeforeClose(const core::TabId& tab_id) {
     CEF_REQUIRE_UI_THREAD();
 
+    AppendLifecycleTrace(
+        storage_root_,
+        "OnBeforeClose enter tab=" + tab_id +
+            " live=" + std::to_string(live_browser_count_) +
+            " surfaces=" + std::to_string(surfaces_.size()) +
+            " window_destroyed=" + (window_destroyed_ ? "true" : "false"));
+
     const auto surface = FindSurface(tab_id);
     if (surface != surfaces_.end()) {
         if (surface->second.browser_created && live_browser_count_ > 0) {
             --live_browser_count_;
         }
 
-        // Once the top-level CefWindow is destroyed its Views hierarchy must no
-        // longer be mutated. OnBeforeClose can arrive after OnWindowDestroyed on
-        // Windows, so only detach/layout while the window still owns the panel.
         if (!window_destroyed_ && browser_host_ && surface->second.view) {
             browser_host_->RemoveChildView(surface->second.view);
         }
@@ -570,10 +598,13 @@ void CefBrowserEngine::NotifyBrowserBeforeClose(const core::TabId& tab_id) {
         }
     }
 
-    // CEF's lifecycle contract allows the app message loop to exit after the
-    // final OnBeforeClose callback. Do not wait for a second Views ordering
-    // condition once all browser objects are gone.
+    AppendLifecycleTrace(
+        storage_root_,
+        "OnBeforeClose before MaybeQuit tab=" + tab_id +
+            " live=" + std::to_string(live_browser_count_) +
+            " surfaces=" + std::to_string(surfaces_.size()));
     MaybeQuitAfterClose();
+    AppendLifecycleTrace(storage_root_, "OnBeforeClose exit tab=" + tab_id);
 }
 
 void CefBrowserEngine::NotifyNavigationStarted(const core::TabId& tab_id, std::string url) {
@@ -644,37 +675,60 @@ void CefBrowserEngine::DeliverNetworkEventOnUi(devtools::network::NetworkEvent e
 
 void CefBrowserEngine::BeginWindowClose() {
     CEF_REQUIRE_UI_THREAD();
+    AppendLifecycleTrace(
+        storage_root_,
+        "CanClose begin live=" + std::to_string(live_browser_count_) +
+            " surfaces=" + std::to_string(surfaces_.size()) +
+            " already_requested=" + (window_close_requested_ ? "true" : "false"));
     window_close_requested_ = true;
 }
 
 bool CefBrowserEngine::CanCloseWindow() {
     CEF_REQUIRE_UI_THREAD();
 
+    AppendLifecycleTrace(
+        storage_root_,
+        "CanCloseWindow enter live=" + std::to_string(live_browser_count_) +
+            " surfaces=" + std::to_string(surfaces_.size()));
+
     bool can_close = true;
 
     for (auto& [tab_id, surface] : surfaces_) {
         CefRefPtr<CefBrowser> browser = surface.view->GetBrowser();
         if (!browser) {
+            AppendLifecycleTrace(storage_root_, "TryCloseBrowser skip tab=" + tab_id + " browser=null");
             continue;
         }
 
-        if (!browser->GetHost()->TryCloseBrowser()) {
+        AppendLifecycleTrace(storage_root_, "TryCloseBrowser before tab=" + tab_id);
+        const bool tab_can_close = browser->GetHost()->TryCloseBrowser();
+        AppendLifecycleTrace(
+            storage_root_,
+            "TryCloseBrowser after tab=" + tab_id +
+                " result=" + (tab_can_close ? "true" : "false"));
+        if (!tab_can_close) {
             can_close = false;
         }
     }
 
+    AppendLifecycleTrace(
+        storage_root_,
+        "CanCloseWindow exit result=" + std::string(can_close ? "true" : "false"));
     return can_close;
 }
 
 void CefBrowserEngine::NotifyWindowDestroyed() {
     CEF_REQUIRE_UI_THREAD();
+    AppendLifecycleTrace(
+        storage_root_,
+        "OnWindowDestroyed enter live=" + std::to_string(live_browser_count_) +
+            " surfaces=" + std::to_string(surfaces_.size()));
     window_destroyed_ = true;
 
-    // The top-level Views hierarchy no longer exists after this callback. Drop
-    // the engine's panel reference so later OnBeforeClose callbacks cannot
-    // accidentally mutate a destroyed CefView tree.
     browser_host_ = nullptr;
+    AppendLifecycleTrace(storage_root_, "OnWindowDestroyed before MaybeQuit");
     MaybeQuitAfterClose();
+    AppendLifecycleTrace(storage_root_, "OnWindowDestroyed exit");
 }
 
 CefBrowserEngine::SurfaceMap::iterator CefBrowserEngine::FindSurface(const core::TabId& tab_id) {
@@ -706,13 +760,22 @@ void CefBrowserEngine::HideActiveSurface() {
 }
 
 void CefBrowserEngine::MaybeQuitAfterClose() {
+    AppendLifecycleTrace(
+        storage_root_,
+        "MaybeQuitAfterClose enter requested=" + std::string(window_close_requested_ ? "true" : "false") +
+            " live=" + std::to_string(live_browser_count_) +
+            " quit_requested=" + (message_loop_quit_requested_ ? "true" : "false"));
+
     if (!window_close_requested_ || live_browser_count_ != 0 ||
         message_loop_quit_requested_) {
+        AppendLifecycleTrace(storage_root_, "MaybeQuitAfterClose skip");
         return;
     }
 
     message_loop_quit_requested_ = true;
+    AppendLifecycleTrace(storage_root_, "CefQuitMessageLoop before");
     CefQuitMessageLoop();
+    AppendLifecycleTrace(storage_root_, "CefQuitMessageLoop after");
 }
 
 }  // namespace openbrowser::desktop
