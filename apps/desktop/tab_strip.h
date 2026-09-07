@@ -14,6 +14,7 @@ class BrowserSession;
 class WorkspaceManager;
 class ProfileManager;
 class SessionPrivacyOrchestrator;
+struct Tab;
 }
 
 class CefBoxLayout;
@@ -48,6 +49,11 @@ private:
     class TabActionDelegate;
 
     void HandleTabAction(TabAction action, const std::string& tab_id);
+    [[nodiscard]] bool IsTabInActiveWorkspace(const core::Tab& tab) const;
+    [[nodiscard]] bool IsTabVisibleInCurrentContext(const core::Tab& tab) const;
+    bool ActivateOrCreateTabForActiveWorkspace();
+    bool OpenNewTabForActiveWorkspace();
+    void SyncWorkspaceToActiveTab();
     void RebuildTabs();
 
     core::BrowserSession& session_;
