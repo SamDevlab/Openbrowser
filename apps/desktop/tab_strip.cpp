@@ -15,26 +15,24 @@
 #include <utility>
 
 namespace openbrowser::desktop {
-namespace {
 
-class TabActionDelegate final : public CefButtonDelegate {
+class TabStrip::TabActionDelegate final : public CefButtonDelegate {
 public:
-    TabActionDelegate(TabStrip& tab_strip, TabStrip::TabAction action, std::string tab_id)
+    TabActionDelegate(TabStrip& tab_strip, const TabAction action, std::string tab_id)
         : tab_strip_(tab_strip), action_(action), tab_id_(std::move(tab_id)) {}
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
+        CEF_REQUIRE_UI_THREAD();
         tab_strip_.HandleTabAction(action_, tab_id_);
     }
 
 private:
     TabStrip& tab_strip_;
-    TabStrip::TabAction action_;
+    TabAction action_;
     std::string tab_id_;
 
     IMPLEMENT_REFCOUNTING(TabActionDelegate);
 };
-
-}  // namespace
 
 TabStrip::TabStrip(
     core::BrowserSession& session,
