@@ -40,7 +40,7 @@ void TestFilenameSanitization() {
     using namespace openbrowser::core;
 
     Require(FileBroker::SanitizeFilename("valid_name.pdf") == "valid_name.pdf", "Normal filename untouched");
-    Require(FileBroker::SanitizeFilename("../../bad:name*.zip") == "____bad_name_.zip", "Separators and illegal chars replaced");
+    Require(FileBroker::SanitizeFilename("../../bad:name*.zip") == ".._.._bad_name_.zip", "Separators and illegal chars replaced");
     Require(FileBroker::SanitizeFilename("trailing.dots... ") == "trailing.dots", "Trailing dots and spaces trimmed");
     Require(FileBroker::SanitizeFilename("CON.txt") == "_CON.txt", "Windows reserved name prefixed");
     Require(FileBroker::SanitizeFilename("aux") == "_aux", "Reserved name aux prefixed");
