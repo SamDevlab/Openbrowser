@@ -16,6 +16,8 @@ namespace {
 constexpr wchar_t kLpacSid[] = L"S-1-15-2-2";
 constexpr DWORD kLpacAccess = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
 constexpr BYTE kLpacInheritance = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
+constexpr wchar_t kSandboxPrerequisiteCheck[] =
+    L"--openbrowser-sandbox-prereq-check";
 
 std::wstring RuntimeDirectory() {
     std::vector<wchar_t> buffer(32768);
@@ -34,6 +36,11 @@ std::wstring RuntimeDirectory() {
     }
     path.resize(separator);
     return path;
+}
+
+bool HasCommandLineToken(const wchar_t* token) {
+    const wchar_t* command_line = GetCommandLineW();
+    return command_line != nullptr && wcsstr(command_line, token) != nullptr;
 }
 
 bool HasLpacRuntimeAcl(const std::wstring& runtime_directory) {
@@ -150,18 +157,24 @@ bool ApplyLpacRuntimeAcl(const std::wstring& runtime_directory) {
 }
 
 bool IsPrimaryBrowserProcess() {
-    const wchar_t* command_line = GetCommandLineW();
-    return command_line == nullptr || wcsstr(command_line, L"--type=") == nullptr;
+    return !HasCommandLineToken(L"--type=");
 }
 
 int FailSandboxInitialization() {
-    MessageBoxW(
-        nullptr,
-        L"Openbrowser could not establish the Windows permissions required "
-        L"for the Chromium sandbox. Move the extracted Openbrowser folder "
-        L"to a normal NTFS location you own and try again.",
-        L"Openbrowser sandbox initialization failed",
-        MB_OK | MB_ICONERROR);
+    wchar_t noninteractive[2]{};
+    const bool suppress_dialog = GetEnvironmentVariableW(
+                                     L"OPENBROWSER_NONINTERACTIVE",
+                                     noninteractive,
+                                     static_cast<DWORD>(std::size(noninteractive))) > 0;
+    if (!suppress_dialog) {
+        MessageBoxW(
+            nullptr,
+            L"Openbrowser could not establish the Windows permissions required "
+            L"for the Chromium sandbox. Move the extracted Openbrowser folder "
+            L"to a normal NTFS location you own and try again.",
+            L"Openbrowser sandbox initialization failed",
+            MB_OK | MB_ICONERROR);
+    }
     return static_cast<int>(ERROR_ACCESS_DENIED);
 }
 
@@ -178,6 +191,13 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
         const std::wstring runtime_directory = RuntimeDirectory();
         if (runtime_directory.empty() || !ApplyLpacRuntimeAcl(runtime_directory)) {
             return FailSandboxInitialization();
+        }
+
+        // Packaging CI uses this diagnostic-only switch to prove that the
+        // extracted bootstrap + DLL can establish the sandbox prerequisite
+        // without conflating that check with GUI/GPU availability on the runner.
+        if (HasCommandLineToken(kSandboxPrerequisiteCheck)) {
+            return 0;
         }
     }
 #endif
