@@ -833,7 +833,7 @@ void DesktopApp::CloseActiveTab() {
     if (!session_) return;
     const auto& active_id = session_->ActiveTabId();
     if (active_id.has_value()) {
-        session_->CloseTab(*active_id);
+        static_cast<void>(session_->CloseTab(*active_id));
     }
 }
 
@@ -841,18 +841,18 @@ void DesktopApp::ReopenClosedTab() {
     CEF_REQUIRE_UI_THREAD();
     if (!session_) return;
     const bool allow_ephemeral = (privacy_orchestrator_ != nullptr) && privacy_orchestrator_->IsPrivateModeActive();
-    session_->ReopenLastClosedTab(allow_ephemeral);
+    static_cast<void>(session_->ReopenLastClosedTab(allow_ephemeral));
 }
 
 void DesktopApp::CycleTab(const bool forward) {
     CEF_REQUIRE_UI_THREAD();
     if (!session_) return;
-    session_->CycleTab(forward, [this](const core::Tab& tab) {
+    static_cast<void>(session_->CycleTab(forward, [this](const core::Tab& tab) {
         if (privacy_orchestrator_ != nullptr) {
             return privacy_orchestrator_->IsTabVisible(tab);
         }
         return true;
-    });
+    }));
 }
 
 }  // namespace openbrowser::desktop
