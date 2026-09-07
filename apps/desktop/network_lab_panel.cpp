@@ -467,7 +467,8 @@ void NetworkLabPanel::BuildDetailsView(
     layout_->SetFlexForView(overview_btn, 0);
 
     if (req.filter_blocked || !req.filter_rule_source.empty()) {
-        std::string decision = "Filter decision: " + (req.filter_blocked ? "BLOCK" : "ALLOW");
+        std::string decision = std::string{"Filter decision: "} +
+            (req.filter_blocked ? "BLOCK" : "ALLOW");
         if (!req.filter_layer.empty()) decision += " | Layer: " + req.filter_layer;
         if (!req.filter_rule_source.empty()) decision += " | Rule: " + req.filter_rule_source;
         auto decision_btn = CefLabelButton::CreateLabelButton(nullptr, decision);
