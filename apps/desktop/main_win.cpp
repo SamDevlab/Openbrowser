@@ -98,61 +98,55 @@ bool ApplyLpacRuntimeAcl(const std::wstring& runtime_directory) {
         return true;
     }
 
-    PSECURITY_DESCRIPTOR descriptor = nullptr;
-    PACL existing_dacl = nullptr;
-    const DWORD read_result = GetNamedSecurityInfoW(
-        runtime_directory.c_str(),
-        SE_FILE_OBJECT,
-        DACL_SECURITY_INFORMATION,
-        nullptr,
-        nullptr,
-        &existing_dacl,
-        nullptr,
-        &descriptor);
-    if (read_result != ERROR_SUCCESS) {
+    // Match the mechanism used by CEF's SET_LPAC_ACLS macro. icacls applies
+    // the inheritable ACE to the directory and propagates it to the already
+    // extracted runtime files, which is required for the Network Service LPAC
+    // sandbox. Launch the system binary directly rather than through cmd.exe.
+    std::vector<wchar_t> system_directory(MAX_PATH + 1);
+    const UINT system_length = GetSystemDirectoryW(
+        system_directory.data(),
+        static_cast<UINT>(system_directory.size()));
+    if (system_length == 0 || system_length >= system_directory.size()) {
         return false;
     }
 
-    PSID lpac_sid = nullptr;
-    if (!ConvertStringSidToSidW(kLpacSid, &lpac_sid)) {
-        LocalFree(descriptor);
+    std::wstring icacls(system_directory.data(), system_length);
+    icacls += L"\\icacls.exe";
+    std::wstring command_line =
+        L"\"" + icacls + L"\" \"" + runtime_directory +
+        L"\" /grant *S-1-15-2-2:(OI)(CI)(RX) /Q";
+    std::vector<wchar_t> mutable_command(command_line.begin(), command_line.end());
+    mutable_command.push_back(L'\0');
+
+    STARTUPINFOW startup_info{};
+    startup_info.cb = sizeof(startup_info);
+    PROCESS_INFORMATION process_info{};
+    if (!CreateProcessW(
+            icacls.c_str(),
+            mutable_command.data(),
+            nullptr,
+            nullptr,
+            FALSE,
+            CREATE_NO_WINDOW,
+            nullptr,
+            runtime_directory.c_str(),
+            &startup_info,
+            &process_info)) {
         return false;
     }
 
-    EXPLICIT_ACCESSW entry{};
-    entry.grfAccessPermissions = kLpacAccess;
-    entry.grfAccessMode = GRANT_ACCESS;
-    entry.grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
-    entry.Trustee.TrusteeForm = TRUSTEE_IS_SID;
-    entry.Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
-    entry.Trustee.ptstrName = static_cast<LPWSTR>(lpac_sid);
-
-    PACL updated_dacl = nullptr;
-    const DWORD merge_result = SetEntriesInAclW(
-        1,
-        &entry,
-        existing_dacl,
-        &updated_dacl);
-    if (merge_result != ERROR_SUCCESS) {
-        LocalFree(lpac_sid);
-        LocalFree(descriptor);
-        return false;
+    const DWORD wait_result = WaitForSingleObject(process_info.hProcess, 15000);
+    DWORD exit_code = ERROR_GEN_FAILURE;
+    if (wait_result == WAIT_TIMEOUT) {
+        static_cast<void>(TerminateProcess(process_info.hProcess, ERROR_TIMEOUT));
+    } else if (wait_result == WAIT_OBJECT_0) {
+        static_cast<void>(GetExitCodeProcess(process_info.hProcess, &exit_code));
     }
 
-    const DWORD write_result = SetNamedSecurityInfoW(
-        const_cast<LPWSTR>(runtime_directory.c_str()),
-        SE_FILE_OBJECT,
-        DACL_SECURITY_INFORMATION,
-        nullptr,
-        nullptr,
-        updated_dacl,
-        nullptr);
-
-    LocalFree(updated_dacl);
-    LocalFree(lpac_sid);
-    LocalFree(descriptor);
-
-    return write_result == ERROR_SUCCESS && HasLpacRuntimeAcl(runtime_directory);
+    CloseHandle(process_info.hThread);
+    CloseHandle(process_info.hProcess);
+    return wait_result == WAIT_OBJECT_0 && exit_code == ERROR_SUCCESS &&
+           HasLpacRuntimeAcl(runtime_directory);
 }
 
 bool IsPrimaryBrowserProcess() {
