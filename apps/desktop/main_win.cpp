@@ -80,7 +80,7 @@ bool HasCommandLineToken(const wchar_t* token) {
     return command_line != nullptr && wcsstr(command_line, token) != nullptr;
 }
 
-bool HasLpacAccess(const std::wstring& path, bool require_inheritance) {
+bool HasLpacAccess(const std::wstring& path, const bool require_inheritance) {
     PSECURITY_DESCRIPTOR descriptor = nullptr;
     PACL dacl = nullptr;
     const DWORD security_result = GetNamedSecurityInfoW(
@@ -157,10 +157,6 @@ bool ApplyLpacRuntimeAcl(const std::wstring& runtime_directory) {
         return true;
     }
 
-    // Match the mechanism used by CEF's SET_LPAC_ACLS macro. icacls applies
-    // the inheritable ACE to the directory and propagates it to the already
-    // extracted runtime files, which is required for the Network Service LPAC
-    // sandbox. Launch the system binary directly rather than through cmd.exe.
     std::vector<wchar_t> system_directory(MAX_PATH + 1);
     const UINT system_length = GetSystemDirectoryW(
         system_directory.data(),
@@ -233,11 +229,6 @@ bool ConfigureCefStorage(CefSettings& settings) {
         return false;
     }
 
-    // CEF 120+ uses root_cache_path for process-singleton identity and requires
-    // every persistent RequestContext cache path to share this parent. The
-    // Openbrowser workspace contexts already live below --storage-dir, so use
-    // that same absolute local-first root and keep the global profile in its
-    // default child directory.
     CefString(&settings.root_cache_path).FromWString(storage_directory.wstring());
     CefString(&settings.cache_path).FromWString(default_cache.wstring());
     return true;
@@ -284,6 +275,33 @@ int FailStorageInitialization() {
     return static_cast<int>(ERROR_CANNOT_MAKE);
 }
 
+class TracingDesktopApp final : public CefApp,
+                                public CefBrowserProcessHandler {
+public:
+    TracingDesktopApp()
+        : delegate_(new openbrowser::desktop::DesktopApp()) {}
+
+    CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
+        AppendStartupTrace("primary:get-browser-process-handler");
+        return this;
+    }
+
+    void OnContextInitialized() override {
+        AppendStartupTrace("primary:on-context-initialized-enter");
+        delegate_->OnContextInitialized();
+        AppendStartupTrace("primary:on-context-initialized-exit");
+    }
+
+    void ShutdownRuntime() {
+        delegate_->ShutdownRuntime();
+    }
+
+private:
+    CefRefPtr<openbrowser::desktop::DesktopApp> delegate_;
+
+    IMPLEMENT_REFCOUNTING(TracingDesktopApp);
+};
+
 int RunMain(HINSTANCE instance, void* sandbox_info) {
     const bool primary_process = IsPrimaryBrowserProcess();
     if (primary_process) {
@@ -292,9 +310,6 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
 
 #if defined(OPENBROWSER_WINDOWS_SANDBOX)
     if (primary_process) {
-        // A build configured as sandboxed must never silently fall back to
-        // CefSettings::no_sandbox. The bootstrap is expected to provide the
-        // sandbox information object for the primary browser process.
         if (sandbox_info == nullptr) {
             return FailSandboxInitialization();
         }
@@ -305,10 +320,6 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
         }
         AppendStartupTrace("primary:sandbox-prerequisites-ok");
 
-        // Packaging CI uses this diagnostic-only switch to prove that the
-        // extracted bootstrap + DLL establishes both the directory LPAC grant
-        // and propagated access on libcef.dll without depending on PowerShell
-        // identity-name translation.
         if (HasCommandLineToken(kSandboxPrerequisiteCheck)) {
             AppendStartupTrace("primary:prerequisite-probe-ok");
             return 0;
@@ -347,7 +358,7 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
         AppendStartupTrace("primary:storage-configured");
     }
 
-    CefRefPtr<openbrowser::desktop::DesktopApp> app(new openbrowser::desktop::DesktopApp());
+    CefRefPtr<TracingDesktopApp> app(new TracingDesktopApp());
     if (primary_process) {
         AppendStartupTrace("primary:before-cef-initialize");
     }
