@@ -27,9 +27,9 @@ An upgrade should be a deliberate change that records:
 - navigation/event-contract compatibility;
 - privacy/network behavior changes that affect Openbrowser policies;
 - platform-specific regressions;
-- updated binary integrity hashes when automated acquisition is enabled.
+- updated binary integrity hashes for every automated-acquisition platform.
 
-## Obtaining CEF
+## Obtaining CEF for local development
 
 Use the official CEF Automated Builds page and download the **Standard Distribution** for your platform matching the exact pinned version.
 
@@ -55,9 +55,9 @@ The configuration step validates:
 
 A mismatch fails configuration instead of silently building against an untested engine.
 
-## No implicit downloads
+## No implicit downloads in the ordinary build
 
-The ordinary Openbrowser build must remain network-independent:
+The ordinary Openbrowser build remains network-independent:
 
 ```bash
 cmake -S . -B build -DOPENBROWSER_BUILD_TESTS=ON
@@ -65,9 +65,29 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-`OPENBROWSER_BUILD_DESKTOP` is `OFF` by default. Enabling it never means “download something from the internet”.
+`OPENBROWSER_BUILD_DESKTOP` is `OFF` by default. Enabling it locally never means “download something from the internet”.
 
-Automated CEF acquisition will be introduced only after Openbrowser has a per-platform manifest containing exact artifact names, source URLs, and integrity hashes. That downloader will be an explicit tool/workflow, not a hidden CMake side effect.
+Automated CEF acquisition exists only in explicit CI adapter/package workflows. It is not a CMake side effect. Those workflows use concrete platform archive names and the versioned integrity pins in `third_party/cef/checksums.sha1`, compare the local pin with the official CEF checksum metadata, and verify the archive before extraction.
+
+The Windows package workflow additionally produces a user-facing SHA-256 for the final portable ZIP.
+
+## Windows portable package and LPAC sandbox ACLs
+
+Current CEF Windows builds require an LPAC read/execute ACL for Chromium's Network Service sandbox. The upstream CEF CMake integration applies this ACL to the build output directory with the well-known SID `S-1-15-2-2` (`ALL RESTRICTED APPLICATION PACKAGES`).
+
+A portable ZIP cannot be trusted to preserve NTFS ACLs after extraction. The Openbrowser Windows runtime therefore treats the ACL as a runtime prerequisite rather than assuming the build-directory ACL survived packaging:
+
+1. the primary browser process resolves its extracted runtime directory;
+2. it checks for the required LPAC read/execute ACE with object/container inheritance;
+3. if the ACE is missing, it invokes the Windows `icacls.exe` system utility to grant `S-1-15-2-2:(OI)(CI)(RX)` on that directory;
+4. it verifies the resulting ACL before continuing into CEF initialization;
+5. if the ACL cannot be established, startup fails closed with a user-facing error instead of silently weakening the Network Service sandbox.
+
+This repair runs only for the primary browser process. CEF subprocesses consume the already-prepared runtime directory.
+
+The Windows package CI extracts the produced ZIP into a fresh temporary directory, launches that extracted `openbrowser.exe`, confirms that the LPAC ACE is present after startup, and observes the CEF Network Service subprocess before accepting the artifact.
+
+Portable Windows builds are intended for normal NTFS locations owned by the current user. Locations that do not support or do not permit the required ACL cause startup to fail rather than downgrade the sandbox.
 
 ## Runtime style
 
@@ -106,3 +126,5 @@ The first adapter implementation must therefore make event dispatch/sequence own
 ## Distribution notices
 
 CEF and Chromium remain under their own licenses. Any distributed Openbrowser desktop build must preserve the notices required by the exact CEF/Chromium distribution, including upstream license/credits material. `THIRD_PARTY.md` is a ledger; it does not replace upstream notice files.
+
+The Windows portable package fails closed if the expected CEF license/credits material is missing from the exact pinned distribution.
