@@ -141,6 +141,9 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
                 .body_preview = event.body_preview,
                 .attribution = event.attribution,
                 .connection_id = event.connection_id,
+                .filter_blocked = false,
+                .filter_rule_source = {},
+                .filter_layer = {},
             };
 
             if (event.type == NetworkEventType::RequestFinished) {
@@ -201,7 +204,7 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
 
     if (decision_log_ != nullptr) {
         for (auto& summary : summaries) {
-            if (const auto dec = decision_log_->FindDecision(summary.request_id); dec.has_value()) {
+            if (const auto dec = decision_log_->FindByRequestId(summary.request_id); dec.has_value()) {
                 summary.filter_blocked = dec->blocked;
                 summary.filter_rule_source = dec->rule_source;
                 summary.filter_layer = core::FilterDecisionLayerToString(dec->layer);
