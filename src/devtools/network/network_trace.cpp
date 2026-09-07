@@ -128,7 +128,9 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
                 summary.url = event.url;
             }
             if (!event.method.empty()) {
-                summary.method = event.method;
+                if (summary.method == "GET" || event.type == NetworkEventType::RequestStarted) {
+                    summary.method = event.method;
+                }
             }
             if (event.status.has_value()) {
                 summary.status = event.status;

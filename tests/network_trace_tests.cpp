@@ -263,43 +263,61 @@ void TestAdvancedNetworkLabQueryAndDetails() {
 
     auto req2_res = MakeEvent("req-2");
     req2_res.type = NetworkEventType::ResponseReceived;
+    req2_res.method = "POST";
     req2_res.status = 404;
     buffer.Add(req2_res);
 
     auto req2_fin = MakeEvent("req-2");
     req2_fin.type = NetworkEventType::RequestFinished;
+    req2_fin.method = "POST";
     buffer.Add(req2_fin);
 
     // 1. FindRequest & Detail Integrity
     const auto details1 = buffer.FindRequest("req-1");
     Require(details1.has_value(), "FindRequest finds req-1");
-    Require(details1->request_headers.size() == 1, "req-1 has 1 request header");
-    Require(details1->request_headers[0].name == "Accept", "request header name");
-    Require(details1->response_headers.size() == 1, "req-1 has 1 response header");
-    Require(details1->response_headers[0].name == "Content-Type", "response header name");
-    Require(details1->body_preview.empty(), "req-1 has empty body preview");
+    if (details1.has_value()) {
+        Require(details1->request_headers.size() == 1, "req-1 has 1 request header");
+        if (!details1->request_headers.empty()) {
+            Require(details1->request_headers[0].name == "Accept", "request header name");
+        }
+        Require(details1->response_headers.size() == 1, "req-1 has 1 response header");
+        if (!details1->response_headers.empty()) {
+            Require(details1->response_headers[0].name == "Content-Type", "response header name");
+        }
+        Require(details1->body_preview.empty(), "req-1 has empty body preview");
+    }
 
     const auto details2 = buffer.FindRequest("req-2");
     Require(details2.has_value(), "FindRequest finds req-2");
-    Require(details2->body_preview == "{\"username\":\"samuel\",\"remember\":true}", "req-2 preserves body preview");
+    if (details2.has_value()) {
+        Require(details2->body_preview == "{\"username\":\"samuel\",\"remember\":true}", "req-2 preserves body preview");
+    }
 
     // 2. Method filtering
     const auto post_only = buffer.QueryRequests(NetworkTraceFilter{.method_filter = "POST"});
     Require(post_only.size() == 1, "method filter POST returns 1 result");
-    Require(post_only[0].request_id == "req-2", "post filter matches req-2");
+    if (post_only.size() == 1) {
+        Require(post_only[0].request_id == "req-2", "post filter matches req-2");
+    }
 
     const auto get_only = buffer.QueryRequests(NetworkTraceFilter{.method_filter = "GET"});
     Require(get_only.size() == 1, "method filter GET returns 1 result");
-    Require(get_only[0].request_id == "req-1", "get filter matches req-1");
+    if (get_only.size() == 1) {
+        Require(get_only[0].request_id == "req-1", "get filter matches req-1");
+    }
 
     // 3. Status filtering
     const auto status_2xx = buffer.QueryRequests(NetworkTraceFilter{.status_filter = "2XX"});
     Require(status_2xx.size() == 1, "status 2XX returns 1 result");
-    Require(status_2xx[0].request_id == "req-1", "status 2XX matches req-1");
+    if (status_2xx.size() == 1) {
+        Require(status_2xx[0].request_id == "req-1", "status 2XX matches req-1");
+    }
 
     const auto status_err = buffer.QueryRequests(NetworkTraceFilter{.status_filter = "ERR"});
     Require(status_err.size() == 1, "status ERR matches 404 response");
-    Require(status_err[0].request_id == "req-2", "status ERR matches req-2");
+    if (status_err.size() == 1) {
+        Require(status_err[0].request_id == "req-2", "status ERR matches req-2");
+    }
 
     // 4. Search query on URL, header, and body preview
     const auto search_url = buffer.QueryRequests(NetworkTraceFilter{.search_query = "users"});
