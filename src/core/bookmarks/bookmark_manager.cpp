@@ -25,6 +25,18 @@ std::string ToLower(const std::string_view s) {
     return out;
 }
 
+bool IsValidBookmarksDocument(const std::string_view content) {
+    const auto root = storage::ParseJson(content);
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+        return false;
+    }
+    if (root->GetSizeT("schema_version", 0) != 1) {
+        return false;
+    }
+    const auto* bookmarks = root->Find("bookmarks");
+    return bookmarks != nullptr && bookmarks->type == storage::JsonValue::Type::Array;
+}
+
 }  // namespace
 
 void BookmarkManager::SetAutoSavePath(std::filesystem::path path) {
@@ -105,7 +117,6 @@ bool BookmarkManager::EditBookmark(
         return false;
     }
 
-    // Check if new_url is already taken by another bookmark
     if (it->url != new_url && IsBookmarked(new_url)) {
         return false;
     }
@@ -115,7 +126,6 @@ bool BookmarkManager::EditBookmark(
     if (new_tags.has_value()) {
         it->tags = *new_tags;
     }
-    // id, created_at_ms, workspace_id preserved
     TriggerAutoSave();
     return true;
 }
@@ -211,7 +221,8 @@ bool BookmarkManager::Deserialize(const std::string_view json) {
     }
 
     const auto root = storage::ParseJson(json);
-    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object ||
+        root->GetSizeT("schema_version", 0) != 1) {
         return false;
     }
 
@@ -270,10 +281,7 @@ bool BookmarkManager::SaveToFile(const std::filesystem::path& path) const {
 
 bool BookmarkManager::LoadFromFile(const std::filesystem::path& path) {
     if (path.empty()) return false;
-    const auto result = storage::ReadFileWithBackupRecovery(path, [](std::string_view content) {
-        const auto root = storage::ParseJson(content);
-        return root.has_value() && root->type == storage::JsonValue::Type::Object;
-    });
+    const auto result = storage::ReadFileWithBackupRecovery(path, IsValidBookmarksDocument);
 
     if (!result.success) {
         return false;
