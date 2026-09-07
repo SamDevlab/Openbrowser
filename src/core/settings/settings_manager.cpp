@@ -7,6 +7,32 @@
 
 namespace openbrowser::core {
 
+namespace {
+
+bool IsValidSettingsDocument(const std::string_view content) {
+    const auto root = storage::ParseJson(content);
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+        return false;
+    }
+    if (root->GetSizeT("schema_version", 0) != 1) {
+        return false;
+    }
+
+    const auto* search_name = root->Find("search_provider_name");
+    const auto* search_url = root->Find("search_url_template");
+    const auto* restore = root->Find("restore_session_on_startup");
+    const auto* home = root->Find("home_page_url");
+    const auto* downloads = root->Find("downloads_directory");
+
+    return search_name != nullptr && search_name->type == storage::JsonValue::Type::String &&
+           search_url != nullptr && search_url->type == storage::JsonValue::Type::String &&
+           restore != nullptr && restore->type == storage::JsonValue::Type::Bool &&
+           home != nullptr && home->type == storage::JsonValue::Type::String &&
+           downloads != nullptr && downloads->type == storage::JsonValue::Type::String;
+}
+
+}  // namespace
+
 SettingsManager::SettingsManager(BrowserSettings settings)
     : settings_(std::move(settings)) {}
 
@@ -72,12 +98,12 @@ std::string SettingsManager::Serialize() const {
 }
 
 bool SettingsManager::Deserialize(const std::string_view json) {
-    if (json.empty()) {
+    if (!IsValidSettingsDocument(json)) {
         return false;
     }
 
     const auto root = storage::ParseJson(json);
-    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+    if (!root.has_value()) {
         return false;
     }
 
@@ -105,10 +131,7 @@ bool SettingsManager::SaveToFile(const std::filesystem::path& path) const {
 
 bool SettingsManager::LoadFromFile(const std::filesystem::path& path) {
     if (path.empty()) return false;
-    const auto result = storage::ReadFileWithBackupRecovery(path, [](std::string_view content) {
-        const auto root = storage::ParseJson(content);
-        return root.has_value() && root->type == storage::JsonValue::Type::Object;
-    });
+    const auto result = storage::ReadFileWithBackupRecovery(path, IsValidSettingsDocument);
 
     if (!result.success) {
         return false;
