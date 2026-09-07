@@ -145,6 +145,21 @@ void DesktopApp::OnContextInitialized() {
     history_manager_ = std::make_unique<core::HistoryManager>();
     bookmark_manager_ = std::make_unique<core::BookmarkManager>();
 
+    file_broker_ = std::make_unique<core::FileBroker>(StorageDirectory() / "downloads");
+
+    action_registry_ = std::make_unique<core::ActionRegistry>();
+    action_registry_->RegisterAction({
+        .id = "network_lab.toggle",
+        .title = "Toggle Network Lab",
+        .description = "Show or hide the Network Lab developer drawer",
+        .category = core::ActionCategory::NetworkLab,
+        .shortcut_hint = "Ctrl+Shift+L",
+        .handler = [this]() {
+            ToggleNetworkLab();
+            return true;
+        },
+    });
+
     network_trace_ = std::make_unique<devtools::network::NetworkTraceBuffer>();
     engine_->SetNetworkObservationSink(network_trace_.get());
 
@@ -216,9 +231,11 @@ void DesktopApp::ShutdownRuntime() {
         engine_->SetNetworkObservationSink(nullptr);
     }
 
+    action_registry_.reset();
     bookmark_manager_.reset();
     history_manager_.reset();
     content_filter_.reset();
+    file_broker_.reset();
     transfer_broker_.reset();
     network_lab_panel_.reset();
     focus_sidebar_.reset();
