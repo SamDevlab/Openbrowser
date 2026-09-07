@@ -62,14 +62,14 @@ DownloadsPanel::DownloadsPanel(
     settings.inside_border_horizontal_spacing = 10;
     settings.inside_border_vertical_spacing = 6;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
-    layout_ = panel_->SetAsBoxLayout(settings);
+    layout_ = panel_->SetToBoxLayout(settings);
 
     list_panel_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings list_settings{};
     list_settings.horizontal = 0;
     list_settings.between_child_spacing = 4;
     list_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
-    list_layout_ = list_panel_->SetAsBoxLayout(list_settings);
+    list_layout_ = list_panel_->SetToBoxLayout(list_settings);
 
     panel_->SetVisible(false);
     RebuildView();
@@ -126,7 +126,7 @@ void DownloadsPanel::RebuildView() {
     header_settings.horizontal = 1;
     header_settings.between_child_spacing = 8;
     header_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
-    header->SetAsBoxLayout(header_settings);
+    header->SetToBoxLayout(header_settings);
 
     auto title_btn = CefLabelButton::CreateLabelButton(nullptr, "📥 Downloads & Transfers");
     header->AddChildView(title_btn);
@@ -149,7 +149,7 @@ void DownloadsPanel::RebuildView() {
             row_settings.horizontal = 1;
             row_settings.between_child_spacing = 6;
             row_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
-            row->SetAsBoxLayout(row_settings);
+            row->SetToBoxLayout(row_settings);
 
             const std::string safe_name = core::FileBroker::SanitizeFilename(item.suggested_filename);
             const double pct = (item.total_bytes > 0)

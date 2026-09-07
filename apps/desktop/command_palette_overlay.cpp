@@ -12,7 +12,7 @@ public:
     explicit QueryFieldDelegate(CommandPaletteOverlay& overlay)
         : overlay_(overlay) {}
 
-    void OnContentsChanged(CefRefPtr<CefTextfield> textfield) override {
+    void OnAfterUserAction(CefRefPtr<CefTextfield> textfield) override {
         CEF_REQUIRE_UI_THREAD();
         overlay_.SetQuery(textfield->GetText().ToString());
     }
@@ -72,7 +72,7 @@ CommandPaletteOverlay::CommandPaletteOverlay(
     container_settings.inside_border_horizontal_spacing = 12;
     container_settings.inside_border_vertical_spacing = 8;
     container_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
-    container_layout_ = container_->SetAsBoxLayout(container_settings);
+    container_layout_ = container_->SetToBoxLayout(container_settings);
 
     search_delegate_ = new QueryFieldDelegate(*this);
     search_field_ = CefTextfield::CreateTextfield(search_delegate_);
@@ -84,7 +84,7 @@ CommandPaletteOverlay::CommandPaletteOverlay(
     results_settings.horizontal = 0;
     results_settings.between_child_spacing = 2;
     results_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
-    results_layout_ = results_panel_->SetAsBoxLayout(results_settings);
+    results_layout_ = results_panel_->SetToBoxLayout(results_settings);
     container_->AddChildView(results_panel_);
 
     container_->SetVisible(false);

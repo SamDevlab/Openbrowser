@@ -56,7 +56,7 @@ BookmarksBar::BookmarksBar(
     settings.inside_border_horizontal_spacing = 8;
     settings.inside_border_vertical_spacing = 2;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
-    layout_ = panel_->SetAsBoxLayout(settings);
+    layout_ = panel_->SetToBoxLayout(settings);
 
     add_delegate_ = new AddBookmarkDelegate(*this);
     add_button_ = CefLabelButton::CreateLabelButton(add_delegate_, "[+ Bookmark]");
@@ -85,21 +85,20 @@ void BookmarksBar::ToggleVisibility() {
 }
 
 void BookmarksBar::BookmarkCurrentPage() {
-    const auto active_tab = session_.ActiveTab();
-    if (!active_tab) {
+    const auto& active_id = session_.ActiveTabId();
+    if (!active_id) {
+        return;
+    }
+    const auto* active_tab = session_.FindTab(*active_id);
+    if (!active_tab || active_tab->url.empty()) {
         return;
     }
 
-    const std::string url = active_tab->Url();
-    if (url.empty()) {
-        return;
-    }
-
-    const std::string title = active_tab->Title().empty() ? url : active_tab->Title();
-    const std::string workspace = active_tab->WorkspaceId().empty() ? "default" : active_tab->WorkspaceId();
+    const std::string title = active_tab->title.empty() ? active_tab->url : active_tab->title;
+    const std::string workspace = active_tab->workspace_id.value_or("default");
 
     core::BookmarkItem item;
-    item.url = url;
+    item.url = active_tab->url;
     item.title = title;
     item.workspace_id = workspace;
     bookmark_manager_.AddBookmark(std::move(item));
@@ -107,9 +106,9 @@ void BookmarksBar::BookmarkCurrentPage() {
 }
 
 void BookmarksBar::NavigateTo(const std::string& url) {
-    const auto active_tab = session_.ActiveTab();
-    if (active_tab && !url.empty()) {
-        session_.Navigate(active_tab->Id(), url);
+    const auto& active_id = session_.ActiveTabId();
+    if (active_id && !url.empty()) {
+        session_.Navigate(*active_id, url);
     }
 }
 
@@ -120,9 +119,12 @@ void BookmarksBar::RebuildBar() {
     panel_->AddChildView(add_button_);
 
     std::string current_workspace = "default";
-    const auto active_tab = session_.ActiveTab();
-    if (active_tab && !active_tab->WorkspaceId().empty()) {
-        current_workspace = active_tab->WorkspaceId();
+    const auto& active_id = session_.ActiveTabId();
+    if (active_id) {
+        const auto* active_tab = session_.FindTab(*active_id);
+        if (active_tab && active_tab->workspace_id.has_value() && !active_tab->workspace_id->empty()) {
+            current_workspace = *active_tab->workspace_id;
+        }
     }
 
     const auto bookmarks = bookmark_manager_.ListBookmarks(current_workspace);
