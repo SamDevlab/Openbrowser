@@ -245,12 +245,14 @@ void TestAdvancedNetworkLabQueryAndDetails() {
 
     auto req1_res = MakeEvent("req-1");
     req1_res.type = NetworkEventType::ResponseReceived;
+    req1_res.url = req1_start.url;
     req1_res.status = 200;
     req1_res.headers = {Header{.name = "Content-Type", .value = "application/json; charset=utf-8"}};
     buffer.Add(req1_res);
 
     auto req1_fin = MakeEvent("req-1");
     req1_fin.type = NetworkEventType::RequestFinished;
+    req1_fin.url = req1_start.url;
     buffer.Add(req1_fin);
 
     // Request 2: POST 404 with body preview

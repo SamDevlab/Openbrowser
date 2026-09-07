@@ -124,13 +124,11 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
             summaries.push_back(std::move(summary));
         } else {
             auto& summary = summaries[it->second];
-            if (!event.url.empty()) {
+            if (!event.url.empty() && (summary.url.empty() || event.type == NetworkEventType::Redirect)) {
                 summary.url = event.url;
             }
-            if (!event.method.empty()) {
-                if (summary.method == "GET" || event.type == NetworkEventType::RequestStarted) {
-                    summary.method = event.method;
-                }
+            if (!event.method.empty() && (summary.method.empty() || event.type == NetworkEventType::RequestStarted)) {
+                summary.method = event.method;
             }
             if (event.status.has_value()) {
                 summary.status = event.status;
