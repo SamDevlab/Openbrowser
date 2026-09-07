@@ -1,0 +1,221 @@
+name: Windows Package
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "cmake/OpenbrowserCEF.cmake"
+      - "src/core/**"
+      - "src/devtools/network/**"
+      - "third_party/cef/**"
+      - "scripts/package-windows.ps1"
+      - "CMakeLists.txt"
+      - "LICENSE"
+      - "README.md"
+      - "THIRD_PARTY.md"
+      - ".github/workflows/windows-package.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "cmake/OpenbrowserCEF.cmake"
+      - "src/core/**"
+      - "src/devtools/network/**"
+      - "third_party/cef/**"
+      - "scripts/package-windows.ps1"
+      - "CMakeLists.txt"
+      - "LICENSE"
+      - "README.md"
+      - "THIRD_PARTY.md"
+      - ".github/workflows/windows-package.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CEF_VERSION: 151.3.17+gf059e67+chromium-151.0.7922.138
+  CEF_PLATFORM: windows64
+  CEF_BASE_URL: https://cef-builds.spotifycdn.com
+  PACKAGE_VERSION: 0.1.0
+
+jobs:
+  windows-package:
+    name: Windows x64 portable ZIP
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore CEF archive cache
+        id: cef-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/cef/*.tar.bz2
+          key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
+
+      - name: Download and verify exact Windows CEF distribution
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+
+          $cacheDir = Join-Path $PWD '.cache/cef'
+          New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+
+          $archive = "cef_binary_${env:CEF_VERSION}_${env:CEF_PLATFORM}.tar.bz2"
+          $encodedArchive = $archive.Replace('+', '%2B')
+          $archivePath = Join-Path $cacheDir $archive
+          $lockFile = Join-Path $PWD 'third_party/cef/checksums.sha1'
+          $upstreamShaPath = "$archivePath.upstream.sha1"
+
+          $match = Get-Content -LiteralPath $lockFile | Where-Object {
+            $_ -match "^([0-9a-fA-F]{40})\s+$([regex]::Escape($archive))\s*$"
+          } | Select-Object -First 1
+          if ($null -eq $match) {
+            throw "Pinned checksum missing for $archive"
+          }
+          $expectedSha1 = (($match -split '\s+')[0]).ToLowerInvariant()
+
+          Invoke-WebRequest \
+            -Uri "${env:CEF_BASE_URL}/${encodedArchive}.sha1" \
+            -OutFile $upstreamShaPath \
+            -MaximumRetryCount 3 \
+            -RetryIntervalSec 2
+          $upstreamSha1 = (Get-Content -LiteralPath $upstreamShaPath -Raw).Trim().ToLowerInvariant()
+          if ($upstreamSha1 -notmatch '^[0-9a-f]{40}$') {
+            throw "Invalid upstream CEF SHA-1 metadata: $upstreamSha1"
+          }
+          if ($upstreamSha1 -ne $expectedSha1) {
+            throw "CEF checksum mismatch. Pinned=$expectedSha1 Upstream=$upstreamSha1"
+          }
+
+          if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
+            Invoke-WebRequest \
+              -Uri "${env:CEF_BASE_URL}/${encodedArchive}" \
+              -OutFile $archivePath \
+              -MaximumRetryCount 3 \
+              -RetryIntervalSec 2
+          }
+
+          $actualSha1 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA1).Hash.ToLowerInvariant()
+          if ($actualSha1 -ne $expectedSha1) {
+            throw "Downloaded CEF archive checksum mismatch. Expected=$expectedSha1 Actual=$actualSha1"
+          }
+
+          $extractDir = Join-Path $cacheDir 'extracted-windows'
+          if (Test-Path $extractDir) {
+            Remove-Item -Recurse -Force $extractDir
+          }
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+
+          Push-Location $extractDir
+          try {
+            cmake -E tar xjf $archivePath
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to extract CEF archive."
+            }
+          } finally {
+            Pop-Location
+          }
+
+          $cefRoot = Join-Path $extractDir "cef_binary_${env:CEF_VERSION}_${env:CEF_PLATFORM}"
+          if (-not (Test-Path -LiteralPath (Join-Path $cefRoot 'include/cef_version.h') -PathType Leaf)) {
+            throw "Extracted CEF_ROOT is invalid: $cefRoot"
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $cefRoot 'LICENSE.txt') -PathType Leaf)) {
+            throw "CEF LICENSE.txt missing from distribution."
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $cefRoot 'CREDITS.html') -PathType Leaf)) {
+            throw "CEF CREDITS.html missing from distribution."
+          }
+
+          "CEF_ROOT=$cefRoot" | Add-Content -LiteralPath $env:GITHUB_ENV
+          Write-Host "Pinned CEF Windows SHA-1 verified: $expectedSha1"
+
+      - name: Save verified CEF archive cache
+        if: steps.cef-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/cef/*.tar.bz2
+          key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
+
+      - name: Configure Windows desktop
+        shell: pwsh
+        run: |
+          cmake -S . -B build-windows -A x64 `
+            -DOPENBROWSER_BUILD_TESTS=OFF `
+            -DOPENBROWSER_BUILD_DESKTOP=ON `
+            -DCEF_ROOT="$env:CEF_ROOT" `
+            -DUSE_SANDBOX=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Windows desktop
+        shell: pwsh
+        run: |
+          cmake --build build-windows --target openbrowser --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build portable package
+        shell: pwsh
+        run: |
+          ./scripts/package-windows.ps1 `
+            -BuildDir ./build-windows `
+            -CefRoot "$env:CEF_ROOT" `
+            -OutputDir ./artifacts `
+            -Version "$env:PACKAGE_VERSION"
+
+      - name: Verify ZIP can be extracted
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $packageName = "Openbrowser-${env:PACKAGE_VERSION}-windows-x64"
+          $zipPath = Join-Path $PWD "artifacts/$packageName.zip"
+          $verifyDir = Join-Path $PWD 'artifacts/verify'
+          if (Test-Path $verifyDir) { Remove-Item -Recurse -Force $verifyDir }
+          Expand-Archive -LiteralPath $zipPath -DestinationPath $verifyDir
+
+          $root = Join-Path $verifyDir $packageName
+          $required = @(
+            'openbrowser.exe',
+            'openbrowser.dll',
+            'libcef.dll',
+            'icudtl.dat',
+            'resources.pak',
+            'OPENBROWSER-LICENSE.txt',
+            'THIRD_PARTY.md',
+            'CEF-LICENSE.txt',
+            'CEF-CREDITS.html'
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path -LiteralPath (Join-Path $root $file) -PathType Leaf)) {
+              throw "ZIP verification failed: missing $file"
+            }
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $root 'locales') -PathType Container)) {
+            throw 'ZIP verification failed: locales directory missing.'
+          }
+
+          $shaFile = Join-Path $PWD "artifacts/$packageName.zip.sha256"
+          $expected = ((Get-Content -LiteralPath $shaFile -Raw) -split '\s+')[0].Trim().ToLowerInvariant()
+          $actual = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "Portable ZIP SHA-256 mismatch. Expected=$expected Actual=$actual"
+          }
+          Write-Host "Portable ZIP verified: $actual"
+
+      - name: Upload Windows portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64
+          path: |
+            artifacts/Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64.zip
+            artifacts/Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
