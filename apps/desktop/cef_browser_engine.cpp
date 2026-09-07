@@ -764,9 +764,10 @@ void CefBrowserEngine::MaybeQuitAfterClose() {
         storage_root_,
         "MaybeQuitAfterClose enter requested=" + std::string(window_close_requested_ ? "true" : "false") +
             " live=" + std::to_string(live_browser_count_) +
+            " window_destroyed=" + (window_destroyed_ ? "true" : "false") +
             " quit_requested=" + (message_loop_quit_requested_ ? "true" : "false"));
 
-    if (!window_close_requested_ || live_browser_count_ != 0 ||
+    if (!window_close_requested_ || !window_destroyed_ || live_browser_count_ != 0 ||
         message_loop_quit_requested_) {
         AppendLifecycleTrace(storage_root_, "MaybeQuitAfterClose skip");
         return;
