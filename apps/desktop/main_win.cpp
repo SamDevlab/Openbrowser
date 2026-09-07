@@ -14,6 +14,8 @@
 namespace {
 
 constexpr wchar_t kLpacSid[] = L"S-1-15-2-2";
+constexpr DWORD kLpacAccess = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
+constexpr BYTE kLpacInheritance = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
 
 std::wstring RuntimeDirectory() {
     std::vector<wchar_t> buffer(32768);
@@ -59,10 +61,7 @@ bool HasLpacRuntimeAcl(const std::wstring& runtime_directory) {
         return false;
     }
 
-    constexpr DWORD kRequiredAccess = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
-    constexpr BYTE kRequiredInheritance = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
     bool found = false;
-
     for (DWORD index = 0; index < dacl->AceCount; ++index) {
         void* raw_ace = nullptr;
         if (!GetAce(dacl, index, &raw_ace) || raw_ace == nullptr) {
@@ -80,9 +79,9 @@ bool HasLpacRuntimeAcl(const std::wstring& runtime_directory) {
             continue;
         }
 
-        const bool has_access = (ace->Mask & kRequiredAccess) == kRequiredAccess;
+        const bool has_access = (ace->Mask & kLpacAccess) == kLpacAccess;
         const bool has_inheritance =
-            (header->AceFlags & kRequiredInheritance) == kRequiredInheritance;
+            (header->AceFlags & kLpacInheritance) == kLpacInheritance;
         if (has_access && has_inheritance) {
             found = true;
             break;
@@ -99,54 +98,61 @@ bool ApplyLpacRuntimeAcl(const std::wstring& runtime_directory) {
         return true;
     }
 
-    std::vector<wchar_t> system_directory(MAX_PATH + 1);
-    const UINT system_length = GetSystemDirectoryW(
-        system_directory.data(),
-        static_cast<UINT>(system_directory.size()));
-    if (system_length == 0 || system_length >= system_directory.size()) {
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    PACL existing_dacl = nullptr;
+    const DWORD read_result = GetNamedSecurityInfoW(
+        runtime_directory.c_str(),
+        SE_FILE_OBJECT,
+        DACL_SECURITY_INFORMATION,
+        nullptr,
+        nullptr,
+        &existing_dacl,
+        nullptr,
+        &descriptor);
+    if (read_result != ERROR_SUCCESS) {
         return false;
     }
 
-    std::wstring icacls(system_directory.data(), system_length);
-    icacls += L"\\icacls.exe";
-
-    std::wstring command_line =
-        L"\"" + icacls + L"\" \"" + runtime_directory +
-        L"\" /grant *S-1-15-2-2:(OI)(CI)(RX) /Q";
-    std::vector<wchar_t> mutable_command(command_line.begin(), command_line.end());
-    mutable_command.push_back(L'\0');
-
-    STARTUPINFOW startup_info{};
-    startup_info.cb = sizeof(startup_info);
-    PROCESS_INFORMATION process_info{};
-
-    if (!CreateProcessW(
-            icacls.c_str(),
-            mutable_command.data(),
-            nullptr,
-            nullptr,
-            FALSE,
-            CREATE_NO_WINDOW,
-            nullptr,
-            runtime_directory.c_str(),
-            &startup_info,
-            &process_info)) {
+    PSID lpac_sid = nullptr;
+    if (!ConvertStringSidToSidW(kLpacSid, &lpac_sid)) {
+        LocalFree(descriptor);
         return false;
     }
 
-    const DWORD wait_result = WaitForSingleObject(process_info.hProcess, 15000);
-    DWORD exit_code = ERROR_GEN_FAILURE;
-    if (wait_result == WAIT_TIMEOUT) {
-        TerminateProcess(process_info.hProcess, ERROR_TIMEOUT);
-    } else if (wait_result == WAIT_OBJECT_0) {
-        static_cast<void>(GetExitCodeProcess(process_info.hProcess, &exit_code));
+    EXPLICIT_ACCESSW entry{};
+    entry.grfAccessPermissions = kLpacAccess;
+    entry.grfAccessMode = GRANT_ACCESS;
+    entry.grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
+    entry.Trustee.TrusteeForm = TRUSTEE_IS_SID;
+    entry.Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
+    entry.Trustee.ptstrName = static_cast<LPWSTR>(lpac_sid);
+
+    PACL updated_dacl = nullptr;
+    const DWORD merge_result = SetEntriesInAclW(
+        1,
+        &entry,
+        existing_dacl,
+        &updated_dacl);
+    if (merge_result != ERROR_SUCCESS) {
+        LocalFree(lpac_sid);
+        LocalFree(descriptor);
+        return false;
     }
 
-    CloseHandle(process_info.hThread);
-    CloseHandle(process_info.hProcess);
+    const DWORD write_result = SetNamedSecurityInfoW(
+        const_cast<LPWSTR>(runtime_directory.c_str()),
+        SE_FILE_OBJECT,
+        DACL_SECURITY_INFORMATION,
+        nullptr,
+        nullptr,
+        updated_dacl,
+        nullptr);
 
-    return wait_result == WAIT_OBJECT_0 && exit_code == ERROR_SUCCESS &&
-           HasLpacRuntimeAcl(runtime_directory);
+    LocalFree(updated_dacl);
+    LocalFree(lpac_sid);
+    LocalFree(descriptor);
+
+    return write_result == ERROR_SUCCESS && HasLpacRuntimeAcl(runtime_directory);
 }
 
 bool IsPrimaryBrowserProcess() {
@@ -154,19 +160,30 @@ bool IsPrimaryBrowserProcess() {
     return command_line == nullptr || wcsstr(command_line, L"--type=") == nullptr;
 }
 
+int FailSandboxInitialization() {
+    MessageBoxW(
+        nullptr,
+        L"Openbrowser could not establish the Windows permissions required "
+        L"for the Chromium sandbox. Move the extracted Openbrowser folder "
+        L"to a normal NTFS location you own and try again.",
+        L"Openbrowser sandbox initialization failed",
+        MB_OK | MB_ICONERROR);
+    return static_cast<int>(ERROR_ACCESS_DENIED);
+}
+
 int RunMain(HINSTANCE instance, void* sandbox_info) {
-#if defined(CEF_USE_SANDBOX)
-    if (sandbox_info != nullptr && IsPrimaryBrowserProcess()) {
+#if defined(OPENBROWSER_WINDOWS_SANDBOX)
+    if (IsPrimaryBrowserProcess()) {
+        // A build configured as sandboxed must never silently fall back to
+        // CefSettings::no_sandbox. The bootstrap is expected to provide the
+        // sandbox information object for the primary browser process.
+        if (sandbox_info == nullptr) {
+            return FailSandboxInitialization();
+        }
+
         const std::wstring runtime_directory = RuntimeDirectory();
         if (runtime_directory.empty() || !ApplyLpacRuntimeAcl(runtime_directory)) {
-            MessageBoxW(
-                nullptr,
-                L"Openbrowser could not apply the Windows LPAC permissions required "
-                L"for the Chromium Network Service sandbox. Move the extracted "
-                L"Openbrowser folder to an NTFS location you own and try again.",
-                L"Openbrowser sandbox initialization failed",
-                MB_OK | MB_ICONERROR);
-            return static_cast<int>(ERROR_ACCESS_DENIED);
+            return FailSandboxInitialization();
         }
     }
 #endif
@@ -179,9 +196,15 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
     }
 
     CefSettings settings;
+#if defined(OPENBROWSER_WINDOWS_SANDBOX)
+    if (sandbox_info == nullptr) {
+        return FailSandboxInitialization();
+    }
+#else
     if (sandbox_info == nullptr) {
         settings.no_sandbox = true;
     }
+#endif
 
     CefRefPtr<openbrowser::desktop::DesktopApp> app(new openbrowser::desktop::DesktopApp());
     if (!CefInitialize(main_args, settings, app.get(), sandbox_info)) {
