@@ -69,8 +69,51 @@ function Close-BrowserGracefully {
         throw 'Openbrowser did not exit after a graceful window close.'
     }
 
-    if ($Process.ExitCode -ne 0) {
-        throw "Openbrowser exited with code $($Process.ExitCode) after graceful close."
+    return $Process.ExitCode
+}
+
+function Write-ShutdownDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$ExitCode,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RuntimeRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$StateRoot
+    )
+
+    $unsignedExitCode = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$ExitCode), 0)
+    Write-Host ("Unexpected graceful-close exit code: {0} (0x{1:X8})" -f $ExitCode, $unsignedExitCode)
+
+    $debugCandidates = @(
+        (Join-Path $RuntimeRoot 'debug.log'),
+        (Join-Path $StateRoot 'debug.log'),
+        (Join-Path $StateRoot 'default/debug.log')
+    )
+    foreach ($debugLog in $debugCandidates) {
+        if (Test-Path -LiteralPath $debugLog -PathType Leaf) {
+            Write-Host "CEF/Openbrowser log: $debugLog"
+            Get-Content -LiteralPath $debugLog -Tail 200
+        }
+    }
+
+    try {
+        $since = (Get-Date).AddMinutes(-3)
+        $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $since } -ErrorAction Stop |
+            Where-Object {
+                $_.Message -match 'openbrowser|libcef|chrome_elf'
+            } |
+            Select-Object -First 8)
+        if ($events.Count -gt 0) {
+            Write-Host 'Recent Windows Application events related to Openbrowser/CEF:'
+            foreach ($event in $events) {
+                Write-Host ("Event {0} Provider={1}: {2}" -f $event.Id, $event.ProviderName, $event.Message)
+            }
+        }
+    } catch {
+        Write-Host "Windows event-log diagnostics unavailable: $($_.Exception.Message)"
     }
 }
 
@@ -196,7 +239,7 @@ try {
         return (Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget) -ge 1
     }
 
-    Close-BrowserGracefully -Process $browser
+    $firstExitCode = Close-BrowserGracefully -Process $browser
     $browser = $null
 
     if (-not (Test-Path -LiteralPath $sessionFile -PathType Leaf)) {
@@ -219,6 +262,12 @@ try {
         throw 'Committed smoke URL was not persisted in history.'
     }
 
+    if ($firstExitCode -ne 0) {
+        Write-Host 'The product persisted a clean shutdown before returning a non-zero process status.'
+        Write-ShutdownDiagnostics -ExitCode $firstExitCode -RuntimeRoot $runtimeRoot -StateRoot $stateRoot
+        throw "Openbrowser returned a non-zero status after a clean persisted shutdown."
+    }
+
     $firstRequestCount = Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget
 
     # Relaunch without --url. The default restore_session_on_startup=true must
@@ -239,7 +288,7 @@ try {
         return (Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget) -gt $firstRequestCount
     }
 
-    Close-BrowserGracefully -Process $restoredBrowser
+    $secondExitCode = Close-BrowserGracefully -Process $restoredBrowser
     $restoredBrowser = $null
 
     $restoredSession = Get-Content -LiteralPath $sessionFile -Raw | ConvertFrom-Json
@@ -248,6 +297,11 @@ try {
     }
     if (@($restoredSession.tabs | Where-Object { $_.url -eq $smokeUrl }).Count -ne 1) {
         throw 'Restored session lost the smoke tab after the second shutdown.'
+    }
+
+    if ($secondExitCode -ne 0) {
+        Write-ShutdownDiagnostics -ExitCode $secondExitCode -RuntimeRoot $runtimeRoot -StateRoot $stateRoot
+        throw "Relaunched Openbrowser returned a non-zero status after a clean persisted shutdown."
     }
 
     $finalRequestCount = Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget
