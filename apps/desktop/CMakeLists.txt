@@ -15,6 +15,12 @@ set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     tab_strip.h
     network_lab_panel.cpp
     network_lab_panel.h
+    bookmarks_bar.cpp
+    bookmarks_bar.h
+    command_palette_overlay.cpp
+    command_palette_overlay.h
+    downloads_panel.cpp
+    downloads_panel.h
 )
 
 if(OS_LINUX)
