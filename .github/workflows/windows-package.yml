@@ -10,6 +10,7 @@ on:
       - "src/devtools/network/**"
       - "third_party/cef/**"
       - "scripts/package-windows.ps1"
+      - "scripts/product-smoke-windows.ps1"
       - "CMakeLists.txt"
       - "LICENSE"
       - "README.md"
@@ -24,6 +25,7 @@ on:
       - "src/devtools/network/**"
       - "third_party/cef/**"
       - "scripts/package-windows.ps1"
+      - "scripts/product-smoke-windows.ps1"
       - "CMakeLists.txt"
       - "LICENSE"
       - "README.md"
@@ -308,3 +310,36 @@ jobs:
             artifacts/Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64.zip.sha256
           if-no-files-found: error
           compression-level: 0
+
+  product-smoke:
+    name: Product smoke / Windows x64
+    needs: windows-package
+    runs-on: windows-2025
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Resolve Openbrowser package version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cmake = Get-Content -LiteralPath ./CMakeLists.txt -Raw
+          if ($cmake -notmatch 'project\s*\(\s*Openbrowser\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+            throw 'Could not resolve Openbrowser VERSION from CMakeLists.txt.'
+          }
+          $version = $Matches[1]
+          "PACKAGE_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV
+
+      - name: Download packaged Windows artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64
+          path: product-artifact
+
+      - name: Run packaged lifecycle smoke
+        shell: pwsh
+        run: |
+          ./scripts/product-smoke-windows.ps1 `
+            -ArtifactDir ./product-artifact `
+            -Version "$env:PACKAGE_VERSION"
