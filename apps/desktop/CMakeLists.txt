@@ -159,7 +159,7 @@ if(OS_WINDOWS)
             TARGET ${OPENBROWSER_DESKTOP_TARGET}
             POST_BUILD
             COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -Command
-                "$map='${CMAKE_BINARY_DIR}/openbrowser-$<CONFIG>.map'; if (Test-Path -LiteralPath $map) { Write-Host 'Openbrowser startup-related linker symbols:'; Select-String -LiteralPath $map -Pattern 'DesktopApp|OnContextInitialized|TracingDesktopApp' | ForEach-Object { Write-Host $_.Line } }"
+                "$map='${CMAKE_BINARY_DIR}/openbrowser-$<CONFIG>.map'; $dll='$<TARGET_FILE:${OPENBROWSER_DESKTOP_TARGET}>'; if (Test-Path -LiteralPath $map) { Write-Host 'Openbrowser BrowserChrome/startup linker symbols:'; Select-String -LiteralPath $map -Pattern 'BrowserChrome|DesktopApp|OnContextInitialized|TracingDesktopApp' | ForEach-Object { Write-Host $_.Line } }; $sym=Get-Command llvm-symbolizer.exe -ErrorAction SilentlyContinue; if ($sym) { Write-Host 'LLVM symbolizer for crash RVA 0x47E2:'; & $sym.Source --obj=$dll --relative-address 0x47E2 }; $objdump=Get-Command llvm-objdump.exe -ErrorAction SilentlyContinue; if ($objdump) { Write-Host 'LLVM disassembly around crash RVA 0x47E2:'; & $objdump.Source -d --start-address=0x180004780 --stop-address=0x180004840 $dll }"
             VERBATIM
         )
     endif()
