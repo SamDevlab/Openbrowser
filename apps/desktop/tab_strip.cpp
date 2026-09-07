@@ -137,7 +137,7 @@ void TabStrip::RebuildTabs() {
         if (privacy_orchestrator_ != nullptr && !privacy_orchestrator_->IsTabVisible(tab)) {
             continue;
         } else if (privacy_orchestrator_ == nullptr && profile_manager_ != nullptr) {
-            const auto* active = profile_manager_->GetActiveProfile();
+            const auto active = profile_manager_->GetActiveProfile();
             const bool is_profile_ephemeral = (active != nullptr && active->IsEphemeral());
             if (is_profile_ephemeral && !tab.is_ephemeral) {
                 continue;

@@ -15,7 +15,7 @@ SessionPrivacyOrchestrator::SessionPrivacyOrchestrator(
       on_private_mode_changed_(std::move(on_private_mode_changed)) {}
 
 bool SessionPrivacyOrchestrator::IsPrivateModeActive() const noexcept {
-    const auto* active = profile_manager_.GetActiveProfile();
+    const auto active = profile_manager_.GetActiveProfile();
     return active != nullptr && active->IsEphemeral();
 }
 
