@@ -234,9 +234,8 @@ jobs:
 
           $exe = Join-Path $root 'openbrowser.exe'
           $env:OPENBROWSER_NONINTERACTIVE = '1'
-          $env:OPENBROWSER_SYMBOL_PATH = Join-Path $PWD 'build-windows/apps/desktop/Release'
 
-          # The diagnostic probe goes through the final bootstrap EXE and DLL.
+          # The prerequisite probe goes through the final bootstrap EXE and DLL.
           # It returns zero only after native SID comparison confirms both the
           # inheritable runtime ACL and propagated LPAC read/execute access on
           # libcef.dll, avoiding locale-dependent PowerShell identity parsing.
@@ -278,47 +277,6 @@ jobs:
               if (Test-Path -LiteralPath $debugLog -PathType Leaf) {
                 Write-Host 'CEF debug.log:'
                 Get-Content -LiteralPath $debugLog -Tail 200
-
-                $crashLine = Get-Content -LiteralPath $debugLog | Where-Object {
-                  $_ -match '^\[openbrowser-crash\]'
-                } | Select-Object -Last 1
-                if ($crashLine -and $crashLine -match 'rva=0x([0-9A-Fa-f]+)') {
-                  $rva = [Convert]::ToUInt64($Matches[1], 16)
-                  $mapPath = Join-Path $PWD 'build-windows/openbrowser-Release.map'
-                  if (Test-Path -LiteralPath $mapPath -PathType Leaf) {
-                    $mapLines = Get-Content -LiteralPath $mapPath
-                    $preferredLine = $mapLines | Where-Object {
-                      $_ -match 'Preferred load address is\s+([0-9A-Fa-f]+)'
-                    } | Select-Object -First 1
-                    if ($preferredLine -and $preferredLine -match 'Preferred load address is\s+([0-9A-Fa-f]+)') {
-                      $preferredBase = [Convert]::ToUInt64($Matches[1], 16)
-                      $targetAddress = $preferredBase + $rva
-                      $symbols = foreach ($line in $mapLines) {
-                        $parts = @($line -split '\s+' | Where-Object { $_ -ne '' })
-                        if ($parts.Count -ge 3 -and
-                            $parts[0] -match '^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8,16}$' -and
-                            $parts[2] -match '^[0-9A-Fa-f]{16}$') {
-                          [pscustomobject]@{
-                            Address = [Convert]::ToUInt64($parts[2], 16)
-                            Symbol = $parts[1]
-                            Line = $line.Trim()
-                          }
-                        }
-                      }
-                      $nearest = @($symbols | Where-Object {
-                        $_.Address -le $targetAddress
-                      } | Sort-Object Address -Descending | Select-Object -First 8)
-                      Write-Host ("Crash RVA 0x{0:X} => preferred VA 0x{1:X}" -f $rva, $targetAddress)
-                      Write-Host 'Nearest linker-map symbols at or before the fault:'
-                      foreach ($symbol in $nearest) {
-                        $delta = $targetAddress - $symbol.Address
-                        Write-Host ("  +0x{0:X} from {1}" -f $delta, $symbol.Line)
-                      }
-                    }
-                  } else {
-                    Write-Host "Linker map not found at $mapPath"
-                  }
-                }
               }
               throw "Extracted Openbrowser exited during startup smoke with code $($process.ExitCode)."
             }
@@ -337,7 +295,6 @@ jobs:
               & taskkill.exe /PID $process.Id /T /F | Out-Null
             }
             Remove-Item Env:OPENBROWSER_NONINTERACTIVE -ErrorAction SilentlyContinue
-            Remove-Item Env:OPENBROWSER_SYMBOL_PATH -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $smokeStorage -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $verifyDir -ErrorAction SilentlyContinue
           }
