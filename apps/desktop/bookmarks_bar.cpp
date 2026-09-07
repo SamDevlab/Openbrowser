@@ -51,7 +51,7 @@ BookmarksBar::BookmarksBar(
     panel_ = CefPanel::CreatePanel(nullptr);
 
     CefBoxLayoutSettings settings{};
-    settings.horizontal = 1; // Horizontal bar
+    settings.horizontal = 1;
     settings.between_child_spacing = 4;
     settings.inside_border_horizontal_spacing = 8;
     settings.inside_border_vertical_spacing = 2;
@@ -90,7 +90,7 @@ void BookmarksBar::BookmarkCurrentPage() {
         return;
     }
     const auto* active_tab = session_.FindTab(*active_id);
-    if (!active_tab || active_tab->url.empty()) {
+    if (!active_tab || active_tab->url.empty() || active_tab->is_ephemeral) {
         return;
     }
 
@@ -146,7 +146,6 @@ void BookmarksBar::RebuildBar() {
 }
 
 void BookmarksBar::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
-    // Refresh bar when tabs/workspace change
     RebuildBar();
 }
 

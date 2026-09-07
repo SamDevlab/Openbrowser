@@ -47,6 +47,7 @@ bool BrowserSession::OpenTab(Tab tab, const bool activate) {
     tab.navigation_state = NavigationState::Requested;
     tab.last_error.reset();
     tab.renderer_crashed = false;
+    tab.has_committed_navigation = false;
 
     tabs_.push_back(std::move(tab));
     engine_.CreateTab(tabs_.back());
@@ -342,6 +343,7 @@ void BrowserSession::OnNavigationCommitted(const engine::NavigationCommittedEven
     it->navigation_state = NavigationState::Idle;
     it->last_error.reset();
     it->renderer_crashed = false;
+    it->has_committed_navigation = true;
     NotifyObservers();
 }
 

@@ -19,6 +19,7 @@
 #include "core/session/browser_session_observer.h"
 #include "core/session/session_history_bridge.h"
 #include "core/session/session_privacy_orchestrator.h"
+#include "core/settings/settings_manager.h"
 #include "core/sync/local_filesystem_sync.h"
 #include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
@@ -76,6 +77,7 @@ private:
 
     CefRefPtr<CefPanel> browser_host_;
     CefRefPtr<CefBrowserEngine> engine_;
+    std::unique_ptr<core::SettingsManager> settings_manager_;
     std::unique_ptr<core::WorkspaceManager> workspace_manager_;
     std::unique_ptr<core::FocusQueue> focus_queue_;
     std::unique_ptr<core::BrowserSession> session_;

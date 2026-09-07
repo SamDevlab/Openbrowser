@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/capabilities/permission_request.h"
+#include "core/navigation/address_input.h"
 #include "core/session/browser_session_observer.h"
 
 #include "include/cef_base.h"
@@ -50,6 +51,7 @@ public:
 
     void SetProfileLabel(const std::string& label);
     void FocusAddressBar();
+    void SetSearchProvider(core::navigation::SearchProvider provider);
 
 private:
     enum class ChromeAction {
@@ -124,6 +126,7 @@ private:
     bool address_editing_{false};
     bool show_security_details_{false};
     std::string current_origin_;
+    core::navigation::SearchProvider search_provider_;
 };
 
 }  // namespace openbrowser::desktop

@@ -1,9 +1,10 @@
 #include "core/history/history_manager.h"
 
+#include "core/storage/atomic_file_store.h"
+#include "core/storage/json_helper.h"
+
 #include <algorithm>
 #include <chrono>
-#include <fstream>
-#include <sstream>
 #include <utility>
 
 namespace openbrowser::core {
@@ -15,7 +16,7 @@ std::int64_t NowEpochMs() noexcept {
     return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
 }
 
-std::string ToLower(std::string_view s) {
+std::string ToLower(const std::string_view s) {
     std::string out;
     out.reserve(s.size());
     for (const char c : s) {
@@ -24,32 +25,33 @@ std::string ToLower(std::string_view s) {
     return out;
 }
 
-void EscapeString(const std::string_view str, std::string& out) {
-    out += '"';
-    for (const char c : str) {
-        switch (c) {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\b': out += "\\b"; break;
-            case '\f': out += "\\f"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default:
-                if (static_cast<unsigned char>(c) < 0x20) {
-                    char buf[8];
-                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned int>(static_cast<unsigned char>(c)));
-                    out += buf;
-                } else {
-                    out += c;
-                }
-                break;
-        }
+bool IsValidHistoryDocument(const std::string_view content) {
+    const auto root = storage::ParseJson(content);
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+        return false;
     }
-    out += '"';
+    if (root->GetSizeT("schema_version", 0) != 1) {
+        return false;
+    }
+    const auto* entries = root->Find("entries");
+    return entries != nullptr && entries->type == storage::JsonValue::Type::Array;
 }
 
 }  // namespace
+
+void HistoryManager::SetAutoSavePath(std::filesystem::path path) {
+    auto_save_path_ = std::move(path);
+}
+
+const std::filesystem::path& HistoryManager::AutoSavePath() const noexcept {
+    return auto_save_path_;
+}
+
+void HistoryManager::TriggerAutoSave() const {
+    if (!auto_save_path_.empty()) {
+        static_cast<void>(SaveToFile(auto_save_path_));
+    }
+}
 
 void HistoryManager::RecordVisit(
     std::string url,
@@ -61,7 +63,6 @@ void HistoryManager::RecordVisit(
 
     const auto now = NowEpochMs();
 
-    // Check if URL was already recorded
     const auto it = std::find_if(entries_.begin(), entries_.end(), [&](const HistoryEntry& entry) {
         return entry.url == url && entry.workspace_id == workspace_id;
     });
@@ -72,6 +73,7 @@ void HistoryManager::RecordVisit(
         if (!title.empty()) {
             it->title = std::move(title);
         }
+        TriggerAutoSave();
         return;
     }
 
@@ -84,6 +86,19 @@ void HistoryManager::RecordVisit(
     entry.workspace_id = std::move(workspace_id);
 
     entries_.push_back(std::move(entry));
+    TriggerAutoSave();
+}
+
+bool HistoryManager::RemoveEntry(const std::string& entry_id) {
+    const auto it = std::remove_if(entries_.begin(), entries_.end(), [&](const HistoryEntry& entry) {
+        return entry.id == entry_id;
+    });
+    if (it != entries_.end()) {
+        entries_.erase(it, entries_.end());
+        TriggerAutoSave();
+        return true;
+    }
+    return false;
 }
 
 std::vector<HistoryEntry> HistoryManager::Search(
@@ -104,7 +119,6 @@ std::vector<HistoryEntry> HistoryManager::Search(
         }
     }
 
-    // Sort by visit count descending, then by last visit time descending
     std::sort(matches.begin(), matches.end(), [](const HistoryEntry& a, const HistoryEntry& b) {
         if (a.visit_count != b.visit_count) {
             return a.visit_count > b.visit_count;
@@ -132,6 +146,7 @@ std::vector<HistoryEntry> HistoryManager::ListHistory(const std::size_t limit) c
 
 void HistoryManager::ClearHistory() noexcept {
     entries_.clear();
+    TriggerAutoSave();
 }
 
 void HistoryManager::ClearWorkspaceHistory(const WorkspaceId& workspace_id) {
@@ -139,6 +154,7 @@ void HistoryManager::ClearWorkspaceHistory(const WorkspaceId& workspace_id) {
         return entry.workspace_id.has_value() && *entry.workspace_id == workspace_id;
     });
     entries_.erase(it, entries_.end());
+    TriggerAutoSave();
 }
 
 std::size_t HistoryManager::TotalEntries() const noexcept {
@@ -152,14 +168,14 @@ std::string HistoryManager::Serialize() const {
     for (std::size_t i = 0; i < entries_.size(); ++i) {
         const auto& entry = entries_[i];
         out += "    {\n";
-        out += "      \"id\": "; EscapeString(entry.id, out); out += ",\n";
-        out += "      \"url\": "; EscapeString(entry.url, out); out += ",\n";
-        out += "      \"title\": "; EscapeString(entry.title, out); out += ",\n";
+        out += "      \"id\": "; storage::EscapeJsonString(entry.id, out); out += ",\n";
+        out += "      \"url\": "; storage::EscapeJsonString(entry.url, out); out += ",\n";
+        out += "      \"title\": "; storage::EscapeJsonString(entry.title, out); out += ",\n";
         out += "      \"last_visit_time_ms\": " + std::to_string(entry.last_visit_time_ms) + ",\n";
         out += "      \"visit_count\": " + std::to_string(entry.visit_count) + ",\n";
         out += "      \"workspace_id\": ";
         if (entry.workspace_id.has_value()) {
-            EscapeString(*entry.workspace_id, out);
+            storage::EscapeJsonString(*entry.workspace_id, out);
         } else {
             out += "null";
         }
@@ -177,62 +193,37 @@ bool HistoryManager::Deserialize(const std::string_view json) {
     if (json.empty()) {
         return false;
     }
-    std::size_t pos = 0;
+
+    const auto root = storage::ParseJson(json);
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object ||
+        root->GetSizeT("schema_version", 0) != 1) {
+        return false;
+    }
+
+    const auto* entries_val = root->Find("entries");
+    if (!entries_val || entries_val->type != storage::JsonValue::Type::Array) {
+        return false;
+    }
+
     std::vector<HistoryEntry> loaded;
     std::size_t max_id = 0;
 
-    while ((pos = json.find("\"url\":", pos)) != std::string_view::npos) {
-        const auto block_start = json.rfind('{', pos);
-        const auto block_end = json.find('}', pos);
-        if (block_start == std::string_view::npos || block_end == std::string_view::npos) {
-            break;
-        }
-        const std::string_view block = json.substr(block_start, block_end - block_start + 1);
-
-        auto extract_str = [&](std::string_view key) -> std::optional<std::string> {
-            const auto kp = block.find(key);
-            if (kp == std::string_view::npos) return std::nullopt;
-            const auto s = block.find('"', kp + key.size());
-            if (s == std::string_view::npos) return std::nullopt;
-            const auto e = block.find('"', s + 1);
-            if (e == std::string_view::npos) return std::nullopt;
-            return std::string(block.substr(s + 1, e - s - 1));
-        };
+    for (const auto& item : entries_val->arr_val) {
+        if (item.type != storage::JsonValue::Type::Object) continue;
 
         HistoryEntry entry;
-        if (const auto id_opt = extract_str("\"id\":")) {
-            entry.id = *id_opt;
-            if (entry.id.rfind("hist-", 0) == 0) {
-                try {
-                    const auto num = std::stoull(entry.id.substr(5));
-                    if (num > max_id) max_id = num;
-                } catch (...) {}
-            }
-        }
-        if (const auto url_opt = extract_str("\"url\":")) {
-            entry.url = *url_opt;
-        }
-        if (const auto title_opt = extract_str("\"title\":")) {
-            entry.title = *title_opt;
-        }
-        if (const auto ws_opt = extract_str("\"workspace_id\":")) {
-            if (*ws_opt != "null") {
-                entry.workspace_id = *ws_opt;
-            }
-        }
-
-        const auto time_p = block.find("\"last_visit_time_ms\":");
-        if (time_p != std::string_view::npos) {
+        entry.id = item.GetString("id");
+        if (entry.id.rfind("hist-", 0) == 0) {
             try {
-                entry.last_visit_time_ms = std::stoll(std::string(block.substr(time_p + 21)));
+                const auto num = std::stoull(entry.id.substr(5));
+                if (num > max_id) max_id = num;
             } catch (...) {}
         }
-        const auto count_p = block.find("\"visit_count\":");
-        if (count_p != std::string_view::npos) {
-            try {
-                entry.visit_count = std::stoul(std::string(block.substr(count_p + 14)));
-            } catch (...) {}
-        }
+        entry.url = item.GetString("url");
+        entry.title = item.GetString("title");
+        entry.last_visit_time_ms = item.GetInt64("last_visit_time_ms", 0);
+        entry.visit_count = item.GetSizeT("visit_count", 1);
+        entry.workspace_id = item.GetOptionalString("workspace_id");
 
         if (!entry.url.empty()) {
             if (entry.id.empty()) {
@@ -240,7 +231,6 @@ bool HistoryManager::Deserialize(const std::string_view json) {
             }
             loaded.push_back(std::move(entry));
         }
-        pos = block_end + 1;
     }
 
     entries_ = std::move(loaded);
@@ -250,28 +240,19 @@ bool HistoryManager::Deserialize(const std::string_view json) {
 
 bool HistoryManager::SaveToFile(const std::filesystem::path& path) const {
     if (path.empty()) return false;
-    std::error_code ec;
-    if (path.has_parent_path()) {
-        std::filesystem::create_directories(path.parent_path(), ec);
-    }
     const auto json = Serialize();
-    const auto temp_path = path.string() + ".tmp";
-    {
-        std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
-        if (!out) return false;
-        out.write(json.data(), static_cast<std::streamsize>(json.size()));
-    }
-    std::filesystem::rename(temp_path, path, ec);
-    return !ec;
+    const auto result = storage::AtomicWriteFile(path, json, /*keep_backup=*/true);
+    return result.success;
 }
 
 bool HistoryManager::LoadFromFile(const std::filesystem::path& path) {
-    if (path.empty() || !std::filesystem::exists(path)) return false;
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return false;
-    std::string content((std::istreambuf_iterator<char>(in)),
-                         std::istreambuf_iterator<char>());
-    return Deserialize(content);
+    if (path.empty()) return false;
+    const auto result = storage::ReadFileWithBackupRecovery(path, IsValidHistoryDocument);
+
+    if (!result.success) {
+        return false;
+    }
+    return Deserialize(result.content);
 }
 
 }  // namespace openbrowser::core
