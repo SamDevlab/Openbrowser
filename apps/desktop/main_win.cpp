@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -21,6 +22,25 @@ constexpr DWORD kLpacAccess = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
 constexpr BYTE kLpacInheritance = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
 constexpr wchar_t kSandboxPrerequisiteCheck[] =
     L"--openbrowser-sandbox-prereq-check";
+
+void AppendStartupTrace(const char* phase) {
+    std::vector<wchar_t> buffer(32768);
+    const DWORD length = GetEnvironmentVariableW(
+        L"OPENBROWSER_STARTUP_TRACE",
+        buffer.data(),
+        static_cast<DWORD>(buffer.size()));
+    if (length == 0 || length >= buffer.size()) {
+        return;
+    }
+
+    std::ofstream stream(
+        std::filesystem::path(std::wstring(buffer.data(), length)),
+        std::ios::app);
+    if (stream.is_open()) {
+        stream << phase << '\n';
+        stream.flush();
+    }
+}
 
 std::wstring RuntimeDirectory() {
     std::vector<wchar_t> buffer(32768);
@@ -214,6 +234,7 @@ bool IsPrimaryBrowserProcess() {
 }
 
 int FailSandboxInitialization() {
+    AppendStartupTrace("fail:sandbox-initialization");
     wchar_t noninteractive[2]{};
     const bool suppress_dialog = GetEnvironmentVariableW(
                                      L"OPENBROWSER_NONINTERACTIVE",
@@ -232,6 +253,7 @@ int FailSandboxInitialization() {
 }
 
 int FailStorageInitialization() {
+    AppendStartupTrace("fail:storage-initialization");
     wchar_t noninteractive[2]{};
     const bool suppress_dialog = GetEnvironmentVariableW(
                                      L"OPENBROWSER_NONINTERACTIVE",
@@ -249,8 +271,13 @@ int FailStorageInitialization() {
 }
 
 int RunMain(HINSTANCE instance, void* sandbox_info) {
+    const bool primary_process = IsPrimaryBrowserProcess();
+    if (primary_process) {
+        AppendStartupTrace("primary:run-main-enter");
+    }
+
 #if defined(OPENBROWSER_WINDOWS_SANDBOX)
-    if (IsPrimaryBrowserProcess()) {
+    if (primary_process) {
         // A build configured as sandboxed must never silently fall back to
         // CefSettings::no_sandbox. The bootstrap is expected to provide the
         // sandbox information object for the primary browser process.
@@ -262,22 +289,30 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
         if (runtime_directory.empty() || !ApplyLpacRuntimeAcl(runtime_directory)) {
             return FailSandboxInitialization();
         }
+        AppendStartupTrace("primary:sandbox-prerequisites-ok");
 
         // Packaging CI uses this diagnostic-only switch to prove that the
         // extracted bootstrap + DLL establishes both the directory LPAC grant
         // and propagated access on libcef.dll without depending on PowerShell
         // identity-name translation.
         if (HasCommandLineToken(kSandboxPrerequisiteCheck)) {
+            AppendStartupTrace("primary:prerequisite-probe-ok");
             return 0;
         }
     }
 #endif
 
     CefMainArgs main_args(instance);
+    if (primary_process) {
+        AppendStartupTrace("primary:before-execute-process");
+    }
 
     const int subprocess_exit_code = CefExecuteProcess(main_args, nullptr, sandbox_info);
     if (subprocess_exit_code >= 0) {
         return subprocess_exit_code;
+    }
+    if (primary_process) {
+        AppendStartupTrace("primary:after-execute-process");
     }
 
     CefSettings settings;
@@ -294,13 +329,27 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
     if (!ConfigureCefStorage(settings)) {
         return FailStorageInitialization();
     }
+    if (primary_process) {
+        AppendStartupTrace("primary:storage-configured");
+    }
 
     CefRefPtr<openbrowser::desktop::DesktopApp> app(new openbrowser::desktop::DesktopApp());
+    if (primary_process) {
+        AppendStartupTrace("primary:before-cef-initialize");
+    }
     if (!CefInitialize(main_args, settings, app.get(), sandbox_info)) {
+        AppendStartupTrace("primary:cef-initialize-false");
         return CefGetExitCode();
+    }
+    if (primary_process) {
+        AppendStartupTrace("primary:cef-initialize-ok");
+        AppendStartupTrace("primary:before-message-loop");
     }
 
     CefRunMessageLoop();
+    if (primary_process) {
+        AppendStartupTrace("primary:message-loop-returned");
+    }
     app->ShutdownRuntime();
     CefShutdown();
     app = nullptr;
