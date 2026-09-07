@@ -8,6 +8,8 @@
 #include "include/cef_task.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <filesystem>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -41,6 +43,41 @@ void CefBrowserEngine::SetEventSink(engine::BrowserEngineEventSink* sink) noexce
     event_sink_ = sink;
 }
 
+void CefBrowserEngine::SetStorageRoot(std::filesystem::path root) {
+    storage_root_ = std::move(root);
+}
+
+const std::filesystem::path& CefBrowserEngine::StorageRoot() const noexcept {
+    return storage_root_;
+}
+
+CefRefPtr<CefRequestContext> CefBrowserEngine::GetOrCreateRequestContext(
+    const std::optional<core::WorkspaceId>& workspace_id) {
+    CEF_REQUIRE_UI_THREAD();
+
+    if (!workspace_id.has_value() || workspace_id->empty() || *workspace_id == "default") {
+        return nullptr;
+    }
+
+    const auto it = workspace_contexts_.find(*workspace_id);
+    if (it != workspace_contexts_.end() && it->second) {
+        return it->second;
+    }
+
+    CefRequestContextSettings settings{};
+    if (!storage_root_.empty()) {
+        const auto partition_path = storage_root_ / "workspaces" / *workspace_id;
+        std::error_code ec;
+        std::filesystem::create_directories(partition_path, ec);
+        CefString(&settings.cache_path).FromString(partition_path.string());
+        settings.persist_session_cookies = 1;
+    }
+
+    CefRefPtr<CefRequestContext> context = CefRequestContext::CreateContext(settings, nullptr);
+    workspace_contexts_[*workspace_id] = context;
+    return context;
+}
+
 void CefBrowserEngine::CreateTab(const core::Tab& tab) {
     CEF_REQUIRE_UI_THREAD();
 
@@ -51,12 +88,13 @@ void CefBrowserEngine::CreateTab(const core::Tab& tab) {
     CefRefPtr<CefBrowserEngine> self(this);
     CefRefPtr<CefTabClient> client(new CefTabClient(tab.id, self));
     CefBrowserSettings browser_settings;
+    CefRefPtr<CefRequestContext> request_context = GetOrCreateRequestContext(tab.workspace_id);
     CefRefPtr<CefBrowserView> view = CefBrowserView::CreateBrowserView(
         client,
         tab.url,
         browser_settings,
         nullptr,
-        nullptr,
+        request_context,
         nullptr);
 
     if (!view) {

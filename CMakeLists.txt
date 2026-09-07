@@ -14,6 +14,7 @@ add_library(openbrowser_core
     src/core/session/focus_session_controller.cpp
     src/core/session/session_persistence.cpp
     src/core/session/tab_discard_policy.cpp
+    src/core/workspaces/workspace_manager.cpp
 )
 
 add_library(Openbrowser::Core ALIAS openbrowser_core)
@@ -101,6 +102,11 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_tab_discard_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_tab_discard_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_workspace_tests tests/workspace_tests.cpp)
+    target_link_libraries(openbrowser_workspace_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_workspace_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_workspace_tests PRIVATE cxx_std_20)
+
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
@@ -114,6 +120,7 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_capability_permission_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_focus_sprint_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_tab_discard_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_workspace_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
@@ -127,6 +134,7 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_capability_permission_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_focus_sprint_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_tab_discard_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_workspace_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
@@ -141,6 +149,7 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.capability_permission COMMAND openbrowser_capability_permission_tests)
     add_test(NAME openbrowser.focus_sprint COMMAND openbrowser_focus_sprint_tests)
     add_test(NAME openbrowser.tab_discard COMMAND openbrowser_tab_discard_tests)
+    add_test(NAME openbrowser.workspace COMMAND openbrowser_workspace_tests)
 endif()
 
 if(OPENBROWSER_BUILD_DESKTOP)
