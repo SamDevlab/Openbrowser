@@ -3,6 +3,7 @@
 #include "core/session/tab_discard_policy.h"
 #include "fakes/fake_browser_engine.h"
 
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <vector>

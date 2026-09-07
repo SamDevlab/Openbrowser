@@ -1,6 +1,7 @@
 #include "core/session/tab_discard_policy.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <utility>
 
 namespace openbrowser::core {

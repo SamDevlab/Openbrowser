@@ -5,6 +5,7 @@
 #include "core/tabs/tab.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace openbrowser::core {

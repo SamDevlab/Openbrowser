@@ -5,6 +5,7 @@
 #include "engine/browser_engine.h"
 #include "engine/browser_engine_events.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
