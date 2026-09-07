@@ -32,7 +32,6 @@ elseif(OS_WINDOWS)
     set(OPENBROWSER_DESKTOP_SOURCES
         ${OPENBROWSER_DESKTOP_COMMON_SOURCES}
         main_win.cpp
-        startup_crash_diagnostics_win.cpp
     )
 elseif(OS_MAC)
     message(FATAL_ERROR
@@ -146,23 +145,6 @@ if(OS_WINDOWS)
             libcef_dll_wrapper
             ${CEF_STANDARD_LIBS}
     )
-
-    if(MSVC)
-        # Diagnostic-only linker map stays in the build tree (never the portable
-        # package) so CI can resolve a crash RVA even when the release PDB is not
-        # loadable from the extracted smoke-test directory.
-        target_link_options(
-            ${OPENBROWSER_DESKTOP_TARGET}
-            PRIVATE "/MAP:${CMAKE_BINARY_DIR}/openbrowser-$<CONFIG>.map"
-        )
-        add_custom_command(
-            TARGET ${OPENBROWSER_DESKTOP_TARGET}
-            POST_BUILD
-            COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -Command
-                "$map='${CMAKE_BINARY_DIR}/openbrowser-$<CONFIG>.map'; $dll='$<TARGET_FILE:${OPENBROWSER_DESKTOP_TARGET}>'; if (Test-Path -LiteralPath $map) { Write-Host 'Openbrowser BrowserChrome/startup linker symbols:'; Select-String -LiteralPath $map -Pattern 'BrowserChrome|DesktopApp|OnContextInitialized|TracingDesktopApp' | ForEach-Object { Write-Host $_.Line } }; $sym=Get-Command llvm-symbolizer.exe -ErrorAction SilentlyContinue; if ($sym) { Write-Host 'LLVM symbolizer for crash RVA 0x47E2:'; & $sym.Source --obj=$dll --relative-address 0x47E2 }; $objdump=Get-Command llvm-objdump.exe -ErrorAction SilentlyContinue; if ($objdump) { Write-Host 'LLVM disassembly around crash RVA 0x47E2:'; & $objdump.Source -d --start-address=0x180004780 --stop-address=0x180004840 $dll }"
-            VERBATIM
-        )
-    endif()
 
     COPY_FILES(
         "${OPENBROWSER_DESKTOP_TARGET}"
