@@ -83,10 +83,10 @@ jobs:
           }
           $expectedSha1 = (($match -split '\s+')[0]).ToLowerInvariant()
 
-          Invoke-WebRequest \
-            -Uri "${env:CEF_BASE_URL}/${encodedArchive}.sha1" \
-            -OutFile $upstreamShaPath \
-            -MaximumRetryCount 3 \
+          Invoke-WebRequest `
+            -Uri "${env:CEF_BASE_URL}/${encodedArchive}.sha1" `
+            -OutFile $upstreamShaPath `
+            -MaximumRetryCount 3 `
             -RetryIntervalSec 2
           $upstreamSha1 = (Get-Content -LiteralPath $upstreamShaPath -Raw).Trim().ToLowerInvariant()
           if ($upstreamSha1 -notmatch '^[0-9a-f]{40}$') {
@@ -97,10 +97,10 @@ jobs:
           }
 
           if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
-            Invoke-WebRequest \
-              -Uri "${env:CEF_BASE_URL}/${encodedArchive}" \
-              -OutFile $archivePath \
-              -MaximumRetryCount 3 \
+            Invoke-WebRequest `
+              -Uri "${env:CEF_BASE_URL}/${encodedArchive}" `
+              -OutFile $archivePath `
+              -MaximumRetryCount 3 `
               -RetryIntervalSec 2
           }
 
