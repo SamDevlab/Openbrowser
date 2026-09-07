@@ -6,6 +6,7 @@
 #include "include/cef_base.h"
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_panel.h"
+#include "include/views/cef_textfield.h"
 #include "include/views/cef_textfield_delegate.h"
 
 #include <memory>
@@ -14,7 +15,6 @@
 
 class CefBoxLayout;
 class CefLabelButton;
-class CefTextfield;
 
 namespace openbrowser::desktop {
 
@@ -23,7 +23,7 @@ public:
     explicit CommandPaletteOverlay(
         core::ActionRegistry& action_registry,
         std::function<void(const std::string&)> on_action_executed = nullptr);
-    ~CommandPaletteOverlay() = default;
+    ~CommandPaletteOverlay();
 
     CommandPaletteOverlay(const CommandPaletteOverlay&) = delete;
     CommandPaletteOverlay& operator=(const CommandPaletteOverlay&) = delete;

@@ -91,6 +91,8 @@ CommandPaletteOverlay::CommandPaletteOverlay(
     RebuildResultsView();
 }
 
+CommandPaletteOverlay::~CommandPaletteOverlay() = default;
+
 CefRefPtr<CefPanel> CommandPaletteOverlay::View() const noexcept {
     return container_;
 }
