@@ -40,6 +40,16 @@ void TransferBroker::RemoveObserver(TransferObserver* observer) noexcept {
     observers_.erase(it, observers_.end());
 }
 
+void TransferBroker::SetFileBroker(FileBroker* file_broker) noexcept {
+    std::lock_guard<std::mutex> lock(mutex_);
+    file_broker_ = file_broker;
+}
+
+FileBroker* TransferBroker::GetFileBroker() const noexcept {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return file_broker_;
+}
+
 bool TransferBroker::RegisterTransfer(TransferItem item) {
     TransferItem snapshot;
     {
@@ -65,6 +75,39 @@ bool TransferBroker::RegisterTransfer(TransferItem item) {
     }
 
     NotifyStarted(snapshot);
+    return true;
+}
+
+bool TransferBroker::UpdateMetadata(
+    const TransferId& id,
+    std::string url,
+    std::string suggested_filename,
+    std::string target_path,
+    std::string mime_type) {
+    TransferItem snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it = transfers_.find(id);
+        if (it == transfers_.end() || IsTerminalState(it->second.state)) {
+            return false;
+        }
+
+        if (!url.empty()) {
+            it->second.url = std::move(url);
+        }
+        if (!suggested_filename.empty()) {
+            it->second.suggested_filename = std::move(suggested_filename);
+        }
+        if (!target_path.empty()) {
+            it->second.target_path = std::move(target_path);
+        }
+        if (!mime_type.empty()) {
+            it->second.mime_type = std::move(mime_type);
+        }
+        snapshot = it->second;
+    }
+
+    NotifyUpdated(snapshot);
     return true;
 }
 
@@ -94,6 +137,21 @@ bool TransferBroker::UpdateProgress(
     return true;
 }
 
+void TransferBroker::SetControl(const TransferId& id, TransferControl control) {
+    if (id.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (transfers_.find(id) != transfers_.end()) {
+        controls_[id] = std::move(control);
+    }
+}
+
+void TransferBroker::ClearControl(const TransferId& id) noexcept {
+    std::lock_guard<std::mutex> lock(mutex_);
+    controls_.erase(id);
+}
+
 bool TransferBroker::CompleteTransfer(const TransferId& id) {
     TransferItem snapshot;
     {
@@ -109,6 +167,7 @@ bool TransferBroker::CompleteTransfer(const TransferId& id) {
         if (it->second.total_bytes > 0) {
             it->second.received_bytes = it->second.total_bytes;
         }
+        controls_.erase(id);
         snapshot = it->second;
     }
 
@@ -129,6 +188,7 @@ bool TransferBroker::FailTransfer(const TransferId& id, std::string error_messag
         it->second.error_message = std::move(error_message);
         it->second.end_time_ms = NowEpochMs();
         it->second.speed_bytes_per_sec = 0;
+        controls_.erase(id);
         snapshot = it->second;
     }
 
@@ -138,6 +198,7 @@ bool TransferBroker::FailTransfer(const TransferId& id, std::string error_messag
 
 bool TransferBroker::CancelTransfer(const TransferId& id) {
     TransferItem snapshot;
+    std::function<void()> cancel;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         const auto it = transfers_.find(id);
@@ -145,18 +206,28 @@ bool TransferBroker::CancelTransfer(const TransferId& id) {
             return false;
         }
 
+        const auto control_it = controls_.find(id);
+        if (control_it != controls_.end()) {
+            cancel = control_it->second.cancel;
+        }
+
         it->second.state = TransferState::Cancelled;
         it->second.end_time_ms = NowEpochMs();
         it->second.speed_bytes_per_sec = 0;
+        controls_.erase(id);
         snapshot = it->second;
     }
 
+    if (cancel) {
+        cancel();
+    }
     NotifyFinished(snapshot);
     return true;
 }
 
 bool TransferBroker::PauseTransfer(const TransferId& id) {
     TransferItem snapshot;
+    std::function<void()> pause;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         const auto it = transfers_.find(id);
@@ -164,17 +235,26 @@ bool TransferBroker::PauseTransfer(const TransferId& id) {
             return false;
         }
 
+        const auto control_it = controls_.find(id);
+        if (control_it != controls_.end()) {
+            pause = control_it->second.pause;
+        }
+
         it->second.state = TransferState::Paused;
         it->second.speed_bytes_per_sec = 0;
         snapshot = it->second;
     }
 
+    if (pause) {
+        pause();
+    }
     NotifyUpdated(snapshot);
     return true;
 }
 
 bool TransferBroker::ResumeTransfer(const TransferId& id) {
     TransferItem snapshot;
+    std::function<void()> resume;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         const auto it = transfers_.find(id);
@@ -182,10 +262,18 @@ bool TransferBroker::ResumeTransfer(const TransferId& id) {
             return false;
         }
 
+        const auto control_it = controls_.find(id);
+        if (control_it != controls_.end()) {
+            resume = control_it->second.resume;
+        }
+
         it->second.state = TransferState::InProgress;
         snapshot = it->second;
     }
 
+    if (resume) {
+        resume();
+    }
     NotifyUpdated(snapshot);
     return true;
 }
