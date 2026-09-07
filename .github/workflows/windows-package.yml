@@ -188,33 +188,6 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Set-StrictMode -Version Latest
 
-          function Find-LpacRule {
-            param(
-              [Parameter(Mandatory = $true)][string]$Path,
-              [switch]$RequireInheritance
-            )
-
-            $lpacSid = 'S-1-15-2-2'
-            $rules = (Get-Acl -LiteralPath $Path).Access | Where-Object {
-              try {
-                $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -eq $lpacSid
-              } catch {
-                $false
-              }
-            } | Where-Object {
-              ($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::ReadAndExecute) -ne 0
-            }
-
-            if ($RequireInheritance) {
-              $rules = $rules | Where-Object {
-                ($_.InheritanceFlags -band [System.Security.AccessControl.InheritanceFlags]::ObjectInherit) -ne 0 -and
-                ($_.InheritanceFlags -band [System.Security.AccessControl.InheritanceFlags]::ContainerInherit) -ne 0
-              }
-            }
-
-            return $rules | Select-Object -First 1
-          }
-
           $packageName = "Openbrowser-${env:PACKAGE_VERSION}-windows-x64"
           $zipPath = Join-Path $PWD "artifacts/$packageName.zip"
           $verifyDir = Join-Path $env:RUNNER_TEMP "openbrowser-package-smoke-$([guid]::NewGuid().ToString('N'))"
@@ -262,9 +235,10 @@ jobs:
           $exe = Join-Path $root 'openbrowser.exe'
           $env:OPENBROWSER_NONINTERACTIVE = '1'
 
-          # First isolate the portable-distribution security prerequisite from
-          # CEF Views/GPU startup. This goes through the final bootstrap EXE and
-          # Openbrowser DLL but exits immediately after LPAC preparation.
+          # The diagnostic probe goes through the final bootstrap EXE and DLL.
+          # It returns zero only after native SID comparison confirms both the
+          # inheritable runtime ACL and propagated LPAC read/execute access on
+          # libcef.dll, avoiding locale-dependent PowerShell identity parsing.
           $prereq = Start-Process `
             -FilePath $exe `
             -ArgumentList '--openbrowser-sandbox-prereq-check' `
@@ -272,23 +246,11 @@ jobs:
             -PassThru `
             -Wait
           if ($prereq.ExitCode -ne 0) {
+            Write-Host 'Runtime ACL at prerequisite failure:'
             & icacls.exe $root
+            Write-Host 'libcef.dll ACL at prerequisite failure:'
+            & icacls.exe (Join-Path $root 'libcef.dll')
             throw "Sandbox prerequisite probe failed with code $($prereq.ExitCode)."
-          }
-
-          $rootRule = Find-LpacRule -Path $root -RequireInheritance
-          if ($null -eq $rootRule) {
-            & icacls.exe $root
-            throw 'Extracted runtime did not establish the required inheritable LPAC ACL.'
-          }
-
-          # Verify the grant propagated to an already-extracted runtime binary,
-          # not only to the parent directory.
-          $libcef = Join-Path $root 'libcef.dll'
-          $fileRule = Find-LpacRule -Path $libcef
-          if ($null -eq $fileRule) {
-            & icacls.exe $libcef
-            throw 'LPAC read/execute access did not propagate to libcef.dll.'
           }
 
           $smokeStorage = Join-Path $env:RUNNER_TEMP "openbrowser-smoke-state-$([guid]::NewGuid().ToString('N'))"
