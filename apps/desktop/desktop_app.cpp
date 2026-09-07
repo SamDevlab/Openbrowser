@@ -11,6 +11,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -42,6 +43,7 @@ public:
         CefRefPtr<CefPanel> downloads_panel,
         CefRefPtr<CefPanel> network_lab_panel,
         CefRefPtr<CefBrowserEngine> engine,
+        std::function<void()> on_window_destroyed,
         core::ActionRegistry* action_registry = nullptr)
         : tab_strip_panel_(std::move(tab_strip_panel)),
           chrome_panel_(std::move(chrome_panel)),
@@ -52,6 +54,7 @@ public:
           downloads_panel_(std::move(downloads_panel)),
           network_lab_panel_(std::move(network_lab_panel)),
           engine_(std::move(engine)),
+          on_window_destroyed_(std::move(on_window_destroyed)),
           action_registry_(action_registry) {}
 
     DesktopWindowDelegate(const DesktopWindowDelegate&) = delete;
@@ -161,6 +164,10 @@ public:
     void OnWindowDestroyed(CefRefPtr<CefWindow> /*window*/) override {
         CEF_REQUIRE_UI_THREAD();
         engine_->NotifyWindowDestroyed();
+        if (on_window_destroyed_) {
+            on_window_destroyed_();
+            on_window_destroyed_ = nullptr;
+        }
         tab_strip_panel_ = nullptr;
         chrome_panel_ = nullptr;
         command_palette_panel_ = nullptr;
@@ -193,6 +200,7 @@ private:
     CefRefPtr<CefPanel> downloads_panel_;
     CefRefPtr<CefPanel> network_lab_panel_;
     CefRefPtr<CefBrowserEngine> engine_;
+    std::function<void()> on_window_destroyed_;
     core::ActionRegistry* action_registry_{nullptr};
 
     IMPLEMENT_REFCOUNTING(DesktopWindowDelegate);
@@ -593,6 +601,20 @@ void DesktopApp::OnContextInitialized() {
             downloads_panel_->View(),
             network_lab_panel_->View(),
             engine_,
+            [this]() {
+                // CEF owns the native Views hierarchy only until the top-level
+                // window is destroyed. Release every DesktopApp-owned wrapper
+                // that retains CefView/CefPanel references before returning to
+                // CEF so internal teardown sees no stale external Views refs.
+                command_palette_overlay_.reset();
+                bookmarks_bar_.reset();
+                downloads_panel_.reset();
+                network_lab_panel_.reset();
+                focus_sidebar_.reset();
+                chrome_.reset();
+                tab_strip_.reset();
+                browser_host_ = nullptr;
+            },
             action_registry_.get()));
 }
 
