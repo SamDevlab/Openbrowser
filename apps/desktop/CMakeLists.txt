@@ -147,6 +147,16 @@ if(OS_WINDOWS)
             ${CEF_STANDARD_LIBS}
     )
 
+    if(MSVC)
+        # Diagnostic-only linker map stays in the build tree (never the portable
+        # package) so CI can resolve a crash RVA even when the release PDB is not
+        # loadable from the extracted smoke-test directory.
+        target_link_options(
+            ${OPENBROWSER_DESKTOP_TARGET}
+            PRIVATE "/MAP:${CMAKE_BINARY_DIR}/openbrowser-$<CONFIG>.map"
+        )
+    endif()
+
     COPY_FILES(
         "${OPENBROWSER_DESKTOP_TARGET}"
         "${CEF_BINARY_FILES}"
