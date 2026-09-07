@@ -149,6 +149,18 @@ void FocusSidebar::HandleFocusAction(const FocusAction action, const std::string
                 RebuildQueueView();
             }
             break;
+        case FocusAction::MarkNext:
+            if (!item_id.empty()) {
+                static_cast<void>(focus_queue_.SetState(item_id, core::FocusState::Next));
+                RebuildQueueView();
+            }
+            break;
+        case FocusAction::MarkLater:
+            if (!item_id.empty()) {
+                static_cast<void>(focus_queue_.SetState(item_id, core::FocusState::Later));
+                RebuildQueueView();
+            }
+            break;
         case FocusAction::RemoveItem:
             if (!item_id.empty()) {
                 static_cast<void>(focus_queue_.Remove(item_id));
@@ -184,7 +196,6 @@ void FocusSidebar::RebuildQueueView() {
     panel_->RemoveAllChildViews();
     delegates_.clear();
 
-    // 1. Sprint Timer Section
     auto sprint_panel = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings sprint_settings{};
     sprint_settings.horizontal = 0;
@@ -255,7 +266,6 @@ void FocusSidebar::RebuildQueueView() {
     panel_->AddChildView(sprint_panel);
     layout_->SetFlexForView(sprint_panel, 0);
 
-    // 2. Add Active Tab Button
     auto enqueue_delegate = CefRefPtr<CefButtonDelegate>(
         new FocusActionDelegate(*this, FocusAction::EnqueueActiveTab, ""));
     delegates_.push_back(enqueue_delegate);
@@ -263,7 +273,6 @@ void FocusSidebar::RebuildQueueView() {
     panel_->AddChildView(enqueue_btn);
     layout_->SetFlexForView(enqueue_btn, 0);
 
-    // 3. Queue Items
     for (const auto& item : focus_queue_.Items()) {
         std::string state_prefix;
         switch (item.state) {
@@ -289,8 +298,11 @@ void FocusSidebar::RebuildQueueView() {
         auto item_layout = item_panel->SetToBoxLayout(item_settings);
 
         std::string item_label = state_prefix + item.url;
-        if (item_label.size() > 18) {
-            item_label = item_label.substr(0, 15) + "...";
+        if (item.workspace_id.has_value() && !item.workspace_id->empty() && *item.workspace_id != "default") {
+            item_label = "[" + *item.workspace_id + "] " + item_label;
+        }
+        if (item_label.size() > 28) {
+            item_label = item_label.substr(0, 25) + "...";
         }
         auto activate_delegate = CefRefPtr<CefButtonDelegate>(
             new FocusActionDelegate(*this, FocusAction::ActivateItem, item.id));
@@ -303,9 +315,27 @@ void FocusSidebar::RebuildQueueView() {
             auto promote_delegate = CefRefPtr<CefButtonDelegate>(
                 new FocusActionDelegate(*this, FocusAction::PromoteItem, item.id));
             delegates_.push_back(promote_delegate);
-            auto promote_btn = CefLabelButton::CreateLabelButton(promote_delegate, "^");
+            auto promote_btn = CefLabelButton::CreateLabelButton(promote_delegate, "Now");
             item_panel->AddChildView(promote_btn);
             item_layout->SetFlexForView(promote_btn, 0);
+        }
+
+        if (item.state != core::FocusState::Next) {
+            auto next_delegate = CefRefPtr<CefButtonDelegate>(
+                new FocusActionDelegate(*this, FocusAction::MarkNext, item.id));
+            delegates_.push_back(next_delegate);
+            auto next_btn = CefLabelButton::CreateLabelButton(next_delegate, "Next");
+            item_panel->AddChildView(next_btn);
+            item_layout->SetFlexForView(next_btn, 0);
+        }
+
+        if (item.state != core::FocusState::Later) {
+            auto later_delegate = CefRefPtr<CefButtonDelegate>(
+                new FocusActionDelegate(*this, FocusAction::MarkLater, item.id));
+            delegates_.push_back(later_delegate);
+            auto later_btn = CefLabelButton::CreateLabelButton(later_delegate, "Later");
+            item_panel->AddChildView(later_btn);
+            item_layout->SetFlexForView(later_btn, 0);
         }
 
         auto remove_delegate = CefRefPtr<CefButtonDelegate>(
