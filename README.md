@@ -129,7 +129,7 @@ The core contains:
 - expiration/scoping for compatibility rules;
 - User-Agent / Client Hints policy modes for standard Chromium, normalized anti-fingerprinting output, and site-scoped overrides.
 
-The desktop UI supports Default and Private profiles. Private profiles are backed by dedicated in-memory `CefRequestContext` instances with no disk cache or persistent cookies, automatic exclusion of private tabs from session snapshots, suppression of history recording, and context purging upon session termination. Dynamic User-Agent and client hint policies, along with site-scoped compatibility mitigations, are enforced directly at the live request boundary.
+The desktop UI supports Default and Private profiles managed by `SessionPrivacyOrchestrator`. Private profiles are backed by dedicated in-memory `CefRequestContext` instances with no disk cache or persistent cookies, automatic exclusion of private tabs from session snapshots, suppression of history recording via `SessionHistoryBridge`, TabStrip isolation (hiding normal tabs during private sessions), programmatic activation guards rejecting persistent tabs in private mode, and strict context purging upon session exit before persistent tabs are restored or created. Dynamic User-Agent and client hint policies, along with site-scoped compatibility mitigations, are enforced directly at the live request boundary.
 
 ### Native Network Lab
 
@@ -157,7 +157,7 @@ The M7 diagnostic layer also contains:
 - a streaming `ObtraceRecorder` core;
 - command actions for HAR and `.obtrace` export.
 
-Connection and TLS diagnostics are populated directly from live CEF response headers and registered in `ConnectionRegistry`, linking `NetworkEvent::connection_id` across request summaries. Per-request filter decisions correlate via `request_id`, and live `.obtrace` recording can be toggled via `network_lab.toggle_recorder` (`Ctrl+Shift+R`) with sensitive header redaction and private-mode write suppression.
+Connection endpoints and identifiers are observed directly from live CEF response headers and registered in `ConnectionRegistry`, linking `NetworkEvent::connection_id` across request summaries. Detailed TLS metadata (such as version, cipher suite, and cert subject) and protocol negotiation are not fabricated from standard HTTP callbacks and remain unpopulated until deeper transport or NetLog/CDP telemetry is integrated. Per-request filter decisions correlate via `request_id`, and live `.obtrace` recording can be toggled via `network_lab.toggle_recorder` (`Ctrl+Shift+R`) with sensitive header redaction and private-mode write suppression.
 
 ### Compatibility engineering
 
@@ -339,6 +339,8 @@ Openbrowser is intentionally explicit about what is not complete yet:
 - no packaged stable release or daily-driver support contract exists yet;
 - the dedicated CEF smoke workflow currently validates Linux x64 only;
 - macOS desktop support is not enabled yet;
+- detailed TLS version/cipher/certificate telemetry and protocol negotiation are not exposed by standard high-level CEF callbacks (fields remain unpopulated/unknown rather than fabricated);
+- private browsing isolates RequestContext and suppresses disk history/snapshots, but full anonymity guarantees against hardware/memory side channels are not claimed;
 - multi-device remote synchronization backend is future work (currently local filesystem sync only);
 - full WPT/reference-browser differential testing is not implemented yet;
 - BitTorrent/magnet transfers and optional raw packet capture are not implemented.

@@ -11,6 +11,7 @@ add_library(openbrowser_core
     src/core/capabilities/capability_policy.cpp
     src/core/navigation/address_input.cpp
     src/core/session/browser_session.cpp
+    src/core/session/session_privacy_orchestrator.cpp
     src/core/session/focus_session_controller.cpp
     src/core/session/session_persistence.cpp
     src/core/session/tab_discard_policy.cpp
@@ -235,7 +236,7 @@ if(OPENBROWSER_BUILD_TESTS)
     target_compile_features(openbrowser_network_lab_enhanced_tests PRIVATE cxx_std_20)
 
     add_executable(openbrowser_private_profile_isolation_tests tests/private_profile_isolation_tests.cpp)
-    target_link_libraries(openbrowser_private_profile_isolation_tests PRIVATE Openbrowser::Core)
+    target_link_libraries(openbrowser_private_profile_isolation_tests PRIVATE Openbrowser::Core Openbrowser::NetworkTrace)
     target_include_directories(openbrowser_private_profile_isolation_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_private_profile_isolation_tests PRIVATE cxx_std_20)
 

@@ -21,6 +21,18 @@
 namespace openbrowser::desktop {
 namespace {
 
+constexpr const char* CurrentPlatformName() noexcept {
+#if defined(_WIN32) || defined(_WIN64)
+    return "Windows";
+#elif defined(__APPLE__)
+    return "macOS";
+#elif defined(__linux__)
+    return "Linux";
+#else
+    return "Linux";
+#endif
+}
+
 struct EndpointInfo {
     std::string scheme;
     std::string host;
@@ -563,13 +575,13 @@ CefResourceRequestHandler::ReturnValue CefTabClient::OnBeforeResourceLoad(
 
     const auto* ua_engine = engine_->UserAgentEngine();
     if (ua_engine != nullptr && request) {
-        const std::string custom_ua = ua_engine->BuildUserAgent(url, "Windows", mitigations);
+        const std::string custom_ua = ua_engine->BuildUserAgent(url, CurrentPlatformName(), mitigations);
         if (!custom_ua.empty()) {
             CefRequest::HeaderMap hdr_map;
             request->GetHeaderMap(hdr_map);
             hdr_map.erase("User-Agent");
             hdr_map.insert(std::make_pair("User-Agent", custom_ua));
-            const auto hints = ua_engine->BuildClientHints(url, "Windows", mitigations);
+            const auto hints = ua_engine->BuildClientHints(url, CurrentPlatformName(), mitigations);
             if (!hints.sec_ch_ua.empty()) {
                 hdr_map.erase("sec-ch-ua");
                 hdr_map.insert(std::make_pair("sec-ch-ua", hints.sec_ch_ua));
@@ -683,30 +695,18 @@ bool CefTabClient::OnResourceResponse(
     const std::string url = request ? request->GetURL().ToString() : "";
     const EndpointInfo ep = ParseEndpoint(url);
 
-    std::string protocol = (ep.scheme == "https" ? "h2" : "http/1.1");
-    if (response) {
-        const auto alt_svc = response->GetHeaderByName("alt-svc").ToString();
-        if (!alt_svc.empty() && alt_svc.find("h3") != std::string::npos) {
-            protocol = "h3";
-        }
-    }
-
+    // Record only verified observations. Standard CEF callbacks do not supply
+    // TLS version, cipher suite, cert subject, or protocol negotiation without CDP/NetLog.
+    // We leave tls_info nullopt and protocol "unknown" rather than fabricating telemetry.
     if (auto* conn_reg = engine_->ConnectionRegistry()) {
         const bool already_known = conn_reg->Find(ep.connection_id).has_value();
         devtools::network::ConnectionDiagnostics diag;
         diag.connection_id = ep.connection_id;
         diag.remote_host = ep.host;
         diag.remote_port = ep.port;
-        diag.protocol = protocol;
+        diag.protocol = "unknown";
         diag.is_reused = already_known;
-        if (ep.scheme == "https") {
-            devtools::network::TlsInfo tls;
-            tls.tls_version = "TLS 1.3";
-            tls.alpn = protocol;
-            tls.cert_subject = "CN=" + ep.host;
-            tls.cert_is_valid = (response ? response->GetStatus() < 500 : true);
-            diag.tls_info = std::move(tls);
-        }
+        diag.tls_info = std::nullopt;
         conn_reg->Register(std::move(diag));
     }
 
@@ -718,7 +718,7 @@ bool CefTabClient::OnResourceResponse(
     ev.url = url;
     ev.method = request ? request->GetMethod().ToString() : "";
     ev.status = response ? std::optional<int>{response->GetStatus()} : std::nullopt;
-    ev.protocol = protocol;
+    ev.protocol = "unknown";
     ev.headers = response ? ResponseHeaders(response) : std::vector<devtools::network::Header>{};
     ev.transferred_bytes = 0;
     ev.error = {};

@@ -26,6 +26,10 @@ public:
     virtual void Reload(const core::TabId& tab_id) = 0;
     virtual void Suspend(const core::TabId& tab_id) = 0;
     virtual void Resume(const core::TabId& tab_id) = 0;
+
+    virtual void SetEphemeralMode(bool /*enabled*/) noexcept {}
+    [[nodiscard]] virtual bool IsEphemeralMode() const noexcept { return false; }
+    virtual void PurgeEphemeralContext() {}
 };
 
 }  // namespace openbrowser::engine

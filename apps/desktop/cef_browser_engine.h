@@ -56,9 +56,9 @@ public:
     void SetStorageRoot(std::filesystem::path root);
     [[nodiscard]] const std::filesystem::path& StorageRoot() const noexcept;
 
-    void SetEphemeralMode(bool enabled) noexcept;
-    [[nodiscard]] bool IsEphemeralMode() const noexcept;
-    void PurgeEphemeralContext();
+    void SetEphemeralMode(bool enabled) noexcept override;
+    [[nodiscard]] bool IsEphemeralMode() const noexcept override;
+    void PurgeEphemeralContext() override;
     [[nodiscard]] CefRefPtr<CefRequestContext> GetOrCreateRequestContext(
         const std::optional<core::WorkspaceId>& workspace_id,
         bool is_ephemeral = false);

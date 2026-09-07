@@ -313,6 +313,21 @@ void DesktopApp::OnContextInitialized() {
     session_ = std::make_unique<core::BrowserSession>(*engine_);
     session_file_path_ = SessionFilePath();
 
+    privacy_orchestrator_ = std::make_unique<core::SessionPrivacyOrchestrator>(
+        *session_,
+        *profile_manager_,
+        engine_.get(),
+        [this](bool is_private) {
+            if (obtrace_recorder_) {
+                obtrace_recorder_->SetPrivateMode(is_private);
+            }
+        });
+
+    session_history_bridge_ = std::make_unique<core::SessionHistoryBridge>(
+        history_manager_.get(),
+        profile_manager_.get(),
+        [this](bool is_clean) { SaveCurrentSession(is_clean); });
+
     bool restored = false;
     const auto snapshot = core::SessionPersistence::LoadFromFile(session_file_path_);
     if (snapshot.has_value() && !snapshot->tabs.empty()) {
@@ -336,7 +351,11 @@ void DesktopApp::OnContextInitialized() {
         }
     }
 
-    tab_strip_ = std::make_unique<TabStrip>(*session_, workspace_manager_.get());
+    tab_strip_ = std::make_unique<TabStrip>(
+        *session_,
+        workspace_manager_.get(),
+        profile_manager_.get(),
+        privacy_orchestrator_.get());
     bookmarks_bar_ = std::make_unique<BookmarksBar>(*bookmark_manager_, *session_);
     downloads_panel_ = std::make_unique<DownloadsPanel>(*transfer_broker_, *file_broker_);
     command_palette_overlay_ = std::make_unique<CommandPaletteOverlay>(*action_registry_);
@@ -427,6 +446,8 @@ void DesktopApp::ShutdownRuntime() {
     focus_sidebar_.reset();
     chrome_.reset();
     tab_strip_.reset();
+    session_history_bridge_.reset();
+    privacy_orchestrator_.reset();
     session_.reset();
     focus_queue_.reset();
     workspace_manager_.reset();
@@ -438,18 +459,8 @@ void DesktopApp::ShutdownRuntime() {
 
 void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& session) {
     CEF_REQUIRE_UI_THREAD();
-    const bool is_private = (engine_ && engine_->IsEphemeralMode()) ||
-        (profile_manager_ && profile_manager_->GetActiveProfile() &&
-         profile_manager_->GetActiveProfile()->IsEphemeral());
-
-    if (!is_private && history_manager_ && session.ActiveTabId().has_value()) {
-        const auto* active_tab = session.FindTab(*session.ActiveTabId());
-        if (active_tab && !active_tab->is_ephemeral && !active_tab->url.empty() && active_tab->url != "about:blank") {
-            history_manager_->RecordVisit(active_tab->url, active_tab->title);
-        }
-    }
-    if (!is_private) {
-        SaveCurrentSession(false);
+    if (session_history_bridge_) {
+        session_history_bridge_->OnBrowserSessionChanged(session);
     }
 }
 
@@ -483,27 +494,17 @@ void DesktopApp::ToggleDownloadsPanel() {
 
 void DesktopApp::ToggleProfile() {
     CEF_REQUIRE_UI_THREAD();
-    if (!profile_manager_) {
+    if (!privacy_orchestrator_) {
         return;
     }
-    auto active = profile_manager_->GetActiveProfile();
-    if (active && active->IsEphemeral()) {
-        profile_manager_->SetActiveProfile("default");
-        profile_manager_->PurgeEphemeralProfiles();
-        if (engine_) {
-            engine_->SetEphemeralMode(false);
-            engine_->PurgeEphemeralContext();
-        }
+
+    if (privacy_orchestrator_->IsPrivateModeActive()) {
+        privacy_orchestrator_->ExitPrivateMode();
         if (chrome_) {
             chrome_->SetProfileLabel("[👤 Default]");
         }
     } else {
-        auto eph = profile_manager_->CreateEphemeralProfile("Private Session");
-        if (eph) {
-            profile_manager_->SetActiveProfile(eph->GetId());
-            if (engine_) {
-                engine_->SetEphemeralMode(true);
-            }
+        if (privacy_orchestrator_->EnterPrivateMode()) {
             if (chrome_) {
                 chrome_->SetProfileLabel("[🕶 Private]");
             }
