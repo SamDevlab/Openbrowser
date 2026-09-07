@@ -52,4 +52,6 @@ A distributable Openbrowser build must include all license and notice material r
 
 The Windows portable package includes the Openbrowser license/ledger plus the exact CEF distribution's `LICENSE.txt` and `CREDITS.html`. Packaging fails if those files are absent.
 
+CEF Windows sandboxed builds also require the LPAC read/execute ACL identified by SID `S-1-15-2-2` on the runtime directory. A normal ZIP extraction does not reliably preserve NTFS ACLs, so the Openbrowser Windows runtime verifies and, when necessary, reapplies this ACL before CEF initialization. Startup fails closed when the required permission cannot be established. The Windows package workflow validates this behavior after extracting the final ZIP into a fresh directory.
+
 When a dependency is removed, its historical license obligations still apply to any older binaries that included it.
