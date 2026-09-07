@@ -1,7 +1,10 @@
 #pragma once
 
+#include "core/network/filter_decision_log.h"
 #include "core/session/browser_session_observer.h"
+#include "devtools/network/connection_diagnostics.h"
 #include "devtools/network/network_trace.h"
+#include "devtools/network/obtrace_recorder.h"
 
 #include "include/cef_base.h"
 #include "include/views/cef_panel.h"
@@ -24,9 +27,13 @@ namespace openbrowser::desktop {
 class NetworkLabPanel final : public devtools::network::NetworkTraceObserver,
                               public core::BrowserSessionObserver {
 public:
+    // M7.4: enhanced constructor accepts M7 subsystems (non-owning refs/ptrs).
     NetworkLabPanel(
         devtools::network::NetworkTraceBuffer& trace_buffer,
-        core::BrowserSession& session);
+        core::BrowserSession& session,
+        devtools::network::ConnectionRegistry* connection_registry = nullptr,
+        core::FilterDecisionLog* decision_log = nullptr,
+        devtools::network::ObtraceRecorder* obtrace_recorder = nullptr);
     ~NetworkLabPanel() override;
 
     NetworkLabPanel(const NetworkLabPanel&) = delete;
@@ -46,6 +53,13 @@ public:
     void OnBrowserSessionChanged(const core::BrowserSession& session) override;
 
 private:
+    // M7.4: active sub-view tab.
+    enum class ActiveTab {
+        Requests,
+        Connections, // M7.1
+        Decisions,   // M7.2
+    };
+
     enum class PanelAction {
         ToggleScope,
         CycleMethod,
@@ -54,6 +68,11 @@ private:
         DeselectRequest,
         Clear,
         Close,
+        // M7.4
+        SwitchToRequests,
+        SwitchToConnections,
+        SwitchToDecisions,
+        ExportObtrace,
     };
 
     class PanelActionDelegate;
@@ -63,6 +82,9 @@ private:
     void RebuildView();
     void BuildTableView(const std::vector<devtools::network::NetworkRequestSummary>& requests);
     void BuildDetailsView(const devtools::network::NetworkRequestSummary& request);
+    void BuildConnectionsView();  // M7.1
+    void BuildDecisionsView();    // M7.2
+    void BuildTabBar();           // M7.4: shared tab strip
 
     devtools::network::NetworkTraceBuffer& trace_buffer_;
     core::BrowserSession& session_;
@@ -71,6 +93,12 @@ private:
     std::string status_filter_{"ALL"};
     std::string search_query_{};
     std::optional<std::string> selected_request_id_{std::nullopt};
+    ActiveTab active_tab_{ActiveTab::Requests}; // M7.4
+
+    // M7 subsystems (non-owning)
+    devtools::network::ConnectionRegistry* connection_registry_{nullptr};
+    core::FilterDecisionLog* decision_log_{nullptr};
+    devtools::network::ObtraceRecorder* obtrace_recorder_{nullptr};
 
     CefRefPtr<CefPanelDelegate> panel_delegate_;
     CefRefPtr<CefPanel> panel_;
@@ -79,4 +107,3 @@ private:
 };
 
 }  // namespace openbrowser::desktop
-

@@ -33,6 +33,7 @@ add_library(openbrowser_core
     src/core/network/network_filter_query.cpp
     src/core/network/waterfall_timeline.cpp
     src/core/filters/adblock_rule_parser.cpp
+    src/core/network/filter_decision_log.cpp     # M7.2
 )
 
 add_library(Openbrowser::Core ALIAS openbrowser_core)
@@ -42,6 +43,8 @@ target_include_directories(openbrowser_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/
 
 add_library(openbrowser_network_trace
     src/devtools/network/network_trace.cpp
+    src/devtools/network/connection_diagnostics.cpp  # M7.1
+    src/devtools/network/obtrace_recorder.cpp        # M7.3
 )
 
 add_library(Openbrowser::NetworkTrace ALIAS openbrowser_network_trace)
@@ -210,6 +213,27 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_desktop_profile_integration_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_desktop_profile_integration_tests PRIVATE cxx_std_20)
 
+    # M7 test targets
+    add_executable(openbrowser_connection_diagnostics_tests tests/connection_diagnostics_tests.cpp)
+    target_link_libraries(openbrowser_connection_diagnostics_tests PRIVATE Openbrowser::NetworkTrace)
+    target_include_directories(openbrowser_connection_diagnostics_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_connection_diagnostics_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_filter_decision_log_tests tests/filter_decision_log_tests.cpp)
+    target_link_libraries(openbrowser_filter_decision_log_tests PRIVATE Openbrowser::NetworkTrace Openbrowser::Core)
+    target_include_directories(openbrowser_filter_decision_log_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_filter_decision_log_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_obtrace_recorder_tests tests/obtrace_recorder_tests.cpp)
+    target_link_libraries(openbrowser_obtrace_recorder_tests PRIVATE Openbrowser::NetworkTrace)
+    target_include_directories(openbrowser_obtrace_recorder_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_obtrace_recorder_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_network_lab_enhanced_tests tests/network_lab_enhanced_tests.cpp)
+    target_link_libraries(openbrowser_network_lab_enhanced_tests PRIVATE Openbrowser::NetworkTrace Openbrowser::Core)
+    target_include_directories(openbrowser_network_lab_enhanced_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_network_lab_enhanced_tests PRIVATE cxx_std_20)
+
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
@@ -241,6 +265,10 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_bookmarks_bar_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_downloads_panel_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_desktop_profile_integration_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_connection_diagnostics_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_filter_decision_log_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_obtrace_recorder_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_network_lab_enhanced_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
@@ -272,6 +300,10 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_bookmarks_bar_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_downloads_panel_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_desktop_profile_integration_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_connection_diagnostics_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_filter_decision_log_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_obtrace_recorder_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_network_lab_enhanced_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
@@ -304,6 +336,11 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.bookmarks_bar COMMAND openbrowser_bookmarks_bar_tests)
     add_test(NAME openbrowser.downloads_panel COMMAND openbrowser_downloads_panel_tests)
     add_test(NAME openbrowser.desktop_profile_integration COMMAND openbrowser_desktop_profile_integration_tests)
+    # M7 tests
+    add_test(NAME openbrowser.connection_diagnostics COMMAND openbrowser_connection_diagnostics_tests)
+    add_test(NAME openbrowser.filter_decision_log COMMAND openbrowser_filter_decision_log_tests)
+    add_test(NAME openbrowser.obtrace_recorder COMMAND openbrowser_obtrace_recorder_tests)
+    add_test(NAME openbrowser.network_lab_enhanced COMMAND openbrowser_network_lab_enhanced_tests)
 endif()
 
 

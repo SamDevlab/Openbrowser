@@ -399,6 +399,62 @@ std::string NetworkTraceBuffer::ExportToHar(
     return out;
 }
 
+std::string NetworkTraceBuffer::ExportToObtrace(
+    const std::vector<NetworkRequestSummary>& requests) {
+    std::string out;
+    // Header record — schema version and entry count.
+    out += "{\"schema\":\"obtrace/1\",\"type\":\"trace_start\",\"total_requests\":";
+    out += std::to_string(requests.size());
+    out += "}\n";
+
+    for (const auto& req : requests) {
+        out += "{\"type\":\"request\",\"schema\":\"obtrace/1\",\"request_id\":";
+        EscapeJsonString(req.request_id, out);
+        out += ",\"method\":";
+        EscapeJsonString(req.method, out);
+        out += ",\"url\":";
+        EscapeJsonString(req.url, out);
+        out += ",\"status\":";
+        out += req.status.has_value() ? std::to_string(*req.status) : "null";
+        out += ",\"protocol\":";
+        EscapeJsonString(req.protocol, out);
+        out += ",\"transferred_bytes\":";
+        out += std::to_string(req.transferred_bytes);
+        out += ",\"state\":\"";
+        switch (req.state) {
+            case RequestState::Active:   out += "active";   break;
+            case RequestState::Finished: out += "finished"; break;
+            case RequestState::Failed:   out += "failed";   break;
+        }
+        out += "\"";
+        out += ",\"attribution\":";
+        EscapeJsonString(core::AttributionToString(req.attribution), out);
+        if (req.connection_id.has_value()) {
+            out += ",\"connection_id\":";
+            EscapeJsonString(*req.connection_id, out);
+        }
+        if (req.filter_blocked) {
+            out += ",\"filter_blocked\":true,\"filter_layer\":";
+            EscapeJsonString(req.filter_layer, out);
+            out += ",\"filter_rule_source\":";
+            EscapeJsonString(req.filter_rule_source, out);
+        } else {
+            out += ",\"filter_blocked\":false";
+        }
+        if (!req.body_preview.empty()) {
+            out += ",\"body_preview\":";
+            EscapeJsonString(req.body_preview, out);
+        }
+        out += "}\n";
+    }
+
+    // Sentinel record.
+    out += "{\"type\":\"trace_end\",\"schema\":\"obtrace/1\",\"total_events\":";
+    out += std::to_string(requests.size());
+    out += "}\n";
+    return out;
+}
+
 bool NetworkTraceBuffer::IsSensitiveHeaderName(const std::string& name) {
     static constexpr std::array sensitive_names{
         "authorization",
