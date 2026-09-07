@@ -23,25 +23,6 @@ constexpr BYTE kLpacInheritance = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
 constexpr wchar_t kSandboxPrerequisiteCheck[] =
     L"--openbrowser-sandbox-prereq-check";
 
-void AppendStartupTrace(const char* phase) {
-    std::vector<wchar_t> buffer(32768);
-    const DWORD length = GetEnvironmentVariableW(
-        L"OPENBROWSER_STARTUP_TRACE",
-        buffer.data(),
-        static_cast<DWORD>(buffer.size()));
-    if (length == 0 || length >= buffer.size()) {
-        return;
-    }
-
-    std::ofstream stream(
-        std::filesystem::path(std::wstring(buffer.data(), length)),
-        std::ios::app);
-    if (stream.is_open()) {
-        stream << phase << '\n';
-        stream.flush();
-    }
-}
-
 std::wstring RuntimeDirectory() {
     std::vector<wchar_t> buffer(32768);
     const DWORD length = GetModuleFileNameW(
@@ -59,6 +40,39 @@ std::wstring RuntimeDirectory() {
     }
     path.resize(separator);
     return path;
+}
+
+void AppendStartupTrace(const char* phase) {
+    std::filesystem::path trace_path;
+
+    std::vector<wchar_t> configured_path(32768);
+    const DWORD configured_length = GetEnvironmentVariableW(
+        L"OPENBROWSER_STARTUP_TRACE",
+        configured_path.data(),
+        static_cast<DWORD>(configured_path.size()));
+    if (configured_length > 0 && configured_length < configured_path.size()) {
+        trace_path = std::wstring(configured_path.data(), configured_length);
+    } else {
+        wchar_t noninteractive[2]{};
+        const DWORD noninteractive_length = GetEnvironmentVariableW(
+            L"OPENBROWSER_NONINTERACTIVE",
+            noninteractive,
+            static_cast<DWORD>(std::size(noninteractive)));
+        if (noninteractive_length == 0) {
+            return;
+        }
+        const std::wstring runtime_directory = RuntimeDirectory();
+        if (runtime_directory.empty()) {
+            return;
+        }
+        trace_path = std::filesystem::path(runtime_directory) / L"debug.log";
+    }
+
+    std::ofstream stream(trace_path, std::ios::app);
+    if (stream.is_open()) {
+        stream << "[openbrowser-startup] " << phase << '\n';
+        stream.flush();
+    }
 }
 
 bool HasCommandLineToken(const wchar_t* token) {
