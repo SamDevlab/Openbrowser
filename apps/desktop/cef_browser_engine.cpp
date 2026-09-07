@@ -453,7 +453,7 @@ void CefBrowserEngine::RegisterMediaAccessPrompt(
     const uint64_t prompt_id = ++next_media_prompt_id_;
 
     core::PermissionPrompt prompt_info{
-        .prompt_id = prompt_id,
+        .prompt_id = std::move(tab_id),
         .tab_id = std::move(tab_id),
         .origin = std::move(origin),
         .capabilities = std::move(capabilities),
@@ -584,17 +584,10 @@ void CefBrowserEngine::NotifyBrowserBeforeClose(const core::TabId& tab_id) {
             --live_browser_count_;
         }
 
-        if (!window_destroyed_ && browser_host_ && surface->second.view) {
-            browser_host_->RemoveChildView(surface->second.view);
-        }
         surfaces_.erase(surface);
 
         if (active_tab_id_.has_value() && *active_tab_id_ == tab_id) {
             active_tab_id_.reset();
-        }
-
-        if (!window_destroyed_ && browser_host_) {
-            browser_host_->Layout();
         }
     }
 
