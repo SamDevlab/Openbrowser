@@ -1,215 +1,241 @@
 # Openbrowser
 
-Openbrowser is an experimental open-source desktop browser focused on local control, privacy-by-architecture, deep customization, intentional tab management, and native capabilities that normally require extensions.
+[![Core CI](https://github.com/SamDevlab/Openbrowser/actions/workflows/ci.yml/badge.svg)](https://github.com/SamDevlab/Openbrowser/actions/workflows/ci.yml)
+[![CEF Desktop Smoke](https://github.com/SamDevlab/Openbrowser/actions/workflows/cef-smoke.yml/badge.svg)](https://github.com/SamDevlab/Openbrowser/actions/workflows/cef-smoke.yml)
 
-> Status: **pre-alpha / M1 browser-shell work**. The engine-independent core is executable and tested; the Chromium/CEF desktop adapter is the next integration step.
+Openbrowser is an experimental open-source desktop browser focused on **local control, privacy-by-architecture, intentional tab management, native developer observability, and replaceable browser-engine boundaries**.
 
-## Engineering direction
+The project uses Chromium through a pinned Chromium Embedded Framework (CEF) adapter, but Chromium does not own Openbrowser's domain model. Tabs, sessions, workspaces, capabilities, focus state, transfers, compatibility policy, and browser-owned network observations live behind engine-independent C++ interfaces.
 
-Openbrowser follows a few non-negotiable architectural rules:
+> **Status: pre-alpha / active M7 development.** The CEF desktop shell is executable and already includes real navigation, tabs, workspaces, permission controls, downloads, bookmarks, focus tooling, content filtering, session recovery, and a native Network Lab. Openbrowser is **not yet a daily-driver or security-hardened browser** and should not be used to protect sensitive browsing sessions.
 
-1. **Local state is authoritative by default.** Core browsing data must not require project-owned infrastructure.
-2. **No mandatory account.** The browser must remain functional without an Openbrowser identity or cloud service.
-3. **Network egress is explicit.** Browser-initiated traffic must pass through declared capabilities/providers rather than hidden service calls.
-4. **Core domain logic is engine-independent.** Tabs, Focus Queue, capabilities, profiles, policies and configuration must not depend directly on Chromium APIs.
-5. **External services are replaceable.** Sync, filters, update sources, DNS and registries sit behind provider interfaces so self-hosted implementations can replace hosted ones.
-6. **Sensitive exports are deny-by-default.** Portable configuration must not silently include credentials, cookies, tokens, sessions or vault secrets.
-7. **Differences are intentional and testable.** Where Openbrowser diverges from upstream browser behavior, the divergence should be classified, reproducible and covered by tests.
-8. **Compatibility is continuously measured.** Privacy/product changes must not silently become unexplained site breakage.
-9. **Developer observability is native and local.** Network activity should be inspectable without requiring a third-party extension or hidden remote service.
+## Why Openbrowser
 
-## Current core
+Openbrowser is built around a few non-negotiable rules:
 
-The current C++20 core already contains executable models for:
+- **Local-first by default.** Core browsing state must not require project-owned infrastructure or a mandatory account.
+- **Engine-independent browser state.** Chromium/CEF is an adapter, not the owner of tabs, session lifecycle, policy, or application state.
+- **Explicit browser-owned egress.** Browser-initiated network behavior is represented through declared capabilities instead of hidden service calls.
+- **Deny-by-default capability policy.** Unknown capabilities do not become implicitly allowed because a new provider or component was linked.
+- **Replaceable providers.** Sync, filters, update sources, DNS, and future hosted services belong behind ports/interfaces.
+- **Observable privacy behavior.** Filtering and browser-owned network activity should be inspectable and explainable locally.
+- **Compatibility is measured.** Site-specific mitigations are scoped policy records rather than silent global privacy exceptions.
+- **Sensitive exports are conservative.** Network traces and configuration must not silently expose credentials, cookies, tokens, or vault data.
 
-- tab identity and lifecycle;
-- `BrowserSession` orchestration;
-- Focus Queue ordering and priority state;
-- browser/page capability policy;
-- replaceable engine/provider boundaries.
+## What works today
 
-`BrowserSession` owns the logical tab collection. Horizontal tabs and vertical tabs will therefore be two projections of the same model rather than separate tab systems.
+### Desktop browser shell
 
-Current session invariants include:
+The current CEF Views desktop application includes:
 
-- unique, non-empty tab IDs;
-- non-empty navigation targets at the application boundary;
-- at most one active tab;
-- opening/activating a tab demotes the previous active tab;
-- active tabs cannot be suspended;
-- activating a suspended tab resumes it first;
-- closing the active tab deterministically selects a surviving fallback;
-- engine handles never become Openbrowser `TabId` values.
+- a top-level native browser window;
+- one CEF browser surface per Openbrowser `TabId`;
+- address-bar navigation;
+- Back, Forward, and Reload controls;
+- a horizontal tab strip driven by `BrowserSession`;
+- a separate Focus Queue sidebar;
+- title/navigation/crash events normalized back into Openbrowser-owned events;
+- versioned session snapshots and clean-shutdown detection;
+- session restore on startup;
+- workspace switching with workspace-specific CEF request contexts;
+- site permission prompts with Allow / Block / Dismiss actions;
+- a site security badge and origin permission inspection/reset;
+- a command palette overlay;
+- a workspace-aware bookmarks bar;
+- a downloads/transfer drawer;
+- an experimental profile/private-session toggle;
+- a native Network Lab drawer.
 
-## Product concepts
+The UI and CEF adapter live in `apps/desktop/`. CEF/Chromium headers are intentionally forbidden from `src/core/`.
 
-### Tabs and vertical tabs
+### Tab lifecycle, focus, and workspaces
 
-Openbrowser will support conventional horizontal tabs and conventional vertical tabs. Both are views over the same browser-session state.
+`BrowserSession` is the application-level authority for logical tab state. Engine handles never become persistent Openbrowser identifiers.
 
-### Focus Queue
+Implemented behavior includes:
 
-The Focus Queue is separate from vertical tabs. It represents what the user explicitly intends to handle next.
+- deterministic active/background tab transitions;
+- tab suspension/resume contracts;
+- LRU-style tab discard policies for memory pressure;
+- on-demand revival of discarded tabs;
+- Focus Queue ordering independent from visual tab order;
+- focus sprint/timer and attention metrics;
+- workspace metadata on tabs;
+- per-workspace CEF request contexts for cookie/storage partitioning;
+- session persistence of tabs, workspaces, and Focus Queue items.
 
-Planned behavior:
+### Capability and privacy policy
 
-- multi-select tabs and enqueue them;
-- reorder with drag-and-drop or keyboard controls;
-- queue a URL without keeping a live tab allocated;
-- states such as `now`, `next`, `later` and `paused`;
-- workspace-aware and optionally global queues;
-- optional resource hints so lower-priority queued items can be suspended while the next item can be prepared.
+Openbrowser has an engine-independent `CapabilityPolicy` with rules that can be scoped globally, per workspace, per origin, or per session.
 
-The core already allows a Focus Queue item to exist without a live tab.
+Current capability categories include page networking, sync, DNS, filter updates, external services, camera, microphone, geolocation, notifications, clipboard access, persistent/third-party storage, automation, and userscripts.
 
-### Deep customization
+The CEF adapter already enforces capability checks at navigation and resource-load boundaries and exposes interactive permission prompts for supported site capabilities.
 
-Customization is planned as structured, portable configuration rather than one opaque preferences database:
+### Content filtering
 
-- theme and appearance;
-- toolbar/sidebar composition;
-- horizontal/vertical tab layout;
-- shortcuts and command palette;
-- workspaces and containers;
-- Focus Queue behavior;
-- privacy policies;
-- search engines;
-- filter sources;
-- custom CSS/userscripts with explicit capabilities.
+The current filtering stack includes:
 
-Configuration import must show a diff/preview before applying changes.
+- native allow/block evaluation;
+- tracker categories for advertising, analytics, fingerprinting, cryptomining, and social tracking;
+- domain allowlists;
+- CEF pre-flight resource blocking;
+- EasyList / Adblock Plus-style parsing for common rule forms;
+- domain anchors such as `||example.com^`;
+- exception rules with `@@`;
+- resource modifiers such as `$script`, `$image`, `$stylesheet`, `$xmlhttprequest`, `$subdocument`, and `$third-party`;
+- a filter-decision model for explaining policy results.
 
-### Native privacy controls
+Live CEF content blocking is wired today. The newer per-request `FilterDecisionLog` exists in core and in the Network Lab UI, but the live CEF filtering path still uses the compatibility `Evaluate()` path rather than `EvaluateWithId()`, so full live decision correlation is still being completed.
 
-Privacy is treated as a core policy system, not an optional skin over the browser. Planned areas include tracker/ad blocking, storage isolation, cookie policy, permission policy, HTTPS controls, network policy and fingerprinting defenses.
+### Downloads and file safety
 
-Openbrowser does **not** define privacy as anonymity. Features such as BitTorrent have protocol-level privacy characteristics that the UI and documentation must make explicit.
+CEF downloads are connected to Openbrowser's transfer layer through `TransferBroker`.
 
-### Web compatibility system
+Implemented pieces include:
 
-Openbrowser will eventually include a compatibility subsystem that continuously checks whether Openbrowser-specific privacy/product changes introduce unintended site regressions.
+- transfer lifecycle tracking;
+- progress and transfer-rate calculation;
+- pause, resume, and cancel controls;
+- a desktop Downloads Panel;
+- `FileBroker` destination containment;
+- path-traversal defenses;
+- Windows/POSIX filename sanitization;
+- collision-safe destination naming;
+- basic executable/script risk classification.
 
-The planned system combines:
+BitTorrent / `magnet:` support is part of the long-term transfer architecture but is **not implemented yet**.
 
-- Web Platform Tests (WPT);
-- rendering/reftest checks;
-- deterministic site scenarios;
-- differential runs against a pinned Chromium reference;
-- classified, versioned and narrowly scoped compatibility mitigations.
+### History, bookmarks, and local sync primitives
 
-A site-specific fix must not silently disable global privacy controls. Differences are classified as standards regressions, engine regressions, Openbrowser regressions, intentional privacy/product divergences, site assumptions or unknowns.
+Openbrowser currently contains:
 
-See [`docs/web-compatibility.md`](docs/web-compatibility.md).
+- a history manager with visit counting, deduplication, search, and ranking;
+- a bookmark manager with tags, search, URL deduplication, and workspace scope;
+- a desktop bookmarks bar with quick-add and one-click navigation;
+- a `SyncPort` abstraction;
+- a `LocalFilesystemSyncProvider` with versioned records, conflict handling, manifests, and disk serialization.
 
-### Developer Network Lab
+History and bookmark managers are currently memory-resident in the desktop runtime, and the local sync provider is not yet exposed as a complete desktop synchronization workflow.
 
-Openbrowser will include a native developer network inspector designed to expose request, connection and policy behavior without requiring an extension.
+### Profiles and compatibility policy
 
-The default mode observes Openbrowser-owned/browser page traffic and can evolve from:
+The core contains:
 
-1. request/response inspection;
-2. connection/transport diagnostics;
-3. optional privileged raw packet capture in a separate helper process.
+- persistent and ephemeral profile models;
+- an in-memory secret/session-data vault;
+- explicit purge of ephemeral profile data;
+- site-scoped compatibility mitigation records;
+- expiration/scoping for compatibility rules;
+- User-Agent / Client Hints policy modes for standard Chromium, normalized anti-fingerprinting output, and site-scoped overrides.
 
-Planned views include a request table, timing waterfall, connection graph, TLS/protocol metadata, WebSocket activity, privacy/filter decisions and safe local trace export. Sensitive headers and bodies are redacted or disabled by default.
+The desktop UI can currently toggle the profile model between Default and Private states. **This is not yet a complete browser-wide incognito guarantee**: the active profile toggle is not yet fully coupled to CEF request-context/storage isolation and all persistence paths. The mitigation and User-Agent engines likewise exist as core policy components but still need complete live request-boundary wiring.
 
-See [`docs/developer-network-inspector.md`](docs/developer-network-inspector.md).
+### Native Network Lab
 
-### Transfers
+Network Lab is a local developer-observability subsystem rather than an extension.
 
-The long-term transfer architecture unifies HTTP(S) downloads and BitTorrent under a common broker while keeping protocol engines isolated.
+The live CEF path currently provides:
 
-Planned capabilities include:
+- Openbrowser-owned request IDs;
+- request start/redirect/response/completion/failure events;
+- request and response headers;
+- bounded POST body previews;
+- transferred-byte totals;
+- request filtering and inspection;
+- browser/page network attribution;
+- HAR 1.2 export;
+- batch `.obtrace` export with a versioned `obtrace/1` format and sensitive-header redaction.
 
-- `.torrent` and `magnet:` handling;
-- file selection and priorities;
-- pause/resume;
-- bandwidth and seeding controls;
-- hash verification;
-- optional isolated background transfers;
-- explicit network/privacy controls.
+The M7 diagnostic layer also contains:
 
-Torrent functionality is for legitimate peer-to-peer distribution. The browser does not bypass content authorization or DRM.
+- connection/TLS diagnostic models and a `ConnectionRegistry`;
+- DNS/connect/TLS timing fields;
+- protocol, ALPN, endpoint, certificate, and connection-reuse metadata models;
+- a filter/policy decision log;
+- Network Lab Requests / Connections / Decisions views;
+- a streaming `ObtraceRecorder` core;
+- command actions for HAR and `.obtrace` export.
+
+The deeper M7 models and views are implemented and tested, but **live CEF population of connection/TLS diagnostics and full per-request filter-decision correlation is still in progress**. The streaming recorder core exists, while the currently wired desktop actions perform batch exports.
+
+### Compatibility engineering
+
+The compatibility layer already includes:
+
+- deterministic `CompatibilityScenario` definitions;
+- a `CompatibilityRunner`;
+- expected-status/header checks;
+- blocked-tracker assertions;
+- site-scoped mitigation records.
+
+A full Web Platform Tests pipeline, pinned-reference differential browser execution, and rendering/reftest comparison infrastructure remain future work.
 
 ## Architecture
 
 ```text
-                 +---------------------------+
-                 |        Desktop UI         |
-                 +-------------+-------------+
-                               |
-                     application commands
-                               |
-                 +-------------v-------------+
-                 |      BrowserSession       |
-                 | active tab / lifecycle    |
-                 +-------------+-------------+
-                               |
-                 +-------------v-------------+
-                 |      Openbrowser Core     |
-                 | tabs / focus / policies   |
-                 | profiles / config / state |
-                 +------+------+-------------+
-                        |      |
-               providers|      |engine port
-                        |      |
-              +---------v--+  +-v----------------+
-              | Providers  |  | Engine Adapter   |
-              | local/self |  | CEF -> Chromium  |
-              | hosted opt |  | deeper later     |
-              +------------+  +------------------+
-                                   |
-                         normalized observations
-                                   |
-                     +-------------v-------------+
-                     | Compatibility / Network   |
-                     | tests + developer traces  |
-                     +---------------------------+
++----------------------------+
+|     Desktop UI / CEF       |
+| chrome, tabs, panels       |
++-------------+--------------+
+              |
+              | application commands
+              v
++-------------+--------------+
+|       BrowserSession       |
+| tab lifecycle / intent     |
++-------------+--------------+
+              |
+              v
++-------------+--------------+
+|      Openbrowser Core      |
+| focus / policy / history   |
+| bookmarks / transfers      |
+| profiles / sync / compat   |
++------+---------------+-----+
+       |               |
+       | provider port | engine port
+       v               v
++------+-------+   +---+----------------+
+|  Providers   |   | Engine Adapter     |
+| local/self   |   | CEF -> Chromium    |
+| hosted opt.  |   | replaceable later  |
++--------------+   +---------+-----------+
+                            |
+                            | normalized observations
+                            v
+                  +---------+-----------+
+                  | Network / Compat    |
+                  | traces + diagnostics|
+                  +---------------------+
 ```
 
-See [`docs/architecture.md`](docs/architecture.md), [`docs/threat-model.md`](docs/threat-model.md) and the ADRs in [`docs/adr/`](docs/adr/).
+The core dependency rule is simple: **dependencies point inward**. Chromium, CEF, platform UI types, and hosted-service SDKs do not belong in the domain core.
 
-## Bootstrap stack
+See [`docs/architecture.md`](docs/architecture.md) for the detailed boundaries and invariants.
 
-### Openbrowser core
+## Technology
+
+### Core
 
 - **C++20**
 - **CMake 3.24+**
 - **CTest**
 
-C++ keeps the core close to the native Chromium/CEF boundary without requiring a mandatory FFI layer. CEF/Chromium types are still forbidden inside `src/core/`.
+### Desktop engine adapter
 
-### First browser engine
-
-The first desktop adapter is planned around **Chromium Embedded Framework (CEF)**. CEF provides the mature Chromium rendering/runtime surface while Openbrowser remains responsible for browser-session state, custom UI, policies, Focus Queue and configuration.
-
-The initial shell will prefer CEF's current Chromium/Chrome runtime and CEF Views where useful. If deeper privacy, process-model, networking, extension or fingerprinting requirements exceed the CEF API, the adapter boundary allows migration to a deeper Chromium integration.
-
-CMake remains the build system for the Openbrowser core. A future direct Chromium integration may use Chromium's native GN/Ninja toolchain behind the adapter boundary.
-
-See [`docs/adr/0002-license-and-bootstrap-stack.md`](docs/adr/0002-license-and-bootstrap-stack.md).
-
-## Repository layout
+The current desktop bootstrap is pinned to:
 
 ```text
-apps/desktop/                         desktop browser shell / CEF integration
-src/core/session/                     browser-session orchestration
-src/core/tabs/                        engine-independent tab domain
-src/core/focus_queue/                 intent/priority queue
-src/core/capabilities/                page and browser capability policy
-src/providers/                        replaceable local/remote provider interfaces
-src/engine/                           rendering-engine ports/adapters
-tests/fakes/                          deterministic engine test doubles
-tests/                                executable invariants and core tests
-docs/architecture.md                  system boundaries and data flow
-docs/threat-model.md                  initial security model
-docs/web-compatibility.md             future compatibility/regression system
-docs/developer-network-inspector.md   native developer network observability
-docs/adr/                             architecture decision records
-THIRD_PARTY.md                        dependency/license ledger
+CEF 151.3.17+gf059e67+chromium-151.0.7922.138
+Chromium 151.0.7922.138
 ```
 
-## Build the current core
+The exact pin is deliberate. Openbrowser does not build against `latest` or silently move Chromium versions underneath the project.
+
+CEF is not vendored into this repository. The ordinary core build remains network-independent.
+
+## Build and test the core
 
 Requirements:
 
@@ -217,94 +243,159 @@ Requirements:
 - a C++20 compiler
 
 ```bash
-cmake -S . -B build -DOPENBROWSER_BUILD_TESTS=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -S . -B build -DOPENBROWSER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --parallel
+ctest --test-dir build --build-config Release --output-on-failure
 ```
 
-Core CI runs on Linux, Windows and macOS.
+The default build does not need Chromium/CEF and does not download browser-engine binaries.
 
-## Initial milestones
+## Build the desktop CEF shell
 
-### M0 — Architecture bootstrap
+Obtain the **exact pinned CEF Standard Distribution** for your platform and extract it outside the repository. Then point `CEF_ROOT` at that directory:
 
-- [x] define local-first boundaries and invariants;
-- [x] executable core model for tabs, Focus Queue and capabilities;
-- [x] provider interfaces for replaceable services;
-- [x] cross-platform core CI;
-- [x] threat model and engine ADR;
-- [x] select MPL-2.0 and start third-party license tracking.
+```bash
+cmake -S . -B build-desktop \
+  -DOPENBROWSER_BUILD_DESKTOP=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCEF_ROOT=/absolute/path/to/cef_binary_151.3.17+gf059e67+chromium-151.0.7922.138_<platform>
 
-### M1 — Browser shell
+cmake --build build-desktop --target openbrowser --config Release --parallel
+```
 
-- [x] `BrowserSession` lifecycle/orchestration model;
-- [x] deterministic fake engine and session tests;
-- [ ] CEF adapter and basic navigation;
-- [ ] first desktop window and address bar;
-- [ ] horizontal + vertical tab projections;
-- [ ] session persistence and crash-recovery contract;
-- [ ] permission/capability enforcement at the engine boundary;
-- [ ] local configuration store.
+Configuration validates the CEF version and required distribution files before the desktop target is generated.
 
-### M2 — Focus and organization
+See [`docs/cef-bootstrap.md`](docs/cef-bootstrap.md) for the complete bootstrap and distribution rules.
 
-- Focus Queue UI and persistence;
-- multi-select enqueue;
-- workspaces;
-- tab suspension/resource hints;
-- command palette.
+### Runtime switches
 
-### M3 — Privacy core
+The desktop shell currently recognizes:
 
-- network/filter policy;
-- tracker/ad blocking;
-- storage and container isolation;
-- per-site capability controls;
-- browser-initiated network activity inspection.
+```text
+--url=<startup-url>
+--storage-dir=<path>
+--session-file=<path>
+--network-lab
+```
 
-### M4 — Portable configuration
+Without `--url`, the current pre-alpha startup URL is `https://example.com/`.
 
-- schema-versioned configuration format;
-- export/import with preview;
-- safe handling of secrets;
-- optional self-hosted synchronization adapters.
+## Platform status
 
-### M5 — Native transfers
+| Layer | Linux | Windows | macOS |
+| --- | --- | --- | --- |
+| Core build + tests | ✅ CI | ✅ CI | ✅ CI |
+| CEF desktop target | ✅ | ✅ | 🚧 not enabled yet |
+| Dedicated CEF smoke CI | ✅ Linux x64 | — | — |
 
-- unified transfer model;
-- HTTP(S) download broker;
-- isolated BitTorrent service;
-- magnet/torrent UI;
-- bandwidth, integrity and privacy controls.
+The desktop CEF target has Linux and Windows source/build paths. macOS desktop packaging/helper-process support is intentionally not declared yet, although the engine-independent core is tested on macOS.
 
-### M6 — Web compatibility engineering
+## Testing and CI
 
-- WPT runner integration;
-- pinned Chromium reference builds;
-- deterministic site scenario runner;
-- normalized differential observations;
-- rendering/reftest comparisons;
-- compatibility regression classification;
-- narrowly scoped compatibility profiles/mitigations.
+The current CMake configuration registers **34 CTest suites** spanning session invariants, navigation, permissions, workspaces, transfers, filtering, history/bookmarks, synchronization, compatibility, profiles, desktop-integration contracts, and M7 Network Lab diagnostics.
 
-### M7 — Developer Network Lab
+GitHub Actions currently runs:
 
-- native request/response trace model;
-- Network/CDP and CEF observation adapters;
-- waterfall and structured filters;
-- connection/TLS/protocol diagnostics;
-- privacy/filter decision explanation;
-- local `.obtrace` and HAR export;
-- optional isolated raw packet-capture helper as a later advanced capability.
+- **Core CI** on Linux, Windows, and macOS;
+- **CEF Desktop Smoke** on Linux x64 against the exact pinned CEF distribution;
+- strict compiler warnings (`/W4` on MSVC and `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion` on GCC/Clang-oriented builds).
 
-## Contributing and security
+The CEF smoke workflow downloads only the pinned artifact, verifies its repository checksum against upstream metadata, verifies the downloaded archive, and then builds the desktop target.
 
-This repository is intentionally strict about architectural boundaries. Changes that introduce undeclared browser egress, direct provider dependencies inside the core, silent persistence of sensitive state, unclassified compatibility divergences or unsafe trace capture should be treated as design regressions.
+## Repository layout
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md) and [`THIRD_PARTY.md`](THIRD_PARTY.md).
+```text
+apps/desktop/                 CEF Views desktop shell and Chromium adapter
+src/core/                     engine-independent browser domains
+  bookmarks/                  bookmarks model and search
+  capabilities/               deny-by-default capability policy
+  commands/                   action registry and command palette core
+  compatibility/              scenarios, mitigations, UA policy
+  filters/                    content filter and adblock parser
+  focus_queue/                Focus Queue and focus sprint logic
+  history/                    browsing-history model
+  navigation/                 address-input normalization
+  network/                    attribution, queries, decisions, waterfall
+  profiles/                   persistent/ephemeral profile models
+  session/                    BrowserSession, persistence, discard policy
+  sync/                       sync ports and local filesystem provider
+  tabs/                       tab domain types
+  transfers/                  transfer broker and safe file broker
+  workspaces/                 workspace model and management
+src/devtools/network/         network trace, connection diagnostics, obtrace
+src/engine/                   rendering-engine command/event contracts
+src/providers/                replaceable provider boundary
+cmake/                        CEF bootstrap integration
+tests/                        executable invariants and subsystem tests
+docs/                         architecture, security, compatibility and ADRs
+third_party/                  pinned third-party integrity metadata
+```
+
+## Known limitations
+
+Openbrowser is intentionally explicit about what is not complete yet:
+
+- it is pre-alpha and not suitable for sensitive browsing sessions;
+- no packaged stable release or daily-driver support contract exists yet;
+- the dedicated CEF smoke workflow currently validates Linux x64 only;
+- macOS desktop support is not enabled yet;
+- the experimental Private profile toggle is not yet full browser-wide CEF/storage isolation;
+- User-Agent and compatibility mitigation engines are not fully applied on the live CEF request path yet;
+- M7 connection/TLS models and views are not yet fully populated from live CEF connection telemetry;
+- live content blocking works, but full `FilterDecisionLog` request correlation still needs adapter wiring;
+- history and bookmarks are currently memory-resident in the desktop runtime;
+- `LocalFilesystemSyncProvider` exists in core but has no complete desktop sync workflow yet;
+- streaming `.obtrace` recording has a core implementation, while the desktop currently exposes batch export actions;
+- full WPT/reference-browser differential testing is not implemented yet;
+- BitTorrent/magnet transfers and optional raw packet capture are not implemented.
+
+## Security posture
+
+Openbrowser assumes web content is untrusted and treats security boundaries as architecture inputs rather than post-release cleanup.
+
+Key invariants include:
+
+- unknown capabilities deny by default;
+- renderer/CEF identifiers do not become browser-domain identities;
+- hosted services are not required for local source-of-truth state;
+- transfer destinations are brokered rather than granting unrestricted filesystem authority;
+- browser-owned egress must be attributable;
+- developer traces are local artifacts and sensitive headers are redacted by default;
+- site compatibility workarounds must be narrow and reviewable rather than globally weakening privacy policy.
+
+Openbrowser privacy controls are **not a claim of anonymity**.
+
+See [`SECURITY.md`](SECURITY.md) and [`docs/threat-model.md`](docs/threat-model.md).
+
+## Documentation
+
+- [`docs/implementation-progress.md`](docs/implementation-progress.md) — current milestone implementation state
+- [`docs/architecture.md`](docs/architecture.md) — dependency rules and system boundaries
+- [`docs/cef-bootstrap.md`](docs/cef-bootstrap.md) — exact CEF pin and desktop bootstrap
+- [`docs/threat-model.md`](docs/threat-model.md) — trust boundaries and abuse cases
+- [`docs/developer-network-inspector.md`](docs/developer-network-inspector.md) — Network Lab design
+- [`docs/web-compatibility.md`](docs/web-compatibility.md) — compatibility strategy
+- [`docs/adr/`](docs/adr/) — architecture decision records
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution and architecture rules
+- [`THIRD_PARTY.md`](THIRD_PARTY.md) — dependency/license ledger
+
+## Contributing
+
+Changes should preserve the engine/provider boundaries instead of taking shortcuts through CEF or hosted-service APIs.
+
+Before merging a material change, ask whether it:
+
+1. keeps Chromium/CEF/platform UI types out of `src/core/`;
+2. gives new browser-owned network behavior an explicit capability and observable reason;
+3. keeps local state correct without requiring a hosted service;
+4. avoids leaking renderer/provider identifiers into stable domain state;
+5. adds negative tests when security/privacy behavior changes;
+6. records material architecture changes in an ADR when appropriate.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
 Openbrowser-authored source code is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. See [`LICENSE`](LICENSE).
 
-Third-party components remain under their respective licenses and notices; see [`THIRD_PARTY.md`](THIRD_PARTY.md).
+CEF, Chromium, and other third-party components remain under their respective licenses and notice requirements. See [`THIRD_PARTY.md`](THIRD_PARTY.md).
