@@ -553,7 +553,10 @@ void CefBrowserEngine::NotifyBrowserBeforeClose(const core::TabId& tab_id) {
             --live_browser_count_;
         }
 
-        if (browser_host_ && surface->second.view) {
+        // Once the top-level CefWindow is destroyed its Views hierarchy must no
+        // longer be mutated. OnBeforeClose can arrive after OnWindowDestroyed on
+        // Windows, so only detach/layout while the window still owns the panel.
+        if (!window_destroyed_ && browser_host_ && surface->second.view) {
             browser_host_->RemoveChildView(surface->second.view);
         }
         surfaces_.erase(surface);
@@ -562,11 +565,14 @@ void CefBrowserEngine::NotifyBrowserBeforeClose(const core::TabId& tab_id) {
             active_tab_id_.reset();
         }
 
-        if (browser_host_) {
+        if (!window_destroyed_ && browser_host_) {
             browser_host_->Layout();
         }
     }
 
+    // CEF's lifecycle contract allows the app message loop to exit after the
+    // final OnBeforeClose callback. Do not wait for a second Views ordering
+    // condition once all browser objects are gone.
     MaybeQuitAfterClose();
 }
 
@@ -675,6 +681,11 @@ bool CefBrowserEngine::CanCloseWindow() {
 void CefBrowserEngine::NotifyWindowDestroyed() {
     CEF_REQUIRE_UI_THREAD();
     window_destroyed_ = true;
+
+    // The top-level Views hierarchy no longer exists after this callback. Drop
+    // the engine's panel reference so later OnBeforeClose callbacks cannot
+    // accidentally mutate a destroyed CefView tree.
+    browser_host_ = nullptr;
     MaybeQuitAfterClose();
 }
 
@@ -707,7 +718,7 @@ void CefBrowserEngine::HideActiveSurface() {
 }
 
 void CefBrowserEngine::MaybeQuitAfterClose() {
-    if (!window_close_requested_ || !window_destroyed_ || live_browser_count_ != 0 ||
+    if (!window_close_requested_ || live_browser_count_ != 0 ||
         message_loop_quit_requested_) {
         return;
     }
