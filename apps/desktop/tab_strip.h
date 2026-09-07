@@ -11,6 +11,7 @@
 
 namespace openbrowser::core {
 class BrowserSession;
+class WorkspaceManager;
 }
 
 class CefBoxLayout;
@@ -20,7 +21,9 @@ namespace openbrowser::desktop {
 
 class TabStrip final : public core::BrowserSessionObserver {
 public:
-    explicit TabStrip(core::BrowserSession& session);
+    explicit TabStrip(
+        core::BrowserSession& session,
+        core::WorkspaceManager* workspace_manager = nullptr);
     ~TabStrip() override;
 
     TabStrip(const TabStrip&) = delete;
@@ -35,6 +38,7 @@ private:
         Activate,
         Close,
         NewTab,
+        CycleWorkspace,
     };
 
     class TabActionDelegate;
@@ -43,6 +47,7 @@ private:
     void RebuildTabs();
 
     core::BrowserSession& session_;
+    core::WorkspaceManager* workspace_manager_{nullptr};
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
     std::size_t next_tab_index_{1};

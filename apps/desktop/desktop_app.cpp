@@ -130,6 +130,7 @@ void DesktopApp::OnContextInitialized() {
     browser_host_->SetToFillLayout();
 
     engine_ = new CefBrowserEngine(browser_host_);
+    engine_->SetStorageRoot(StorageDirectory());
 
     capability_policy_ = std::make_unique<core::CapabilityPolicy>(
         core::CapabilityPolicy::CreateDefault());
@@ -138,6 +139,7 @@ void DesktopApp::OnContextInitialized() {
     network_trace_ = std::make_unique<devtools::network::NetworkTraceBuffer>();
     engine_->SetNetworkObservationSink(network_trace_.get());
 
+    workspace_manager_ = std::make_unique<core::WorkspaceManager>();
     focus_queue_ = std::make_unique<core::FocusQueue>();
     session_ = std::make_unique<core::BrowserSession>(*engine_);
     session_file_path_ = SessionFilePath();
@@ -149,13 +151,14 @@ void DesktopApp::OnContextInitialized() {
     }
 
     if (!restored || session_->Tabs().empty()) {
-        const bool opened = session_->OpenTab({
-            .id = "initial",
-            .url = StartupUrl(),
-            .title = "New tab",
-            .lifecycle = core::TabLifecycle::Active,
-            .workspace_id = std::nullopt,
-        });
+        core::Tab initial_tab;
+        initial_tab.id = "initial";
+        initial_tab.url = StartupUrl();
+        initial_tab.title = "New tab";
+        initial_tab.lifecycle = core::TabLifecycle::Active;
+        initial_tab.workspace_id = std::nullopt;
+
+        const bool opened = session_->OpenTab(std::move(initial_tab));
 
         if (!opened) {
             engine_->BeginWindowClose();
@@ -164,7 +167,7 @@ void DesktopApp::OnContextInitialized() {
         }
     }
 
-    tab_strip_ = std::make_unique<TabStrip>(*session_);
+    tab_strip_ = std::make_unique<TabStrip>(*session_, workspace_manager_.get());
     chrome_ = std::make_unique<BrowserChrome>(*session_, engine_, [this]() {
         ToggleNetworkLab();
     });
@@ -208,6 +211,7 @@ void DesktopApp::ShutdownRuntime() {
     tab_strip_.reset();
     session_.reset();
     focus_queue_.reset();
+    workspace_manager_.reset();
     network_trace_.reset();
     capability_policy_.reset();
     engine_ = nullptr;
@@ -224,6 +228,18 @@ void DesktopApp::ToggleNetworkLab() {
     if (network_lab_panel_) {
         network_lab_panel_->ToggleVisibility();
     }
+}
+
+std::filesystem::path DesktopApp::StorageDirectory() const {
+    CefRefPtr<CefCommandLine> command_line = CefCommandLine::GetGlobalCommandLine();
+    if (command_line && command_line->HasSwitch("storage-dir")) {
+        const auto configured = command_line->GetSwitchValue("storage-dir").ToString();
+        if (!configured.empty()) {
+            return configured;
+        }
+    }
+
+    return "openbrowser_storage";
 }
 
 std::filesystem::path DesktopApp::SessionFilePath() const {
