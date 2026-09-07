@@ -453,7 +453,7 @@ void CefBrowserEngine::RegisterMediaAccessPrompt(
     const uint64_t prompt_id = ++next_media_prompt_id_;
 
     core::PermissionPrompt prompt_info{
-        .prompt_id = std::move(tab_id),
+        .prompt_id = prompt_id,
         .tab_id = std::move(tab_id),
         .origin = std::move(origin),
         .capabilities = std::move(capabilities),
