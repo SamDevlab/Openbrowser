@@ -52,7 +52,7 @@ TabStrip::TabStrip(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 1;
-    settings.between_child_spacing = 4;
+    settings.between_child_spacing = 3;
     settings.inside_border_horizontal_spacing = 8;
     settings.inside_border_vertical_spacing = 4;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
@@ -243,6 +243,9 @@ void TabStrip::RebuildTabs() {
         const std::string title_text = tab.title.empty() ? tab.url : tab.title;
 
         std::string prefix;
+        if (is_active) {
+            prefix += "● ";
+        }
         if (is_discarded) {
             prefix += "💤 ";
         }
@@ -252,18 +255,9 @@ void TabStrip::RebuildTabs() {
             prefix += "⚠ ";
         }
 
-        std::string label;
-        if (is_active) {
-            label = "[ " + prefix + title_text + " ]";
-        } else {
-            label = prefix + title_text;
-        }
-
-        if (label.size() > 28) {
-            label = label.substr(0, 25) + "...";
-            if (is_active) {
-                label += " ]";
-            }
+        std::string label = prefix + title_text;
+        if (label.size() > 30) {
+            label = label.substr(0, 27) + "...";
         }
 
         auto activate_delegate = CefRefPtr<CefButtonDelegate>(
@@ -276,7 +270,7 @@ void TabStrip::RebuildTabs() {
         auto close_delegate = CefRefPtr<CefButtonDelegate>(
             new TabActionDelegate(*this, TabAction::Close, tab.id));
         delegates_.push_back(close_delegate);
-        auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "x");
+        auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "×");
         panel_->AddChildView(close_btn);
         layout_->SetFlexForView(close_btn, 0);
     }
