@@ -43,11 +43,11 @@ bool HasCommandLineToken(const wchar_t* token) {
     return command_line != nullptr && wcsstr(command_line, token) != nullptr;
 }
 
-bool HasLpacRuntimeAcl(const std::wstring& runtime_directory) {
+bool HasLpacAccess(const std::wstring& path, bool require_inheritance) {
     PSECURITY_DESCRIPTOR descriptor = nullptr;
     PACL dacl = nullptr;
     const DWORD security_result = GetNamedSecurityInfoW(
-        runtime_directory.c_str(),
+        path.c_str(),
         SE_FILE_OBJECT,
         DACL_SECURITY_INFORMATION,
         nullptr,
@@ -89,7 +89,7 @@ bool HasLpacRuntimeAcl(const std::wstring& runtime_directory) {
         const bool has_access = (ace->Mask & kLpacAccess) == kLpacAccess;
         const bool has_inheritance =
             (header->AceFlags & kLpacInheritance) == kLpacInheritance;
-        if (has_access && has_inheritance) {
+        if (has_access && (!require_inheritance || has_inheritance)) {
             found = true;
             break;
         }
@@ -100,8 +100,23 @@ bool HasLpacRuntimeAcl(const std::wstring& runtime_directory) {
     return found;
 }
 
+bool VerifyLpacRuntime(const std::wstring& runtime_directory) {
+    if (!HasLpacAccess(runtime_directory, true)) {
+        return false;
+    }
+
+    const std::wstring libcef = runtime_directory + L"\\libcef.dll";
+    const DWORD attributes = GetFileAttributesW(libcef.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES ||
+        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+        return false;
+    }
+
+    return HasLpacAccess(libcef, false);
+}
+
 bool ApplyLpacRuntimeAcl(const std::wstring& runtime_directory) {
-    if (HasLpacRuntimeAcl(runtime_directory)) {
+    if (VerifyLpacRuntime(runtime_directory)) {
         return true;
     }
 
@@ -153,7 +168,7 @@ bool ApplyLpacRuntimeAcl(const std::wstring& runtime_directory) {
     CloseHandle(process_info.hThread);
     CloseHandle(process_info.hProcess);
     return wait_result == WAIT_OBJECT_0 && exit_code == ERROR_SUCCESS &&
-           HasLpacRuntimeAcl(runtime_directory);
+           VerifyLpacRuntime(runtime_directory);
 }
 
 bool IsPrimaryBrowserProcess() {
@@ -194,8 +209,9 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
         }
 
         // Packaging CI uses this diagnostic-only switch to prove that the
-        // extracted bootstrap + DLL can establish the sandbox prerequisite
-        // without conflating that check with GUI/GPU availability on the runner.
+        // extracted bootstrap + DLL establishes both the directory LPAC grant
+        // and propagated access on libcef.dll without depending on PowerShell
+        // identity-name translation.
         if (HasCommandLineToken(kSandboxPrerequisiteCheck)) {
             return 0;
         }
