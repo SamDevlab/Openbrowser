@@ -502,7 +502,7 @@ void DesktopApp::ToggleProfile() {
                 }
             }
             for (const auto& tid : ephemeral_tab_ids) {
-                session_->CloseTab(tid);
+                static_cast<void>(session_->CloseTab(tid));
             }
             if (session_->Tabs().empty()) {
                 static std::size_t s_def_counter = 0;
@@ -512,9 +512,9 @@ void DesktopApp::ToggleProfile() {
                 def_tab.title = "New Tab";
                 def_tab.lifecycle = core::TabLifecycle::Active;
                 def_tab.is_ephemeral = false;
-                session_->OpenTab(std::move(def_tab), true);
+                static_cast<void>(session_->OpenTab(std::move(def_tab), true));
             } else if (!session_->ActiveTabId().has_value() || session_->FindTab(*session_->ActiveTabId()) == nullptr) {
-                session_->ActivateTab(session_->Tabs().front().id);
+                static_cast<void>(session_->ActivateTab(session_->Tabs().front().id));
             }
         }
 
@@ -549,7 +549,7 @@ void DesktopApp::ToggleProfile() {
                 priv_tab.title = "Private Tab";
                 priv_tab.lifecycle = core::TabLifecycle::Active;
                 priv_tab.is_ephemeral = true;
-                session_->OpenTab(std::move(priv_tab), true);
+                static_cast<void>(session_->OpenTab(std::move(priv_tab), true));
             }
             if (chrome_) {
                 chrome_->SetProfileLabel("[🕶 Private]");
