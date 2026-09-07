@@ -5,6 +5,7 @@
 #include "include/cef_client.h"
 #include "include/cef_display_handler.h"
 #include "include/cef_download_handler.h"
+#include "include/cef_keyboard_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_permission_handler.h"
@@ -22,6 +23,7 @@ class CefBrowserEngine;
 class CefTabClient final : public CefClient,
                            public CefDisplayHandler,
                            public CefDownloadHandler,
+                           public CefKeyboardHandler,
                            public CefLifeSpanHandler,
                            public CefLoadHandler,
                            public CefPermissionHandler,
@@ -35,10 +37,17 @@ public:
 
     CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
     CefRefPtr<CefDownloadHandler> GetDownloadHandler() override;
+    CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override;
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
     CefRefPtr<CefLoadHandler> GetLoadHandler() override;
     CefRefPtr<CefPermissionHandler> GetPermissionHandler() override;
     CefRefPtr<CefRequestHandler> GetRequestHandler() override;
+
+    bool OnPreKeyEvent(
+        CefRefPtr<CefBrowser> browser,
+        const CefKeyEvent& event,
+        CefEventHandle os_event,
+        bool* is_keyboard_shortcut) override;
 
     bool CanDownload(
         CefRefPtr<CefBrowser> browser,

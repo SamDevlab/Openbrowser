@@ -48,6 +48,10 @@ public:
 
     [[nodiscard]] bool ActivateTab(const TabId& tab_id);
 
+    [[nodiscard]] bool CloseTab(const TabId& tab_id);
+    [[nodiscard]] bool CloseActiveTab();
+    [[nodiscard]] std::optional<TabId> ReopenClosedTab();
+
     [[nodiscard]] bool EnterPrivateMode();
     void ExitPrivateMode();
 

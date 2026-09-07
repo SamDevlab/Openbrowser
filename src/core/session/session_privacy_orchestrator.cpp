@@ -50,6 +50,63 @@ bool SessionPrivacyOrchestrator::ActivateTab(const TabId& tab_id) {
     return session_.ActivateTab(tab_id);
 }
 
+bool SessionPrivacyOrchestrator::CloseActiveTab() {
+    const auto& active_id = session_.ActiveTabId();
+    if (!active_id.has_value()) {
+        return false;
+    }
+    return CloseTab(*active_id);
+}
+
+bool SessionPrivacyOrchestrator::CloseTab(const TabId& tab_id) {
+    if (!IsPrivateModeActive()) {
+        return session_.CloseTab(tab_id);
+    }
+
+    const auto* tab = session_.FindTab(tab_id);
+    if (!tab || !tab->is_ephemeral) {
+        return false;
+    }
+
+    const bool was_active = (session_.ActiveTabId().has_value() && *session_.ActiveTabId() == tab_id);
+
+    // 1. Close ephemeral tab using DoNotActivateFallback so no persistent tab is auto-activated
+    if (!session_.CloseTab(tab_id, CloseActivationPolicy::DoNotActivateFallback)) {
+        return false;
+    }
+
+    // 2. If the closed tab was active, look for another ephemeral tab to activate
+    if (was_active) {
+        std::optional<TabId> next_ephemeral_id;
+        for (const auto& t : session_.Tabs()) {
+            if (t.is_ephemeral) {
+                next_ephemeral_id = t.id;
+                break;
+            }
+        }
+
+        if (next_ephemeral_id.has_value()) {
+            static_cast<void>(session_.ActivateTab(*next_ephemeral_id));
+        } else {
+            // 3. If no ephemeral tab remains, create a new Private Tab
+            Tab priv_tab;
+            priv_tab.id = "private-tab-" + std::to_string(++ephemeral_tab_counter_);
+            priv_tab.url = "https://example.com/";
+            priv_tab.title = "Private Tab";
+            priv_tab.lifecycle = TabLifecycle::Active;
+            priv_tab.is_ephemeral = true;
+            static_cast<void>(session_.OpenTab(std::move(priv_tab), true));
+        }
+    }
+
+    return true;
+}
+
+std::optional<TabId> SessionPrivacyOrchestrator::ReopenClosedTab() {
+    const auto mode = IsPrivateModeActive() ? ClosedTabMode::EphemeralOnly : ClosedTabMode::PersistentOnly;
+    return session_.ReopenLastClosedTab(mode);
+}
+
 bool SessionPrivacyOrchestrator::EnterPrivateMode() {
     auto eph = profile_manager_.CreateEphemeralProfile("Private Session");
     if (!eph) {
@@ -102,6 +159,7 @@ void SessionPrivacyOrchestrator::ExitPrivateMode() {
     // 4. Restore persistent profile
     profile_manager_.SetActiveProfile("default");
     profile_manager_.PurgeEphemeralProfiles();
+    session_.PurgeEphemeralClosedTabs();
 
     // 5. Notify callback (e.g. obtrace recorder restored)
     if (on_private_mode_changed_) {

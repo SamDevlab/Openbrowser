@@ -410,13 +410,13 @@ bool BrowserChrome::HandleAddressKeyEvent(
     if (event.windows_key_code == 13) {
         if (event.type == KEYEVENT_RAWKEYDOWN || event.type == KEYEVENT_KEYDOWN) {
             const auto text = textfield->GetText().ToString();
-            const auto normalized = core::navigation::NormalizeAddressInput(text);
+            const auto resolved = core::navigation::ResolveAddressInput(text);
             address_editing_ = false;
 
-            if (normalized.has_value()) {
+            if (resolved.has_value()) {
                 const auto& active_id = session_.ActiveTabId();
                 if (active_id.has_value()) {
-                    static_cast<void>(session_.Navigate(*active_id, *normalized));
+                    static_cast<void>(session_.Navigate(*active_id, *resolved));
                 }
             } else {
                 SyncAddressFromSession(session_);
@@ -454,6 +454,14 @@ void BrowserChrome::HandleAddressBlur() {
     SyncAddressFromSession(session_);
 }
 
+void BrowserChrome::FocusAddressBar() {
+    CEF_REQUIRE_UI_THREAD();
+    if (address_bar_) {
+        address_bar_->RequestFocus();
+        address_bar_->SelectAll(false);
+    }
+}
+
 void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) {
     CEF_REQUIRE_UI_THREAD();
     if (!address_bar_ || address_editing_) {
@@ -465,6 +473,9 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
         address_bar_->SetText("");
         current_origin_.clear();
         security_badge_->SetText("[ 🌐 Web ]");
+        if (reload_button_) {
+            reload_button_->SetText("Reload");
+        }
         UpdateSecurityDetails();
         return;
     }
@@ -474,8 +485,16 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
         address_bar_->SetText("");
         current_origin_.clear();
         security_badge_->SetText("[ 🌐 Web ]");
+        if (reload_button_) {
+            reload_button_->SetText("Reload");
+        }
         UpdateSecurityDetails();
         return;
+    }
+
+    const bool is_loading = (tab->navigation_state == core::NavigationState::Loading);
+    if (reload_button_) {
+        reload_button_->SetText(is_loading ? "[ ⏳ ]" : "Reload");
     }
 
     const std::string& display_url = tab->pending_url.has_value() ? *tab->pending_url : tab->url;

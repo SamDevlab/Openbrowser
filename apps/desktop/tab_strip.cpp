@@ -88,7 +88,11 @@ void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id
             break;
         case TabAction::Close:
             if (!tab_id.empty()) {
-                static_cast<void>(session_.CloseTab(tab_id));
+                if (privacy_orchestrator_ != nullptr) {
+                    static_cast<void>(privacy_orchestrator_->CloseTab(tab_id));
+                } else {
+                    static_cast<void>(session_.CloseTab(tab_id));
+                }
             }
             break;
         case TabAction::CycleWorkspace:
@@ -151,6 +155,11 @@ void TabStrip::RebuildTabs() {
         std::string prefix;
         if (is_discarded) {
             prefix += "💤 ";
+        }
+        if (tab.navigation_state == core::NavigationState::Loading) {
+            prefix += "⏳ ";
+        } else if (tab.navigation_state == core::NavigationState::Failed) {
+            prefix += "⚠ ";
         }
         if (tab.workspace_id.has_value() && !tab.workspace_id->empty() && *tab.workspace_id != "default") {
             prefix += "[" + *tab.workspace_id + "] ";

@@ -9,6 +9,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include <filesystem>
+#include <functional>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -34,6 +35,24 @@ private:
     IMPLEMENT_REFCOUNTING(NetworkEventTask);
 };
 
+class ActionTask final : public CefTask {
+public:
+    ActionTask(
+        CefRefPtr<CefBrowserEngine> engine,
+        std::string action_id)
+        : engine_(std::move(engine)), action_id_(std::move(action_id)) {}
+
+    void Execute() override {
+        engine_->PostAction(action_id_);
+    }
+
+private:
+    CefRefPtr<CefBrowserEngine> engine_;
+    std::string action_id_;
+
+    IMPLEMENT_REFCOUNTING(ActionTask);
+};
+
 }  // namespace
 
 CefBrowserEngine::CefBrowserEngine(CefRefPtr<CefPanel> browser_host)
@@ -41,6 +60,21 @@ CefBrowserEngine::CefBrowserEngine(CefRefPtr<CefPanel> browser_host)
 
 void CefBrowserEngine::SetEventSink(engine::BrowserEngineEventSink* sink) noexcept {
     event_sink_ = sink;
+}
+
+void CefBrowserEngine::SetActionDispatcher(std::function<void(const std::string&)> dispatcher) {
+    action_dispatcher_ = std::move(dispatcher);
+}
+
+void CefBrowserEngine::PostAction(const std::string& action_id) {
+    if (!action_dispatcher_) {
+        return;
+    }
+    if (CefCurrentlyOn(TID_UI)) {
+        action_dispatcher_(action_id);
+        return;
+    }
+    CefPostTask(TID_UI, new ActionTask(this, action_id));
 }
 
 void CefBrowserEngine::SetStorageRoot(std::filesystem::path root) {

@@ -69,6 +69,10 @@ private:
     void ToggleLiveTraceRecording();
     void ExportNetworkHar();      // M7.4
     void ExportNetworkObtrace(); // M7.4
+    void OpenNewTab();
+    void CloseActiveTab();
+    void ReopenClosedTab();
+    void CycleTab(bool forward);
 
     CefRefPtr<CefPanel> browser_host_;
     CefRefPtr<CefBrowserEngine> engine_;
@@ -101,6 +105,7 @@ private:
     std::unique_ptr<core::SessionHistoryBridge> session_history_bridge_;
     std::unique_ptr<core::SessionPrivacyOrchestrator> privacy_orchestrator_;
     std::filesystem::path session_file_path_;
+    std::size_t next_tab_index_{1};
 
     IMPLEMENT_REFCOUNTING(DesktopApp);
 };
