@@ -188,6 +188,33 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Set-StrictMode -Version Latest
 
+          function Find-LpacRule {
+            param(
+              [Parameter(Mandatory = $true)][string]$Path,
+              [switch]$RequireInheritance
+            )
+
+            $lpacSid = 'S-1-15-2-2'
+            $rules = (Get-Acl -LiteralPath $Path).Access | Where-Object {
+              try {
+                $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -eq $lpacSid
+              } catch {
+                $false
+              }
+            } | Where-Object {
+              ($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::ReadAndExecute) -ne 0
+            }
+
+            if ($RequireInheritance) {
+              $rules = $rules | Where-Object {
+                ($_.InheritanceFlags -band [System.Security.AccessControl.InheritanceFlags]::ObjectInherit) -ne 0 -and
+                ($_.InheritanceFlags -band [System.Security.AccessControl.InheritanceFlags]::ContainerInherit) -ne 0
+              }
+            }
+
+            return $rules | Select-Object -First 1
+          }
+
           $packageName = "Openbrowser-${env:PACKAGE_VERSION}-windows-x64"
           $zipPath = Join-Path $PWD "artifacts/$packageName.zip"
           $verifyDir = Join-Path $env:RUNNER_TEMP "openbrowser-package-smoke-$([guid]::NewGuid().ToString('N'))"
@@ -232,38 +259,64 @@ jobs:
             throw "Portable ZIP SHA-256 mismatch. Expected=$expected Actual=$actual"
           }
 
+          $exe = Join-Path $root 'openbrowser.exe'
+          $env:OPENBROWSER_NONINTERACTIVE = '1'
+
+          # First isolate the portable-distribution security prerequisite from
+          # CEF Views/GPU startup. This goes through the final bootstrap EXE and
+          # Openbrowser DLL but exits immediately after LPAC preparation.
+          $prereq = Start-Process `
+            -FilePath $exe `
+            -ArgumentList '--openbrowser-sandbox-prereq-check' `
+            -WorkingDirectory $root `
+            -PassThru `
+            -Wait
+          if ($prereq.ExitCode -ne 0) {
+            & icacls.exe $root
+            throw "Sandbox prerequisite probe failed with code $($prereq.ExitCode)."
+          }
+
+          $rootRule = Find-LpacRule -Path $root -RequireInheritance
+          if ($null -eq $rootRule) {
+            & icacls.exe $root
+            throw 'Extracted runtime did not establish the required inheritable LPAC ACL.'
+          }
+
+          # Verify the grant propagated to an already-extracted runtime binary,
+          # not only to the parent directory.
+          $libcef = Join-Path $root 'libcef.dll'
+          $fileRule = Find-LpacRule -Path $libcef
+          if ($null -eq $fileRule) {
+            & icacls.exe $libcef
+            throw 'LPAC read/execute access did not propagate to libcef.dll.'
+          }
+
           $smokeStorage = Join-Path $env:RUNNER_TEMP "openbrowser-smoke-state-$([guid]::NewGuid().ToString('N'))"
           New-Item -ItemType Directory -Force -Path $smokeStorage | Out-Null
           $sessionFile = Join-Path $smokeStorage 'session.json'
-          $exe = Join-Path $root 'openbrowser.exe'
           $arguments = @(
             '--url=https://example.com',
+            '--disable-gpu',
             "--storage-dir=$smokeStorage",
             "--session-file=$sessionFile"
           )
 
-          $process = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru
+          $process = Start-Process `
+            -FilePath $exe `
+            -ArgumentList $arguments `
+            -WorkingDirectory $root `
+            -PassThru
           try {
             Start-Sleep -Seconds 10
             if ($process.HasExited) {
-              throw "Extracted Openbrowser exited during startup smoke with code $($process.ExitCode)."
-            }
-
-            $lpacSid = 'S-1-15-2-2'
-            $acl = Get-Acl -LiteralPath $root
-            $lpacRule = $acl.Access | Where-Object {
-              try {
-                $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -eq $lpacSid
-              } catch {
-                $false
+              Write-Host 'Runtime ACL at failure:'
+              & icacls.exe $root
+              $debugLog = Join-Path $root 'debug.log'
+              if (Test-Path -LiteralPath $debugLog -PathType Leaf) {
+                Write-Host 'CEF debug.log:'
+                Get-Content -LiteralPath $debugLog -Tail 200
               }
-            } | Where-Object {
-              ($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::ReadAndExecute) -ne 0 -and
-              ($_.InheritanceFlags -band [System.Security.AccessControl.InheritanceFlags]::ObjectInherit) -ne 0 -and
-              ($_.InheritanceFlags -band [System.Security.AccessControl.InheritanceFlags]::ContainerInherit) -ne 0
-            } | Select-Object -First 1
-            if ($null -eq $lpacRule) {
-              throw 'Extracted runtime did not establish the required LPAC read/execute ACL.'
+              throw "Extracted Openbrowser exited during startup smoke with code $($process.ExitCode)."
             }
 
             $networkService = Get-CimInstance Win32_Process | Where-Object {
@@ -279,6 +332,7 @@ jobs:
             if (-not $process.HasExited) {
               & taskkill.exe /PID $process.Id /T /F | Out-Null
             }
+            Remove-Item Env:OPENBROWSER_NONINTERACTIVE -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $smokeStorage -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $verifyDir -ErrorAction SilentlyContinue
           }
