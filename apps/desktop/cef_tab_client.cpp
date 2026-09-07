@@ -47,10 +47,28 @@ EndpointInfo ParseEndpoint(const std::string_view url) {
     const auto colon_pos = host_port_view.rfind(':');
     if (colon_pos != std::string_view::npos) {
         info.host = std::string(host_port_view.substr(0, colon_pos));
-        try {
-            info.port = static_cast<std::uint16_t>(
-                std::stoul(std::string(host_port_view.substr(colon_pos + 1))));
-        } catch (...) {
+        std::uint32_t parsed_port = 0;
+        bool valid = true;
+        const auto port_str = host_port_view.substr(colon_pos + 1);
+        if (port_str.empty()) {
+            valid = false;
+        } else {
+            for (const char c : port_str) {
+                if (c >= '0' && c <= '9') {
+                    parsed_port = parsed_port * 10 + static_cast<std::uint32_t>(c - '0');
+                    if (parsed_port > 65535) {
+                        valid = false;
+                        break;
+                    }
+                } else {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+        if (valid && parsed_port > 0) {
+            info.port = static_cast<std::uint16_t>(parsed_port);
+        } else {
             info.port = (info.scheme == "https" ? 443 : 80);
         }
     } else {
