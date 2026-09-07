@@ -120,6 +120,72 @@ function Write-ShutdownDiagnostics {
     }
 }
 
+function Export-ProductSmokeDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DiagnosticsRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RuntimeRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$StateRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ServerOut,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ServerErr,
+
+        [System.Diagnostics.Process]$Browser,
+        [System.Diagnostics.Process]$RestoredBrowser
+    )
+
+    Remove-Item -Recurse -Force $DiagnosticsRoot -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $DiagnosticsRoot | Out-Null
+
+    foreach ($name in @('session.json', 'history.json', 'bookmarks.json', 'workspaces.json', 'settings.json')) {
+        $source = Join-Path $StateRoot $name
+        if (Test-Path -LiteralPath $source -PathType Leaf) {
+            Copy-Item -LiteralPath $source -Destination (Join-Path $DiagnosticsRoot $name) -Force
+        }
+    }
+
+    foreach ($candidate in @(
+        @{ Source = $ServerOut; Name = 'http.stdout.log' },
+        @{ Source = $ServerErr; Name = 'http.stderr.log' },
+        @{ Source = (Join-Path $RuntimeRoot 'debug.log'); Name = 'debug.log' },
+        @{ Source = (Join-Path $StateRoot 'debug.log'); Name = 'state-debug.log' },
+        @{ Source = (Join-Path $StateRoot 'default/debug.log'); Name = 'default-debug.log' }
+    )) {
+        if (Test-Path -LiteralPath $candidate.Source -PathType Leaf) {
+            Copy-Item -LiteralPath $candidate.Source -Destination (Join-Path $DiagnosticsRoot $candidate.Name) -Force
+        }
+    }
+
+    $trace = @(
+        "captured_utc=$([DateTime]::UtcNow.ToString('O'))",
+        "runtime_root=$RuntimeRoot",
+        "state_root=$StateRoot",
+        "browser_present=$($null -ne $Browser)",
+        "browser_exited=$($null -ne $Browser -and $Browser.HasExited)",
+        "restored_browser_present=$($null -ne $RestoredBrowser)",
+        "restored_browser_exited=$($null -ne $RestoredBrowser -and $RestoredBrowser.HasExited)"
+    )
+    Set-Content -LiteralPath (Join-Path $DiagnosticsRoot 'shutdown-trace.log') -Encoding UTF8 -Value $trace
+
+    try {
+        $since = (Get-Date).AddMinutes(-5)
+        Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $since } -ErrorAction Stop |
+            Where-Object { $_.Message -match 'openbrowser|libcef|chrome_elf' } |
+            Select-Object -First 20 TimeCreated, Id, ProviderName, LevelDisplayName, Message |
+            Format-List |
+            Out-File -LiteralPath (Join-Path $DiagnosticsRoot 'windows-event-log.txt') -Encoding utf8
+    } catch {
+        Set-Content -LiteralPath (Join-Path $DiagnosticsRoot 'windows-event-log.txt') -Encoding UTF8 -Value "Unavailable: $($_.Exception.Message)"
+    }
+}
+
 function Start-Browser {
     param(
         [Parameter(Mandatory = $true)]
@@ -163,6 +229,7 @@ $stateRoot = Join-Path $runRoot 'state'
 $siteRoot = Join-Path $runRoot 'site'
 $serverOut = Join-Path $runRoot 'http.stdout.log'
 $serverErr = Join-Path $runRoot 'http.stderr.log'
+$diagnosticsRoot = Join-Path $PWD 'product-smoke-diagnostics'
 
 New-Item -ItemType Directory -Force -Path $extractRoot, $stateRoot, $siteRoot | Out-Null
 Set-Content -LiteralPath (Join-Path $siteRoot 'smoke.html') -Encoding UTF8 -Value @'
@@ -327,6 +394,15 @@ try {
     Write-Host "  Clean shutdown x2: verified"
     Write-Host "  ZIP SHA-256: $actualSha"
 } finally {
+    Export-ProductSmokeDiagnostics `
+        -DiagnosticsRoot $diagnosticsRoot `
+        -RuntimeRoot $runtimeRoot `
+        -StateRoot $stateRoot `
+        -ServerOut $serverOut `
+        -ServerErr $serverErr `
+        -Browser $browser `
+        -RestoredBrowser $restoredBrowser
+
     foreach ($candidate in @($browser, $restoredBrowser)) {
         if ($null -ne $candidate -and -not $candidate.HasExited) {
             & taskkill.exe /PID $candidate.Id /T /F | Out-Null
