@@ -5,6 +5,7 @@
 #include "core/tabs/tab.h"
 #include "engine/browser_engine.h"
 
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>

@@ -6,6 +6,7 @@
 #include "engine/browser_engine_events.h"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>

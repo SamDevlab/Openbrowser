@@ -77,25 +77,6 @@ bool IsLoopbackAddress(const std::string_view value) {
     return value.starts_with("[::1]");
 }
 
-std::string UrlEncode(const std::string_view value) {
-    std::string encoded;
-    encoded.reserve(value.size() * 3 / 2);
-    static const char hex_chars[] = "0123456789ABCDEF";
-
-    for (const unsigned char c : value) {
-        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-            encoded.push_back(static_cast<char>(c));
-        } else if (c == ' ') {
-            encoded.push_back('+');
-        } else {
-            encoded.push_back('%');
-            encoded.push_back(hex_chars[(c >> 4) & 0x0F]);
-            encoded.push_back(hex_chars[c & 0x0F]);
-        }
-    }
-    return encoded;
-}
-
 bool LooksLikeHostOrDomain(const std::string_view value) {
     const std::size_t host_end = value.find_first_of("/?#:");
     const std::string_view host = (host_end == std::string_view::npos) ? value : value.substr(0, host_end);
@@ -122,6 +103,26 @@ bool LooksLikeHostOrDomain(const std::string_view value) {
 }
 
 }  // namespace
+
+std::string UrlEncode(const std::string_view value) {
+    std::string encoded;
+    encoded.reserve(value.size() * 3 / 2);
+    static const char hex_chars[] = "0123456789ABCDEF";
+
+    for (const char ch : value) {
+        const auto c = static_cast<unsigned char>(ch);
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded.push_back(ch);
+        } else if (c == ' ') {
+            encoded.push_back('+');
+        } else {
+            encoded.push_back('%');
+            encoded.push_back(hex_chars[(c >> 4) & 0x0F]);
+            encoded.push_back(hex_chars[c & 0x0F]);
+        }
+    }
+    return encoded;
+}
 
 std::optional<std::string> NormalizeAddressInput(std::string input) {
     TrimAsciiWhitespace(input);
