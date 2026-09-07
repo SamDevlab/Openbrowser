@@ -13,6 +13,12 @@ std::int64_t NowEpochMs() noexcept {
     return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
 }
 
+bool IsTerminalState(const TransferState state) noexcept {
+    return state == TransferState::Completed ||
+        state == TransferState::Failed ||
+        state == TransferState::Cancelled;
+}
+
 }  // namespace
 
 void TransferBroker::AddObserver(TransferObserver* observer) {
@@ -35,23 +41,30 @@ void TransferBroker::RemoveObserver(TransferObserver* observer) noexcept {
 }
 
 bool TransferBroker::RegisterTransfer(TransferItem item) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (item.id.empty() || transfers_.find(item.id) != transfers_.end()) {
-        return false;
+    TransferItem snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (item.id.empty() || transfers_.find(item.id) != transfers_.end()) {
+            return false;
+        }
+
+        if (item.start_time_ms <= 0) {
+            item.start_time_ms = NowEpochMs();
+        }
+        item.received_bytes = std::max<std::int64_t>(0, item.received_bytes);
+        item.total_bytes = std::max<std::int64_t>(0, item.total_bytes);
+        item.speed_bytes_per_sec = std::max<std::int64_t>(0, item.speed_bytes_per_sec);
+        item.state = TransferState::InProgress;
+
+        const auto id = item.id;
+        const auto [it, inserted] = transfers_.emplace(id, std::move(item));
+        if (!inserted) {
+            return false;
+        }
+        snapshot = it->second;
     }
 
-    if (item.start_time_ms <= 0) {
-        item.start_time_ms = NowEpochMs();
-    }
-    item.state = TransferState::InProgress;
-
-    const auto id = item.id;
-    const auto [it, inserted] = transfers_.emplace(id, std::move(item));
-    if (!inserted) {
-        return false;
-    }
-
-    NotifyStarted(it->second);
+    NotifyStarted(snapshot);
     return true;
 }
 
@@ -60,98 +73,120 @@ bool TransferBroker::UpdateProgress(
     const std::int64_t received_bytes,
     const std::int64_t total_bytes,
     const std::int64_t current_speed) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto it = transfers_.find(id);
-    if (it == transfers_.end()) {
-        return false;
+    TransferItem snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it = transfers_.find(id);
+        if (it == transfers_.end() || IsTerminalState(it->second.state)) {
+            return false;
+        }
+
+        it->second.received_bytes = std::max<std::int64_t>(0, received_bytes);
+        it->second.total_bytes = std::max<std::int64_t>(0, total_bytes);
+        it->second.speed_bytes_per_sec = std::max<std::int64_t>(0, current_speed);
+        if (it->second.state != TransferState::Paused) {
+            it->second.state = TransferState::InProgress;
+        }
+        snapshot = it->second;
     }
 
-    if (it->second.state != TransferState::InProgress && it->second.state != TransferState::Queued) {
-        return false;
-    }
-
-    it->second.received_bytes = received_bytes;
-    it->second.total_bytes = total_bytes;
-    it->second.speed_bytes_per_sec = current_speed;
-    it->second.state = TransferState::InProgress;
-
-    NotifyUpdated(it->second);
+    NotifyUpdated(snapshot);
     return true;
 }
 
 bool TransferBroker::CompleteTransfer(const TransferId& id) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto it = transfers_.find(id);
-    if (it == transfers_.end()) {
-        return false;
+    TransferItem snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it = transfers_.find(id);
+        if (it == transfers_.end() || IsTerminalState(it->second.state)) {
+            return false;
+        }
+
+        it->second.state = TransferState::Completed;
+        it->second.end_time_ms = NowEpochMs();
+        it->second.speed_bytes_per_sec = 0;
+        if (it->second.total_bytes > 0) {
+            it->second.received_bytes = it->second.total_bytes;
+        }
+        snapshot = it->second;
     }
 
-    it->second.state = TransferState::Completed;
-    it->second.end_time_ms = NowEpochMs();
-    it->second.speed_bytes_per_sec = 0;
-    if (it->second.total_bytes > 0) {
-        it->second.received_bytes = it->second.total_bytes;
-    }
-
-    NotifyFinished(it->second);
+    NotifyFinished(snapshot);
     return true;
 }
 
 bool TransferBroker::FailTransfer(const TransferId& id, std::string error_message) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto it = transfers_.find(id);
-    if (it == transfers_.end()) {
-        return false;
+    TransferItem snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it = transfers_.find(id);
+        if (it == transfers_.end() || IsTerminalState(it->second.state)) {
+            return false;
+        }
+
+        it->second.state = TransferState::Failed;
+        it->second.error_message = std::move(error_message);
+        it->second.end_time_ms = NowEpochMs();
+        it->second.speed_bytes_per_sec = 0;
+        snapshot = it->second;
     }
 
-    it->second.state = TransferState::Failed;
-    it->second.error_message = std::move(error_message);
-    it->second.end_time_ms = NowEpochMs();
-    it->second.speed_bytes_per_sec = 0;
-
-    NotifyFinished(it->second);
+    NotifyFinished(snapshot);
     return true;
 }
 
 bool TransferBroker::CancelTransfer(const TransferId& id) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto it = transfers_.find(id);
-    if (it == transfers_.end()) {
-        return false;
+    TransferItem snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it = transfers_.find(id);
+        if (it == transfers_.end() || IsTerminalState(it->second.state)) {
+            return false;
+        }
+
+        it->second.state = TransferState::Cancelled;
+        it->second.end_time_ms = NowEpochMs();
+        it->second.speed_bytes_per_sec = 0;
+        snapshot = it->second;
     }
 
-    it->second.state = TransferState::Cancelled;
-    it->second.end_time_ms = NowEpochMs();
-    it->second.speed_bytes_per_sec = 0;
-
-    NotifyFinished(it->second);
+    NotifyFinished(snapshot);
     return true;
 }
 
 bool TransferBroker::PauseTransfer(const TransferId& id) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto it = transfers_.find(id);
-    if (it == transfers_.end() || it->second.state != TransferState::InProgress) {
-        return false;
+    TransferItem snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it = transfers_.find(id);
+        if (it == transfers_.end() || it->second.state != TransferState::InProgress) {
+            return false;
+        }
+
+        it->second.state = TransferState::Paused;
+        it->second.speed_bytes_per_sec = 0;
+        snapshot = it->second;
     }
 
-    it->second.state = TransferState::Paused;
-    it->second.speed_bytes_per_sec = 0;
-
-    NotifyUpdated(it->second);
+    NotifyUpdated(snapshot);
     return true;
 }
 
 bool TransferBroker::ResumeTransfer(const TransferId& id) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto it = transfers_.find(id);
-    if (it == transfers_.end() || it->second.state != TransferState::Paused) {
-        return false;
+    TransferItem snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it = transfers_.find(id);
+        if (it == transfers_.end() || it->second.state != TransferState::Paused) {
+            return false;
+        }
+
+        it->second.state = TransferState::InProgress;
+        snapshot = it->second;
     }
 
-    it->second.state = TransferState::InProgress;
-
-    NotifyUpdated(it->second);
+    NotifyUpdated(snapshot);
     return true;
 }
 
@@ -178,7 +213,9 @@ std::size_t TransferBroker::ActiveTransfersCount() const noexcept {
     std::lock_guard<std::mutex> lock(mutex_);
     std::size_t active = 0;
     for (const auto& [_, item] : transfers_) {
-        if (item.state == TransferState::InProgress || item.state == TransferState::Paused) {
+        if (item.state == TransferState::Queued ||
+            item.state == TransferState::InProgress ||
+            item.state == TransferState::Paused) {
             ++active;
         }
     }
@@ -186,7 +223,12 @@ std::size_t TransferBroker::ActiveTransfersCount() const noexcept {
 }
 
 void TransferBroker::NotifyStarted(const TransferItem& item) {
-    for (auto* obs : observers_) {
+    std::vector<TransferObserver*> observers;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        observers = observers_;
+    }
+    for (auto* obs : observers) {
         if (obs != nullptr) {
             obs->OnTransferStarted(item);
         }
@@ -194,7 +236,12 @@ void TransferBroker::NotifyStarted(const TransferItem& item) {
 }
 
 void TransferBroker::NotifyUpdated(const TransferItem& item) {
-    for (auto* obs : observers_) {
+    std::vector<TransferObserver*> observers;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        observers = observers_;
+    }
+    for (auto* obs : observers) {
         if (obs != nullptr) {
             obs->OnTransferUpdated(item);
         }
@@ -202,7 +249,12 @@ void TransferBroker::NotifyUpdated(const TransferItem& item) {
 }
 
 void TransferBroker::NotifyFinished(const TransferItem& item) {
-    for (auto* obs : observers_) {
+    std::vector<TransferObserver*> observers;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        observers = observers_;
+    }
+    for (auto* obs : observers) {
         if (obs != nullptr) {
             obs->OnTransferFinished(item);
         }
