@@ -4,6 +4,7 @@
 
 #include "include/cef_client.h"
 #include "include/cef_display_handler.h"
+#include "include/cef_download_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_permission_handler.h"
@@ -20,6 +21,7 @@ class CefBrowserEngine;
 
 class CefTabClient final : public CefClient,
                            public CefDisplayHandler,
+                           public CefDownloadHandler,
                            public CefLifeSpanHandler,
                            public CefLoadHandler,
                            public CefPermissionHandler,
@@ -32,10 +34,27 @@ public:
     CefTabClient& operator=(const CefTabClient&) = delete;
 
     CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
+    CefRefPtr<CefDownloadHandler> GetDownloadHandler() override;
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
     CefRefPtr<CefLoadHandler> GetLoadHandler() override;
     CefRefPtr<CefPermissionHandler> GetPermissionHandler() override;
     CefRefPtr<CefRequestHandler> GetRequestHandler() override;
+
+    bool CanDownload(
+        CefRefPtr<CefBrowser> browser,
+        const CefString& url,
+        const CefString& request_method) override;
+
+    bool OnBeforeDownload(
+        CefRefPtr<CefBrowser> browser,
+        CefRefPtr<CefDownloadItem> download_item,
+        const CefString& suggested_name,
+        CefRefPtr<CefBeforeDownloadCallback> callback) override;
+
+    void OnDownloadUpdated(
+        CefRefPtr<CefBrowser> browser,
+        CefRefPtr<CefDownloadItem> download_item,
+        CefRefPtr<CefDownloadItemCallback> callback) override;
 
     bool OnRequestMediaAccessPermission(
         CefRefPtr<CefBrowser> browser,

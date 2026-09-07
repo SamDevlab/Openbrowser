@@ -136,6 +136,15 @@ void DesktopApp::OnContextInitialized() {
         core::CapabilityPolicy::CreateDefault());
     engine_->SetCapabilityPolicy(capability_policy_.get());
 
+    transfer_broker_ = std::make_unique<core::TransferBroker>();
+    engine_->SetTransferBroker(transfer_broker_.get());
+
+    content_filter_ = std::make_unique<core::ContentFilter>();
+    engine_->SetContentFilter(content_filter_.get());
+
+    history_manager_ = std::make_unique<core::HistoryManager>();
+    bookmark_manager_ = std::make_unique<core::BookmarkManager>();
+
     network_trace_ = std::make_unique<devtools::network::NetworkTraceBuffer>();
     engine_->SetNetworkObservationSink(network_trace_.get());
 
@@ -201,10 +210,16 @@ void DesktopApp::ShutdownRuntime() {
     SaveCurrentSession(true);
 
     if (engine_) {
+        engine_->SetTransferBroker(nullptr);
+        engine_->SetContentFilter(nullptr);
         engine_->SetCapabilityPolicy(nullptr);
         engine_->SetNetworkObservationSink(nullptr);
     }
 
+    bookmark_manager_.reset();
+    history_manager_.reset();
+    content_filter_.reset();
+    transfer_broker_.reset();
     network_lab_panel_.reset();
     focus_sidebar_.reset();
     chrome_.reset();
@@ -218,8 +233,14 @@ void DesktopApp::ShutdownRuntime() {
     browser_host_ = nullptr;
 }
 
-void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
+void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& session) {
     CEF_REQUIRE_UI_THREAD();
+    if (history_manager_ && session.ActiveTabId().has_value()) {
+        const auto* active_tab = session.FindTab(*session.ActiveTabId());
+        if (active_tab && !active_tab->url.empty() && active_tab->url != "about:blank") {
+            history_manager_->RecordVisit(active_tab->url, active_tab->title);
+        }
+    }
     SaveCurrentSession(false);
 }
 
