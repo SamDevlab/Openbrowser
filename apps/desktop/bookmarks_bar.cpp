@@ -1,0 +1,147 @@
+#include "bookmarks_bar.h"
+
+#include "core/session/browser_session.h"
+
+#include "include/views/cef_box_layout.h"
+#include "include/views/cef_label_button.h"
+#include "include/wrapper/cef_helpers.h"
+
+namespace openbrowser::desktop {
+
+class BookmarksBar::BookmarkItemDelegate final : public CefButtonDelegate {
+public:
+    BookmarkItemDelegate(BookmarksBar& bar, std::string url)
+        : bar_(bar), url_(std::move(url)) {}
+
+    void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
+        CEF_REQUIRE_UI_THREAD();
+        bar_.NavigateTo(url_);
+    }
+
+private:
+    BookmarksBar& bar_;
+    std::string url_;
+
+    IMPLEMENT_REFCOUNTING(BookmarkItemDelegate);
+};
+
+class BookmarksBar::AddBookmarkDelegate final : public CefButtonDelegate {
+public:
+    explicit AddBookmarkDelegate(BookmarksBar& bar)
+        : bar_(bar) {}
+
+    void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
+        CEF_REQUIRE_UI_THREAD();
+        bar_.BookmarkCurrentPage();
+    }
+
+private:
+    BookmarksBar& bar_;
+
+    IMPLEMENT_REFCOUNTING(AddBookmarkDelegate);
+};
+
+BookmarksBar::BookmarksBar(
+    core::BookmarkManager& bookmark_manager,
+    core::BrowserSession& session)
+    : bookmark_manager_(bookmark_manager), session_(session) {
+
+    session_.AddObserver(this);
+
+    panel_ = CefPanel::CreatePanel(nullptr);
+
+    CefBoxLayoutSettings settings{};
+    settings.horizontal = 1; // Horizontal bar
+    settings.between_child_spacing = 4;
+    settings.inside_border_horizontal_spacing = 8;
+    settings.inside_border_vertical_spacing = 2;
+    settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
+    layout_ = panel_->SetAsBoxLayout(settings);
+
+    add_delegate_ = new AddBookmarkDelegate(*this);
+    add_button_ = CefLabelButton::CreateLabelButton(add_delegate_, "[+ Bookmark]");
+
+    RebuildBar();
+}
+
+BookmarksBar::~BookmarksBar() {
+    session_.RemoveObserver(this);
+}
+
+CefRefPtr<CefPanel> BookmarksBar::View() const noexcept {
+    return panel_;
+}
+
+void BookmarksBar::SetVisible(bool visible) {
+    panel_->SetVisible(visible);
+}
+
+bool BookmarksBar::IsVisible() const {
+    return panel_->IsVisible();
+}
+
+void BookmarksBar::ToggleVisibility() {
+    SetVisible(!IsVisible());
+}
+
+void BookmarksBar::BookmarkCurrentPage() {
+    const auto active_tab = session_.ActiveTab();
+    if (!active_tab) {
+        return;
+    }
+
+    const std::string url = active_tab->Url();
+    if (url.empty()) {
+        return;
+    }
+
+    const std::string title = active_tab->Title().empty() ? url : active_tab->Title();
+    const std::string workspace = active_tab->WorkspaceId().empty() ? "default" : active_tab->WorkspaceId();
+
+    bookmark_manager_.AddBookmark(url, title, workspace);
+    RebuildBar();
+}
+
+void BookmarksBar::NavigateTo(const std::string& url) {
+    const auto active_tab = session_.ActiveTab();
+    if (active_tab && !url.empty()) {
+        session_.Navigate(active_tab->Id(), url);
+    }
+}
+
+void BookmarksBar::RebuildBar() {
+    panel_->RemoveAllChildViews();
+    item_delegates_.clear();
+
+    panel_->AddChildView(add_button_);
+
+    std::string current_workspace = "default";
+    const auto active_tab = session_.ActiveTab();
+    if (active_tab && !active_tab->WorkspaceId().empty()) {
+        current_workspace = active_tab->WorkspaceId();
+    }
+
+    const auto bookmarks = bookmark_manager_.ListBookmarks(current_workspace);
+    for (const auto& b : bookmarks) {
+        std::string display_title = b.title.empty() ? b.url : b.title;
+        if (display_title.length() > 20) {
+            display_title = display_title.substr(0, 17) + "...";
+        }
+        std::string label = "★ " + display_title;
+
+        auto delegate = new BookmarkItemDelegate(*this, b.url);
+        item_delegates_.push_back(delegate);
+
+        auto btn = CefLabelButton::CreateLabelButton(delegate, label);
+        panel_->AddChildView(btn);
+    }
+
+    panel_->InvalidateLayout();
+}
+
+void BookmarksBar::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
+    // Refresh bar when tabs/workspace change
+    RebuildBar();
+}
+
+} // namespace openbrowser::desktop
