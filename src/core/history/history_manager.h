@@ -30,6 +30,8 @@ public:
         std::string title,
         std::optional<WorkspaceId> workspace_id = std::nullopt);
 
+    bool RemoveEntry(const std::string& entry_id);
+
     [[nodiscard]] std::vector<HistoryEntry> Search(
         const std::string& query,
         std::size_t max_results = 10) const;
@@ -40,6 +42,9 @@ public:
 
     [[nodiscard]] std::size_t TotalEntries() const noexcept;
 
+    void SetAutoSavePath(std::filesystem::path path);
+    [[nodiscard]] const std::filesystem::path& AutoSavePath() const noexcept;
+
     [[nodiscard]] std::string Serialize() const;
     bool Deserialize(std::string_view json);
 
@@ -47,8 +52,11 @@ public:
     bool LoadFromFile(const std::filesystem::path& path);
 
 private:
+    void TriggerAutoSave() const;
+
     std::vector<HistoryEntry> entries_;
     std::size_t next_id_{1};
+    std::filesystem::path auto_save_path_;
 };
 
 }  // namespace openbrowser::core

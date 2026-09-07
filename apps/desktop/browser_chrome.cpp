@@ -398,6 +398,10 @@ void BrowserChrome::SetProfileLabel(const std::string& label) {
     }
 }
 
+void BrowserChrome::SetSearchProvider(core::navigation::SearchProvider provider) {
+    search_provider_ = std::move(provider);
+}
+
 bool BrowserChrome::HandleAddressKeyEvent(
     CefRefPtr<CefTextfield> textfield,
     const CefKeyEvent& event) {
@@ -410,7 +414,7 @@ bool BrowserChrome::HandleAddressKeyEvent(
     if (event.windows_key_code == 13) {
         if (event.type == KEYEVENT_RAWKEYDOWN || event.type == KEYEVENT_KEYDOWN) {
             const auto text = textfield->GetText().ToString();
-            const auto resolved = core::navigation::ResolveAddressInput(text);
+            const auto resolved = core::navigation::ResolveAddressInput(text, search_provider_);
             address_editing_ = false;
 
             if (resolved.has_value()) {

@@ -208,11 +208,37 @@ CefRefPtr<CefBrowserProcessHandler> DesktopApp::GetBrowserProcessHandler() {
 void DesktopApp::OnContextInitialized() {
     CEF_REQUIRE_UI_THREAD();
 
+    const auto storage_dir = StorageDirectory();
+
+    // 1. SettingsManager
+    settings_manager_ = std::make_unique<core::SettingsManager>();
+    const auto settings_path = storage_dir / "settings.json";
+    static_cast<void>(settings_manager_->LoadFromFile(settings_path));
+    settings_manager_->SetAutoSavePath(settings_path);
+
+    // 2. WorkspaceManager
+    workspace_manager_ = std::make_unique<core::WorkspaceManager>();
+    const auto workspaces_path = storage_dir / "workspaces.json";
+    static_cast<void>(workspace_manager_->LoadFromFile(workspaces_path));
+    workspace_manager_->SetAutoSavePath(workspaces_path);
+
+    // 3. HistoryManager
+    history_manager_ = std::make_unique<core::HistoryManager>();
+    const auto history_path = storage_dir / "history.json";
+    static_cast<void>(history_manager_->LoadFromFile(history_path));
+    history_manager_->SetAutoSavePath(history_path);
+
+    // 4. BookmarkManager
+    bookmark_manager_ = std::make_unique<core::BookmarkManager>();
+    const auto bookmarks_path = storage_dir / "bookmarks.json";
+    static_cast<void>(bookmark_manager_->LoadFromFile(bookmarks_path));
+    bookmark_manager_->SetAutoSavePath(bookmarks_path);
+
     browser_host_ = CefPanel::CreatePanel(nullptr);
     browser_host_->SetToFillLayout();
 
     engine_ = new CefBrowserEngine(browser_host_);
-    engine_->SetStorageRoot(StorageDirectory());
+    engine_->SetStorageRoot(storage_dir);
 
     capability_policy_ = std::make_unique<core::CapabilityPolicy>(
         core::CapabilityPolicy::CreateDefault());
@@ -224,16 +250,13 @@ void DesktopApp::OnContextInitialized() {
     content_filter_ = std::make_unique<core::ContentFilter>();
     engine_->SetContentFilter(content_filter_.get());
 
-    history_manager_ = std::make_unique<core::HistoryManager>();
-    static_cast<void>(history_manager_->LoadFromFile(StorageDirectory() / "history.json"));
-
-    bookmark_manager_ = std::make_unique<core::BookmarkManager>();
-    static_cast<void>(bookmark_manager_->LoadFromFile(StorageDirectory() / "bookmarks.json"));
-
     sync_provider_ = std::make_unique<core::LocalFilesystemSyncProvider>(
-        StorageDirectory() / "sync", "desktop-main");
+        storage_dir / "sync", "desktop-main");
 
-    file_broker_ = std::make_unique<core::FileBroker>(StorageDirectory() / "downloads");
+    const auto downloads_dir = !settings_manager_->Settings().downloads_directory.empty()
+        ? std::filesystem::path(settings_manager_->Settings().downloads_directory)
+        : (storage_dir / "downloads");
+    file_broker_ = std::make_unique<core::FileBroker>(downloads_dir);
 
     profile_manager_ = std::make_unique<core::ProfileManager>();
     mitigation_registry_ = std::make_unique<core::CompatibilityMitigationRegistry>();
@@ -364,7 +387,6 @@ void DesktopApp::OnContextInitialized() {
     obtrace_recorder_ = std::make_unique<devtools::network::ObtraceRecorder>();
     network_trace_->AddObserver(obtrace_recorder_.get());
 
-    workspace_manager_ = std::make_unique<core::WorkspaceManager>();
     focus_queue_ = std::make_unique<core::FocusQueue>();
     session_ = std::make_unique<core::BrowserSession>(*engine_);
     session_file_path_ = SessionFilePath();
@@ -385,9 +407,11 @@ void DesktopApp::OnContextInitialized() {
         [this](bool is_clean) { SaveCurrentSession(is_clean); });
 
     bool restored = false;
-    const auto snapshot = core::SessionPersistence::LoadFromFile(session_file_path_);
-    if (snapshot.has_value() && !snapshot->tabs.empty()) {
-        restored = core::SessionPersistence::RestoreSession(*session_, *focus_queue_, *snapshot);
+    if (settings_manager_->Settings().restore_session_on_startup) {
+        const auto snapshot = core::SessionPersistence::LoadFromFile(session_file_path_);
+        if (snapshot.has_value() && !snapshot->tabs.empty()) {
+            restored = core::SessionPersistence::RestoreSession(*session_, *focus_queue_, *snapshot);
+        }
     }
 
     if (!restored || session_->Tabs().empty()) {
@@ -396,7 +420,7 @@ void DesktopApp::OnContextInitialized() {
         initial_tab.url = StartupUrl();
         initial_tab.title = "New tab";
         initial_tab.lifecycle = core::TabLifecycle::Active;
-        initial_tab.workspace_id = std::nullopt;
+        initial_tab.workspace_id = workspace_manager_->ActiveWorkspaceId();
 
         const bool opened = session_->OpenTab(std::move(initial_tab));
 
@@ -422,6 +446,12 @@ void DesktopApp::OnContextInitialized() {
         [this]() { ToggleBookmarksBar(); },
         [this]() { ToggleDownloadsPanel(); },
         [this]() { ToggleProfile(); });
+
+    // Connect SearchProvider from settings to BrowserChrome
+    chrome_->SetSearchProvider({
+        .name = settings_manager_->Settings().search_provider_name,
+        .search_url_template = settings_manager_->Settings().search_url_template,
+    });
     focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);
     network_lab_panel_ = std::make_unique<NetworkLabPanel>(
         *network_trace_, *session_,
@@ -623,6 +653,7 @@ void DesktopApp::ShutdownRuntime() {
     session_.reset();
     focus_queue_.reset();
     workspace_manager_.reset();
+    settings_manager_.reset();
     network_trace_.reset();
     capability_policy_.reset();
     engine_ = nullptr;
@@ -771,6 +802,13 @@ std::string DesktopApp::StartupUrl() const {
         const auto configured = command_line->GetSwitchValue("url").ToString();
         if (!configured.empty()) {
             return configured;
+        }
+    }
+
+    if (settings_manager_) {
+        const auto& home = settings_manager_->Settings().home_page_url;
+        if (!home.empty()) {
+            return home;
         }
     }
 
