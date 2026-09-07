@@ -71,6 +71,24 @@ Automated CEF acquisition exists only in explicit CI adapter/package workflows. 
 
 The Windows package workflow additionally produces a user-facing SHA-256 for the final portable ZIP.
 
+## Windows portable package and LPAC sandbox ACLs
+
+Current CEF Windows builds require an LPAC read/execute ACL for Chromium's Network Service sandbox. The upstream CEF CMake integration applies this ACL to the build output directory with the well-known SID `S-1-15-2-2` (`ALL RESTRICTED APPLICATION PACKAGES`).
+
+A portable ZIP cannot be trusted to preserve NTFS ACLs after extraction. The Openbrowser Windows runtime therefore treats the ACL as a runtime prerequisite rather than assuming the build-directory ACL survived packaging:
+
+1. the primary browser process resolves its extracted runtime directory;
+2. it checks for the required LPAC read/execute ACE with object/container inheritance;
+3. if the ACE is missing, it invokes the Windows `icacls.exe` system utility to grant `S-1-15-2-2:(OI)(CI)(RX)` on that directory;
+4. it verifies the resulting ACL before continuing into CEF initialization;
+5. if the ACL cannot be established, startup fails closed with a user-facing error instead of silently weakening the Network Service sandbox.
+
+This repair runs only for the primary browser process. CEF subprocesses consume the already-prepared runtime directory.
+
+The Windows package CI extracts the produced ZIP into a fresh temporary directory, launches that extracted `openbrowser.exe`, confirms that the LPAC ACE is present after startup, and observes the CEF Network Service subprocess before accepting the artifact.
+
+Portable Windows builds are intended for normal NTFS locations owned by the current user. Locations that do not support or do not permit the required ACL cause startup to fail rather than downgrade the sandbox.
+
 ## Runtime style
 
 The first Openbrowser shell should use CEF as a controlled Chromium surface. CEF exposes Chrome and Alloy runtime styles. Openbrowser should not adopt Chrome's product-level tabs/session model because those concepts already belong to `BrowserSession`.
