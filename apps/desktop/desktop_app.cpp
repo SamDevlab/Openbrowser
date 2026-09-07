@@ -10,6 +10,7 @@
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <fstream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -221,7 +222,7 @@ void DesktopApp::OnContextInitialized() {
             return true;
         },
     });
-    action_registry_->RegisterAction({
+    static_cast<void>(action_registry_->RegisterAction({
         .id = "profile.toggle_incognito",
         .title = "Toggle Private Profile",
         .description = "Switch between Default profile and Ephemeral Incognito profile",
@@ -231,10 +232,44 @@ void DesktopApp::OnContextInitialized() {
             ToggleProfile();
             return true;
         },
-    });
+    }));
+    // M7.4 — Developer tools export actions.
+    static_cast<void>(action_registry_->RegisterAction({
+        .id = "devtools.export_har",
+        .title = "Export Network HAR",
+        .description = "Export the current Network Lab trace as a HAR 1.2 file",
+        .category = core::ActionCategory::NetworkLab,
+        .shortcut_hint = "Ctrl+Shift+H",
+        .handler = [this]() {
+            ExportNetworkHar();
+            return true;
+        },
+    }));
+    static_cast<void>(action_registry_->RegisterAction({
+        .id = "devtools.export_obtrace",
+        .title = "Export Network .obtrace",
+        .description = "Export the current Network Lab trace as a versioned .obtrace NDJSON file",
+        .category = core::ActionCategory::NetworkLab,
+        .shortcut_hint = "Ctrl+Shift+O",
+        .handler = [this]() {
+            ExportNetworkObtrace();
+            return true;
+        },
+    }));
 
     network_trace_ = std::make_unique<devtools::network::NetworkTraceBuffer>();
     engine_->SetNetworkObservationSink(network_trace_.get());
+
+    // M7.1 — Connection diagnostics registry.
+    connection_registry_ = std::make_unique<devtools::network::ConnectionRegistry>();
+
+    // M7.2 — Filter decision log; wire into ContentFilter.
+    filter_decision_log_ = std::make_unique<core::FilterDecisionLog>();
+    content_filter_->SetDecisionLog(filter_decision_log_.get());
+
+    // M7.3 — .obtrace trace recorder (begins recording on user request).
+    obtrace_recorder_ = std::make_unique<devtools::network::ObtraceRecorder>();
+    network_trace_->AddObserver(obtrace_recorder_.get());
 
     workspace_manager_ = std::make_unique<core::WorkspaceManager>();
     focus_queue_ = std::make_unique<core::FocusQueue>();
@@ -276,7 +311,11 @@ void DesktopApp::OnContextInitialized() {
         [this]() { ToggleDownloadsPanel(); },
         [this]() { ToggleProfile(); });
     focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);
-    network_lab_panel_ = std::make_unique<NetworkLabPanel>(*network_trace_, *session_);
+    network_lab_panel_ = std::make_unique<NetworkLabPanel>(
+        *network_trace_, *session_,
+        connection_registry_.get(),
+        filter_decision_log_.get(),
+        obtrace_recorder_.get());
 
     CefRefPtr<CefCommandLine> command_line = CefCommandLine::GetGlobalCommandLine();
     const bool show_network_lab = command_line && command_line->HasSwitch("network-lab");
@@ -445,6 +484,31 @@ std::string DesktopApp::StartupUrl() const {
     }
 
     return "https://example.com/";
+}
+
+void DesktopApp::ExportNetworkHar() {
+    if (!network_trace_) {
+        return;
+    }
+    const auto requests = network_trace_->AggregateRequests();
+    const auto har_content = devtools::network::NetworkTraceBuffer::ExportToHar(requests);
+    // Write to a local file in the storage directory.
+    const auto out_path = StorageDirectory() / "network_export.har";
+    if (auto f = std::ofstream(out_path); f.is_open()) {
+        f << har_content;
+    }
+}
+
+void DesktopApp::ExportNetworkObtrace() {
+    if (!network_trace_) {
+        return;
+    }
+    const auto requests = network_trace_->AggregateRequests();
+    const auto obtrace_content = devtools::network::NetworkTraceBuffer::ExportToObtrace(requests);
+    const auto out_path = StorageDirectory() / "network_export.obtrace";
+    if (auto f = std::ofstream(out_path); f.is_open()) {
+        f << obtrace_content;
+    }
 }
 
 }  // namespace openbrowser::desktop

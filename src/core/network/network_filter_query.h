@@ -25,7 +25,9 @@ struct StatusClause {
 };
 
 struct TermClause {
-    std::string field; // "method", "host", "protocol", "is", "has", "attribution", or "" (free text)
+    // field: "method", "host", "protocol", "is", "has", "attribution",
+    //        "blocked" (M7.2), "decision" (M7.2), or "" (free text)
+    std::string field;
     std::string value;
     bool negate = false;
 };

@@ -23,6 +23,10 @@ enum class NetworkEventType {
     WebSocketOpened,
     WebSocketFrame,
     WebSocketClosed,
+    // M7.1 — connection / transport diagnostics
+    DnsResolved,
+    ConnectionEstablished,
+    TlsHandshaked,
 };
 
 struct Header {
@@ -44,6 +48,8 @@ struct NetworkEvent {
     std::string error;
     std::string body_preview;
     core::NetworkAttribution attribution{core::NetworkAttribution::Page};
+    // M7.1 — cross-reference to ConnectionRegistry
+    std::optional<std::string> connection_id;
 };
 
 struct CapturePolicy {
@@ -71,6 +77,12 @@ struct NetworkRequestSummary {
     std::vector<Header> response_headers;
     std::string body_preview;
     core::NetworkAttribution attribution{core::NetworkAttribution::Page};
+    // M7.1 — cross-reference to ConnectionRegistry
+    std::optional<std::string> connection_id;
+    // M7.2 — last filter decision for this request (set by FilterDecisionLog)
+    bool filter_blocked{false};
+    std::string filter_rule_source;
+    std::string filter_layer;
 };
 
 struct NetworkTraceFilter {
@@ -114,6 +126,10 @@ public:
         const std::string& request_id) const;
 
     [[nodiscard]] static std::string ExportToHar(
+        const std::vector<NetworkRequestSummary>& requests);
+
+    // M7.3 — export to versioned NDJSON .obtrace format
+    [[nodiscard]] static std::string ExportToObtrace(
         const std::vector<NetworkRequestSummary>& requests);
 
     [[nodiscard]] static bool IsSensitiveHeaderName(const std::string& name);

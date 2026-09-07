@@ -1,4 +1,5 @@
 #include "core/filters/content_filter.h"
+#include "core/network/filter_decision_log.h"
 
 #include <algorithm>
 #include <utility>
@@ -73,6 +74,41 @@ FilterDecision ContentFilter::Evaluate(const std::string_view url) const {
     }
 
     return FilterDecision::Allow;
+}
+
+FilterDecision ContentFilter::EvaluateWithId(
+    const std::string_view url,
+    const std::string& request_id,
+    const std::string& scope) const {
+    const FilterDecision decision = Evaluate(url);
+    if (decision_log_ != nullptr) {
+        FilterDecisionRecord record;
+        record.request_id = request_id;
+        record.url = std::string(url);
+        record.blocked = (decision == FilterDecision::Block);
+        record.layer = FilterDecisionLayer::ContentFilter;
+        record.scope = scope;
+        if (record.blocked) {
+            // Find the matching rule for the explanation.
+            const auto lower_url = ToLower(url);
+            for (const auto& rule : rules_) {
+                if (lower_url.find(rule.pattern) != std::string::npos) {
+                    record.rule_source = rule.pattern;
+                    record.human_explanation =
+                        std::string("Blocked by tracker rule: ") + rule.pattern;
+                    break;
+                }
+            }
+        } else {
+            record.human_explanation = "Allowed by content filter policy";
+        }
+        decision_log_->AddDecision(std::move(record));
+    }
+    return decision;
+}
+
+void ContentFilter::SetDecisionLog(FilterDecisionLog* log) noexcept {
+    decision_log_ = log;
 }
 
 std::size_t ContentFilter::TotalRules() const noexcept {

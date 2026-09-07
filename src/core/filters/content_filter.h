@@ -8,6 +8,9 @@
 
 namespace openbrowser::core {
 
+// Forward declaration — avoids pulling the full header into every TU.
+class FilterDecisionLog;
+
 enum class FilterDecision {
     Allow,
     Block,
@@ -36,6 +39,16 @@ public:
 
     [[nodiscard]] FilterDecision Evaluate(std::string_view url) const;
 
+    // M7.2: evaluate and emit a FilterDecisionRecord to the attached log.
+    // request_id is used to cross-reference with the NetworkTraceBuffer.
+    [[nodiscard]] FilterDecision EvaluateWithId(
+        std::string_view url,
+        const std::string& request_id,
+        const std::string& scope = "global") const;
+
+    // Attach a non-owning decision log (nullptr clears it).
+    void SetDecisionLog(FilterDecisionLog* log) noexcept;
+
     [[nodiscard]] std::size_t TotalRules() const noexcept;
     [[nodiscard]] std::size_t BlockedCount() const noexcept;
     void ResetStats() noexcept;
@@ -48,6 +61,7 @@ private:
     std::unordered_set<std::string> allowlist_domains_;
     mutable std::size_t blocked_count_{0};
     bool enabled_{true};
+    FilterDecisionLog* decision_log_{nullptr}; // M7.2 — non-owning
 };
 
 }  // namespace openbrowser::core

@@ -13,13 +13,16 @@
 #include "core/filters/content_filter.h"
 #include "core/focus_queue/focus_queue.h"
 #include "core/history/history_manager.h"
+#include "core/network/filter_decision_log.h"  // M7.2
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
 #include "core/session/browser_session_observer.h"
 #include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
 #include "core/workspaces/workspace_manager.h"
+#include "devtools/network/connection_diagnostics.h" // M7.1
 #include "devtools/network/network_trace.h"
+#include "devtools/network/obtrace_recorder.h"       // M7.3
 #include "focus_sidebar.h"
 #include "network_lab_panel.h"
 #include "tab_strip.h"
@@ -59,6 +62,8 @@ private:
     void ToggleBookmarksBar();
     void ToggleDownloadsPanel();
     void ToggleProfile();
+    void ExportNetworkHar();      // M7.4
+    void ExportNetworkObtrace(); // M7.4
 
     CefRefPtr<CefPanel> browser_host_;
     CefRefPtr<CefBrowserEngine> engine_;
@@ -83,6 +88,10 @@ private:
     std::unique_ptr<core::ProfileManager> profile_manager_;
     std::unique_ptr<core::CompatibilityMitigationRegistry> mitigation_registry_;
     std::unique_ptr<core::UserAgentPolicyEngine> ua_engine_;
+    // M7 subsystems
+    std::unique_ptr<devtools::network::ConnectionRegistry> connection_registry_; // M7.1
+    std::unique_ptr<core::FilterDecisionLog> filter_decision_log_;               // M7.2
+    std::unique_ptr<devtools::network::ObtraceRecorder> obtrace_recorder_;       // M7.3
     std::filesystem::path session_file_path_;
 
     IMPLEMENT_REFCOUNTING(DesktopApp);

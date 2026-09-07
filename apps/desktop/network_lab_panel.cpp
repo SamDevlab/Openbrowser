@@ -54,8 +54,15 @@ private:
 
 NetworkLabPanel::NetworkLabPanel(
     devtools::network::NetworkTraceBuffer& trace_buffer,
-    core::BrowserSession& session)
-    : trace_buffer_(trace_buffer), session_(session) {
+    core::BrowserSession& session,
+    devtools::network::ConnectionRegistry* connection_registry,
+    core::FilterDecisionLog* decision_log,
+    devtools::network::ObtraceRecorder* obtrace_recorder)
+    : trace_buffer_(trace_buffer)
+    , session_(session)
+    , connection_registry_(connection_registry)
+    , decision_log_(decision_log)
+    , obtrace_recorder_(obtrace_recorder) {
     trace_buffer_.AddObserver(this);
     session_.AddObserver(this);
 
@@ -174,6 +181,25 @@ void NetworkLabPanel::HandleAction(const PanelAction action, const std::string& 
         case PanelAction::Close:
             SetVisible(false);
             break;
+        // M7.4: tab switching
+        case PanelAction::SwitchToRequests:
+            active_tab_ = ActiveTab::Requests;
+            selected_request_id_ = std::nullopt;
+            RebuildView();
+            break;
+        case PanelAction::SwitchToConnections:
+            active_tab_ = ActiveTab::Connections;
+            RebuildView();
+            break;
+        case PanelAction::SwitchToDecisions:
+            active_tab_ = ActiveTab::Decisions;
+            RebuildView();
+            break;
+        // M7.4: export .obtrace snapshot
+        case PanelAction::ExportObtrace:
+            // Trigger is handled by DesktopApp via ActionRegistry;
+            // here we just ensure the recorder knows about it.
+            break;
     }
 }
 
@@ -181,6 +207,21 @@ void NetworkLabPanel::RebuildView() {
     CEF_REQUIRE_UI_THREAD();
     panel_->RemoveAllChildViews();
     delegates_.clear();
+
+    // Always render the shared tab bar first.
+    BuildTabBar();
+
+    switch (active_tab_) {
+        case ActiveTab::Connections:
+            BuildConnectionsView();
+            return;
+        case ActiveTab::Decisions:
+            BuildDecisionsView();
+            return;
+        case ActiveTab::Requests:
+        default:
+            break;
+    }
 
     if (selected_request_id_.has_value()) {
         const auto req = trace_buffer_.FindRequest(*selected_request_id_);
@@ -429,6 +470,189 @@ void NetworkLabPanel::BuildDetailsView(
     if (window) {
         window->Layout();
     }
+}
+
+// M7.4: shared tab strip row rendered at the top of every sub-view.
+void NetworkLabPanel::BuildTabBar() {
+    auto tab_bar = CefPanel::CreatePanel(nullptr);
+    CefBoxLayoutSettings tab_settings{};
+    tab_settings.horizontal = 1;
+    tab_settings.between_child_spacing = 4;
+    tab_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
+    auto tab_layout = tab_bar->SetToBoxLayout(tab_settings);
+
+    auto req_delegate = CefRefPtr<CefButtonDelegate>(
+        new PanelActionDelegate(*this, PanelAction::SwitchToRequests));
+    delegates_.push_back(req_delegate);
+    std::string req_label = active_tab_ == ActiveTab::Requests ? "[▶ Requests]" : "Requests";
+    auto req_btn = CefLabelButton::CreateLabelButton(req_delegate, req_label);
+    tab_bar->AddChildView(req_btn);
+    tab_layout->SetFlexForView(req_btn, 0);
+
+    auto conn_delegate = CefRefPtr<CefButtonDelegate>(
+        new PanelActionDelegate(*this, PanelAction::SwitchToConnections));
+    delegates_.push_back(conn_delegate);
+    std::string conn_label = active_tab_ == ActiveTab::Connections ? "[▶ Connections]" : "Connections";
+    auto conn_btn = CefLabelButton::CreateLabelButton(conn_delegate, conn_label);
+    tab_bar->AddChildView(conn_btn);
+    tab_layout->SetFlexForView(conn_btn, 0);
+
+    auto dec_delegate = CefRefPtr<CefButtonDelegate>(
+        new PanelActionDelegate(*this, PanelAction::SwitchToDecisions));
+    delegates_.push_back(dec_delegate);
+    std::string dec_label = active_tab_ == ActiveTab::Decisions ? "[▶ Decisions]" : "Decisions";
+    auto dec_btn = CefLabelButton::CreateLabelButton(dec_delegate, dec_label);
+    tab_bar->AddChildView(dec_btn);
+    tab_layout->SetFlexForView(dec_btn, 0);
+
+    auto close_delegate = CefRefPtr<CefButtonDelegate>(
+        new PanelActionDelegate(*this, PanelAction::Close));
+    delegates_.push_back(close_delegate);
+    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "✕");
+    tab_bar->AddChildView(close_btn);
+    tab_layout->SetFlexForView(close_btn, 0);
+
+    panel_->AddChildView(tab_bar);
+    layout_->SetFlexForView(tab_bar, 0);
+}
+
+// M7.1: Connections sub-view — lists ConnectionRegistry entries.
+void NetworkLabPanel::BuildConnectionsView() {
+    if (connection_registry_ == nullptr) {
+        auto empty_btn = CefLabelButton::CreateLabelButton(
+            nullptr, "Connection diagnostics not available (registry not wired).");
+        panel_->AddChildView(empty_btn);
+        layout_->SetFlexForView(empty_btn, 0);
+        return;
+    }
+
+    const auto connections = connection_registry_->All();
+    if (connections.empty()) {
+        auto empty_btn = CefLabelButton::CreateLabelButton(
+            nullptr, "No connection diagnostics recorded yet.");
+        panel_->AddChildView(empty_btn);
+        layout_->SetFlexForView(empty_btn, 0);
+        return;
+    }
+
+    const std::size_t max_rows = 8;
+    const std::size_t start_idx = connections.size() > max_rows
+        ? (connections.size() - max_rows) : 0;
+
+    for (std::size_t i = start_idx; i < connections.size(); ++i) {
+        const auto& conn = connections[i];
+
+        auto row = CefPanel::CreatePanel(nullptr);
+        CefBoxLayoutSettings row_settings{};
+        row_settings.horizontal = 1;
+        row_settings.between_child_spacing = 4;
+        row_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
+        auto row_layout = row->SetToBoxLayout(row_settings);
+
+        // Protocol + reuse indicator
+        std::string proto_label = "[" + (conn.protocol.empty() ? "?" : conn.protocol) + "]";
+        if (conn.is_reused) { proto_label += " ♻"; }
+        auto proto_btn = CefLabelButton::CreateLabelButton(nullptr, proto_label);
+        row->AddChildView(proto_btn);
+        row_layout->SetFlexForView(proto_btn, 0);
+
+        // Host/endpoint
+        std::string endpoint = conn.remote_host;
+        if (!conn.remote_ip.empty() && conn.remote_ip != conn.remote_host) {
+            endpoint += " (" + conn.remote_ip + ")";
+        }
+        if (endpoint.size() > 40) { endpoint = endpoint.substr(0, 37) + "..."; }
+        auto host_btn = CefLabelButton::CreateLabelButton(nullptr, endpoint);
+        row->AddChildView(host_btn);
+        row_layout->SetFlexForView(host_btn, 1);
+
+        // TLS info
+        std::string tls_label = "plain";
+        if (conn.tls_info.has_value()) {
+            tls_label = conn.tls_info->tls_version + " / " + conn.tls_info->alpn;
+        }
+        auto tls_btn = CefLabelButton::CreateLabelButton(nullptr, tls_label);
+        row->AddChildView(tls_btn);
+        row_layout->SetFlexForView(tls_btn, 0);
+
+        // Timing summary
+        std::string timing = "DNS:";
+        timing += conn.dns_ms >= 0.0 ? std::to_string(static_cast<int>(conn.dns_ms)) + "ms" : "?";
+        timing += " TCP:";
+        timing += conn.connect_ms >= 0.0 ? std::to_string(static_cast<int>(conn.connect_ms)) + "ms" : "?";
+        auto timing_btn = CefLabelButton::CreateLabelButton(nullptr, timing);
+        row->AddChildView(timing_btn);
+        row_layout->SetFlexForView(timing_btn, 0);
+
+        panel_->AddChildView(row);
+        layout_->SetFlexForView(row, 0);
+    }
+
+    panel_->Layout();
+    auto window = panel_->GetWindow();
+    if (window) { window->Layout(); }
+}
+
+// M7.2: Decisions sub-view — lists FilterDecisionLog entries.
+void NetworkLabPanel::BuildDecisionsView() {
+    if (decision_log_ == nullptr) {
+        auto empty_btn = CefLabelButton::CreateLabelButton(
+            nullptr, "Filter decision log not available.");
+        panel_->AddChildView(empty_btn);
+        layout_->SetFlexForView(empty_btn, 0);
+        return;
+    }
+
+    const auto decisions = decision_log_->All();
+    if (decisions.empty()) {
+        auto empty_btn = CefLabelButton::CreateLabelButton(
+            nullptr, "No filter decisions recorded yet.");
+        panel_->AddChildView(empty_btn);
+        layout_->SetFlexForView(empty_btn, 0);
+        return;
+    }
+
+    const std::size_t max_rows = 8;
+    const std::size_t start_idx = decisions.size() > max_rows
+        ? (decisions.size() - max_rows) : 0;
+
+    for (std::size_t i = decisions.size(); i > start_idx; --i) {
+        const auto& dec = decisions[i - 1];
+
+        auto row = CefPanel::CreatePanel(nullptr);
+        CefBoxLayoutSettings row_settings{};
+        row_settings.horizontal = 1;
+        row_settings.between_child_spacing = 4;
+        row_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
+        auto row_layout = row->SetToBoxLayout(row_settings);
+
+        // Decision badge
+        std::string badge = dec.blocked ? "✗ Block" : "✓ Allow";
+        auto badge_btn = CefLabelButton::CreateLabelButton(nullptr, badge);
+        row->AddChildView(badge_btn);
+        row_layout->SetFlexForView(badge_btn, 0);
+
+        // URL (truncated)
+        std::string url = dec.url;
+        if (url.size() > 50) { url = url.substr(0, 47) + "..."; }
+        auto url_btn = CefLabelButton::CreateLabelButton(nullptr, url);
+        row->AddChildView(url_btn);
+        row_layout->SetFlexForView(url_btn, 1);
+
+        // Layer + explanation (truncated)
+        std::string explanation = dec.human_explanation;
+        if (explanation.size() > 40) { explanation = explanation.substr(0, 37) + "..."; }
+        auto expl_btn = CefLabelButton::CreateLabelButton(nullptr, explanation);
+        row->AddChildView(expl_btn);
+        row_layout->SetFlexForView(expl_btn, 0);
+
+        panel_->AddChildView(row);
+        layout_->SetFlexForView(row, 0);
+    }
+
+    panel_->Layout();
+    auto window = panel_->GetWindow();
+    if (window) { window->Layout(); }
 }
 
 }  // namespace openbrowser::desktop

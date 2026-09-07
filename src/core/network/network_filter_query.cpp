@@ -187,6 +187,17 @@ bool NetworkFilterQuery::EvaluateTerm(
         } else if (tc.value == "filter") {
             match = (req.attribution == NetworkAttribution::FilterListSync);
         }
+    } else if (tc.field == "blocked") {
+        // M7.2: blocked:true or blocked:false
+        const bool want_blocked = (tc.value == "true" || tc.value == "1" || tc.value == "yes");
+        match = (req.filter_blocked == want_blocked);
+    } else if (tc.field == "decision") {
+        // M7.2: decision:block or decision:allow
+        if (tc.value == "block" || tc.value == "blocked") {
+            match = req.filter_blocked;
+        } else if (tc.value == "allow" || tc.value == "allowed") {
+            match = !req.filter_blocked;
+        }
     } else if (tc.field.empty()) {
         // Free-text search
         const std::string text = tc.value;
