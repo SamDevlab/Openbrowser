@@ -280,7 +280,7 @@ jobs:
                 Get-Content -LiteralPath $debugLog -Tail 200
 
                 $crashLine = Get-Content -LiteralPath $debugLog | Where-Object {
-                  $_ -like '[openbrowser-crash]*' -or $_ -match '^\[openbrowser-crash\]'
+                  $_ -match '^\[openbrowser-crash\]'
                 } | Select-Object -Last 1
                 if ($crashLine -and $crashLine -match 'rva=0x([0-9A-Fa-f]+)') {
                   $rva = [Convert]::ToUInt64($Matches[1], 16)
