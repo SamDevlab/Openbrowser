@@ -236,25 +236,13 @@ void TestHistoryCorrectnessAndCrud() {
     std::filesystem::remove(hist_path, ec);
 }
 
-// Dummy engine for BrowserSession testing
-class MockSessionEngine final : public openbrowser::core::BrowserEngineAdapter {
-public:
-    void Navigate(const openbrowser::core::engine::NavigationRequest&) override {}
-    void GoBack(const openbrowser::core::TabId&) override {}
-    void GoForward(const openbrowser::core::TabId&) override {}
-    void Reload(const openbrowser::core::TabId&) override {}
-    void StopLoading(const openbrowser::core::TabId&) override {}
-    void ActivateTab(const openbrowser::core::TabId&) override {}
-    void CloseTab(const openbrowser::core::TabId&) override {}
-    void Suspend(const openbrowser::core::TabId&) override {}
-    void Resume(const openbrowser::core::TabId&) override {}
-};
+#include "fakes/fake_browser_engine.h"
 
 // 5. SessionHistoryBridge semantics
 void TestSessionHistoryBridgeSemantics() {
     using namespace openbrowser::core;
 
-    MockSessionEngine engine;
+    openbrowser::tests::FakeBrowserEngine engine;
     BrowserSession session(engine);
     HistoryManager history;
     ProfileManager profiles;
@@ -269,7 +257,7 @@ void TestSessionHistoryBridgeSemantics() {
     tab_a.title = "Site A";
     tab_a.is_ephemeral = false;
     tab_a.navigation_state = NavigationState::Requested; // Not committed yet
-    session.OpenTab(std::move(tab_a), true);
+    static_cast<void>(session.OpenTab(std::move(tab_a), true));
 
     Require(history.TotalEntries() == 0, "No visit while navigation state is Requested");
 
@@ -288,12 +276,12 @@ void TestSessionHistoryBridgeSemantics() {
     tab_b.url = "https://site-b.com";
     tab_b.is_ephemeral = false;
     tab_b.navigation_state = NavigationState::Idle;
-    session.OpenTab(std::move(tab_b), true);
+    static_cast<void>(session.OpenTab(std::move(tab_b), true));
     session.OnNavigationCommitted({.tab_id = "tab-b", .url = "https://site-b.com"});
     Require(history.TotalEntries() == 2, "Site B committed records second visit");
 
     // Switch back to tab A
-    session.ActivateTab("tab-a");
+    static_cast<void>(session.ActivateTab("tab-a"));
     Require(history.TotalEntries() == 2, "Activating tab A does not increment visit count");
     Require(history.Search("site-a.com")[0].visit_count == 1, "Tab A visit count still 1");
 
@@ -315,7 +303,7 @@ void TestSessionHistoryBridgeSemantics() {
     tab_priv.id = "tab-priv";
     tab_priv.url = "https://secret.com";
     tab_priv.is_ephemeral = true;
-    session.OpenTab(std::move(tab_priv), true);
+    static_cast<void>(session.OpenTab(std::move(tab_priv), true));
     session.OnNavigationCommitted({.tab_id = "tab-priv", .url = "https://secret.com"});
     Require(history.Search("secret.com").empty(), "Private navigation records 0 visits");
 }
@@ -462,7 +450,7 @@ void TestCrashAndPrivateModeIsolation() {
     std::filesystem::remove(history_path, ec);
     std::filesystem::remove(bookmark_path, ec);
 
-    MockSessionEngine engine;
+    openbrowser::tests::FakeBrowserEngine engine;
     BrowserSession session(engine);
     FocusQueue focus_queue;
     ProfileManager profiles;
@@ -484,7 +472,7 @@ void TestCrashAndPrivateModeIsolation() {
     tab_a.url = "https://public-a.com";
     tab_a.title = "Public A";
     tab_a.is_ephemeral = false;
-    session.OpenTab(std::move(tab_a), true);
+    static_cast<void>(session.OpenTab(std::move(tab_a), true));
     session.OnNavigationCommitted({.tab_id = "tab-1", .url = "https://public-a.com"});
 
     bookmarks.AddBookmark({
@@ -500,7 +488,7 @@ void TestCrashAndPrivateModeIsolation() {
     tab_priv.url = "https://secret-vault.com";
     tab_priv.title = "Secret";
     tab_priv.is_ephemeral = true;
-    session.OpenTab(std::move(tab_priv), true);
+    static_cast<void>(session.OpenTab(std::move(tab_priv), true));
     session.OnNavigationCommitted({.tab_id = "tab-secret", .url = "https://secret-vault.com"});
 
     // Simulate exit / crash while still in Private Mode (NO clean shutdown executed)
