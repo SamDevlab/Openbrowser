@@ -88,6 +88,7 @@ function Write-ShutdownDiagnostics {
     Write-Host ("Unexpected graceful-close exit code: {0} (0x{1:X8})" -f $ExitCode, $unsignedExitCode)
 
     $debugCandidates = @(
+        (Join-Path $StateRoot 'lifecycle-shutdown.log'),
         (Join-Path $RuntimeRoot 'debug.log'),
         (Join-Path $StateRoot 'debug.log'),
         (Join-Path $StateRoot 'default/debug.log')
@@ -144,7 +145,7 @@ function Export-ProductSmokeDiagnostics {
     Remove-Item -Recurse -Force $DiagnosticsRoot -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path $DiagnosticsRoot | Out-Null
 
-    foreach ($name in @('session.json', 'history.json', 'bookmarks.json', 'workspaces.json', 'settings.json')) {
+    foreach ($name in @('session.json', 'history.json', 'bookmarks.json', 'workspaces.json', 'settings.json', 'lifecycle-shutdown.log')) {
         $source = Join-Path $StateRoot $name
         if (Test-Path -LiteralPath $source -PathType Leaf) {
             Copy-Item -LiteralPath $source -Destination (Join-Path $DiagnosticsRoot $name) -Force
@@ -349,8 +350,6 @@ try {
 
     $firstRequestCount = Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget
 
-    # Relaunch without --url. The default restore_session_on_startup=true must
-    # restore the persisted tab and cause a second real request to the same URL.
     $restoredBrowser = Start-Browser `
         -Exe $exe `
         -WorkingDirectory $runtimeRoot `
