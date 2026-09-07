@@ -4,11 +4,13 @@
 #include "cef_browser_engine.h"
 #include "core/bookmarks/bookmark_manager.h"
 #include "core/capabilities/capability_policy.h"
+#include "core/commands/action_registry.h"
 #include "core/filters/content_filter.h"
 #include "core/focus_queue/focus_queue.h"
 #include "core/history/history_manager.h"
 #include "core/session/browser_session.h"
 #include "core/session/browser_session_observer.h"
+#include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
 #include "core/workspaces/workspace_manager.h"
 #include "devtools/network/network_trace.h"
@@ -60,9 +62,11 @@ private:
     std::unique_ptr<NetworkLabPanel> network_lab_panel_;
     std::unique_ptr<core::CapabilityPolicy> capability_policy_;
     std::unique_ptr<core::TransferBroker> transfer_broker_;
+    std::unique_ptr<core::FileBroker> file_broker_;
     std::unique_ptr<core::ContentFilter> content_filter_;
     std::unique_ptr<core::HistoryManager> history_manager_;
     std::unique_ptr<core::BookmarkManager> bookmark_manager_;
+    std::unique_ptr<core::ActionRegistry> action_registry_;
     std::filesystem::path session_file_path_;
 
     IMPLEMENT_REFCOUNTING(DesktopApp);

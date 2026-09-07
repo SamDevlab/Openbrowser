@@ -16,10 +16,17 @@ add_library(openbrowser_core
     src/core/session/tab_discard_policy.cpp
     src/core/workspaces/workspace_manager.cpp
     src/core/transfers/transfer_broker.cpp
+    src/core/transfers/file_broker.cpp
     src/core/filters/content_filter.cpp
     src/core/history/history_manager.cpp
     src/core/bookmarks/bookmark_manager.cpp
     src/core/network/network_attribution.cpp
+    src/core/commands/action_registry.cpp
+    src/core/commands/command_palette.cpp
+    src/core/sync/sync_port.cpp
+    src/core/sync/local_filesystem_sync.cpp
+    src/core/compatibility/compatibility_scenario.cpp
+    src/core/compatibility/compatibility_runner.cpp
 )
 
 add_library(Openbrowser::Core ALIAS openbrowser_core)
@@ -132,6 +139,26 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_network_attribution_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_network_attribution_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_file_broker_tests tests/file_broker_tests.cpp)
+    target_link_libraries(openbrowser_file_broker_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_file_broker_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_file_broker_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_command_palette_tests tests/command_palette_tests.cpp)
+    target_link_libraries(openbrowser_command_palette_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_command_palette_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_command_palette_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_sync_tests tests/sync_tests.cpp)
+    target_link_libraries(openbrowser_sync_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_sync_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_sync_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_compatibility_tests tests/compatibility_tests.cpp)
+    target_link_libraries(openbrowser_compatibility_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_compatibility_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_compatibility_tests PRIVATE cxx_std_20)
+
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
@@ -150,6 +177,10 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_content_filter_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_history_bookmark_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_network_attribution_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_file_broker_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_command_palette_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_sync_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_compatibility_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
@@ -168,6 +199,10 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_content_filter_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_history_bookmark_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_network_attribution_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_file_broker_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_command_palette_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_sync_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_compatibility_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
@@ -187,6 +222,10 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.content_filter COMMAND openbrowser_content_filter_tests)
     add_test(NAME openbrowser.history_bookmark COMMAND openbrowser_history_bookmark_tests)
     add_test(NAME openbrowser.network_attribution COMMAND openbrowser_network_attribution_tests)
+    add_test(NAME openbrowser.file_broker COMMAND openbrowser_file_broker_tests)
+    add_test(NAME openbrowser.command_palette COMMAND openbrowser_command_palette_tests)
+    add_test(NAME openbrowser.sync COMMAND openbrowser_sync_tests)
+    add_test(NAME openbrowser.compatibility COMMAND openbrowser_compatibility_tests)
 endif()
 
 if(OPENBROWSER_BUILD_DESKTOP)

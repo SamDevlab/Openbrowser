@@ -54,5 +54,12 @@ All five M2 milestones have been delivered, tested across unit test suites and t
 - **M3.3 Delivered**: Native History & Bookmarks Engine (`HistoryManager`, `BookmarkManager`, visit deduplication, recency/visit count ranking, tag filtering, and workspace partition isolation).
 - **M3.4 Delivered**: Browser-Owned Network Attribution & HAR Diagnostic Export (`NetworkAttribution` tagging across Page, UpdateCheck, FilterListSync, Telemetry, and Transfer, and standard HAR 1.2 JSON export via `NetworkTraceBuffer::ExportToHar`).
 
+## Milestone M4: Platform Operations, Sync Ports & Transfer Sandboxing
+
+- **M4.1 Delivered**: Transfer Destination Sandboxing & Safe File Broker (`FileBroker`, directory containment checks, path traversal defenses, Windows/POSIX filename sanitization, executable risk assessment, and automatic collision resolution).
+- **M4.2 Delivered**: Native Command Palette & Keyboard Action Dispatcher (`ActionRegistry`, `CommandPalette`, categorized actions across navigation, focus, network lab, and settings, with fuzzy query scoring and ranking).
+- **M4.3 Delivered**: Native Sync Ports & Local Storage Provider (`SyncPort`, `LocalFilesystemSyncProvider`, version-based conflict resolution, manifest synchronization, and atomic JSON store serialization).
+- **M4.4 Delivered**: Web Compatibility Scenario Harness & Reftest Engine (`CompatibilityScenario`, `CompatibilityRunner`, deterministic scenario evaluations, header expectation checking, tracking-script blockage verification, and compatibility reports).
+
 
 
