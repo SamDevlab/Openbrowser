@@ -61,5 +61,12 @@ All five M2 milestones have been delivered, tested across unit test suites and t
 - **M4.3 Delivered**: Native Sync Ports & Local Storage Provider (`SyncPort`, `LocalFilesystemSyncProvider`, version-based conflict resolution, manifest synchronization, and atomic JSON store serialization).
 - **M4.4 Delivered**: Web Compatibility Scenario Harness & Reftest Engine (`CompatibilityScenario`, `CompatibilityRunner`, deterministic scenario evaluations, header expectation checking, tracking-script blockage verification, and compatibility reports).
 
+## Milestone M5: Privacy Profiles, Compatibility Mitigations, Adblock Parser & Network Lab Waterfall
+
+- **M5.1 Delivered**: Ephemeral Profiles & Isolated Memory Vault (`ProfileManager`, `ProfileConfig`, persistent disk profiles vs strictly in-memory ephemeral/incognito profiles, zero-disk persistence guarantee, in-memory vault, and secure memory wipe on purge).
+- **M5.2 Delivered**: Site-Scoped Compatibility Mitigations & Anti-Fingerprinting UA Engine (`CompatibilityMitigationRegistry`, origin-scoped transparent relaxation flags, and `UserAgentPolicyEngine` providing Standard Chromium, Anti-Fingerprint Uniform, and site-scoped override modes).
+- **M5.3 Delivered**: Structured Network Lab Filter Query Parser & Waterfall Phase Timeline (`NetworkFilterQuery` supporting status comparisons/ranges, method, host, state, attribution, and free-text queries, and `WaterfallTimeline` computing timing phase segments and ASCII visualization).
+- **M5.4 Delivered**: Native Adblock / EasyList Rule Parser & Rule List Compiler (`AdblockRuleParser` parsing EasyList/ABP syntax with domain anchors `||`, resource options `$script`, `$third-party`, allowlist rules `@@`, and high-speed compilation into `ContentFilter`).
+
 
 
