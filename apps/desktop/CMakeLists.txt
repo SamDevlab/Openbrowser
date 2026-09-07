@@ -32,6 +32,7 @@ elseif(OS_WINDOWS)
     set(OPENBROWSER_DESKTOP_SOURCES
         ${OPENBROWSER_DESKTOP_COMMON_SOURCES}
         main_win.cpp
+        startup_crash_diagnostics_win.cpp
     )
 elseif(OS_MAC)
     message(FATAL_ERROR
