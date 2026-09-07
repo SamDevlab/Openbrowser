@@ -59,4 +59,4 @@ private:
     std::vector<CefRefPtr<CefButtonDelegate>> item_delegates_;
 };
 
-}  // namespace openbrowser::desktop
+} // namespace openbrowser::desktop
