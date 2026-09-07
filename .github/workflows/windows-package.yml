@@ -343,3 +343,12 @@ jobs:
           ./scripts/product-smoke-windows.ps1 `
             -ArtifactDir ./product-artifact `
             -Version "$env:PACKAGE_VERSION"
+
+      - name: Upload product smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Openbrowser-product-smoke-diagnostics
+          path: product-smoke-diagnostics
+          if-no-files-found: warn
+          retention-days: 7
