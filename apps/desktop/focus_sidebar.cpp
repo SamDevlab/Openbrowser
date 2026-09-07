@@ -18,18 +18,13 @@ namespace openbrowser::desktop {
 
 class FocusSidebar::FocusPanelDelegate final : public CefPanelDelegate {
 public:
-    explicit FocusPanelDelegate(const FocusSidebar& sidebar) : sidebar_(sidebar) {}
-
     CefSize GetPreferredSize(CefRefPtr<CefView> /*view*/) override {
-        return sidebar_.expanded_ ? CefSize(240, 600) : CefSize(76, 600);
+        return CefSize(240, 600);
     }
 
     CefSize GetMinimumSize(CefRefPtr<CefView> /*view*/) override {
-        return sidebar_.expanded_ ? CefSize(180, 200) : CefSize(64, 80);
+        return CefSize(180, 200);
     }
-
-private:
-    const FocusSidebar& sidebar_;
 
     IMPLEMENT_REFCOUNTING(FocusPanelDelegate);
 };
@@ -78,7 +73,7 @@ FocusSidebar::FocusSidebar(core::BrowserSession& session, core::FocusQueue& focu
     : session_(session), focus_queue_(focus_queue) {
     session_.AddObserver(this);
 
-    panel_delegate_ = new FocusPanelDelegate(*this);
+    panel_delegate_ = new FocusPanelDelegate();
     panel_ = CefPanel::CreatePanel(panel_delegate_);
 
     CefBoxLayoutSettings settings{};
@@ -138,10 +133,6 @@ void FocusSidebar::HandleFocusAction(const FocusAction action, const std::string
     CEF_REQUIRE_UI_THREAD();
 
     switch (action) {
-        case FocusAction::ToggleExpanded:
-            expanded_ = !expanded_;
-            RebuildQueueView();
-            break;
         case FocusAction::EnqueueActiveTab:
             static_cast<void>(core::FocusSessionController::EnqueueActiveTab(session_, focus_queue_));
             RebuildQueueView();
@@ -204,24 +195,6 @@ void FocusSidebar::RebuildQueueView() {
 
     panel_->RemoveAllChildViews();
     delegates_.clear();
-
-    auto toggle_delegate = CefRefPtr<CefButtonDelegate>(
-        new FocusActionDelegate(*this, FocusAction::ToggleExpanded, ""));
-    delegates_.push_back(toggle_delegate);
-    auto toggle_btn = CefLabelButton::CreateLabelButton(
-        toggle_delegate, expanded_ ? "Focus <" : "Focus >");
-    panel_->AddChildView(toggle_btn);
-    layout_->SetFlexForView(toggle_btn, 0);
-
-    if (!expanded_) {
-        panel_->InvalidateLayout();
-        panel_->Layout();
-        auto window = panel_->GetWindow();
-        if (window) {
-            window->Layout();
-        }
-        return;
-    }
 
     auto sprint_panel = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings sprint_settings{};
@@ -376,7 +349,6 @@ void FocusSidebar::RebuildQueueView() {
         layout_->SetFlexForView(item_panel, 0);
     }
 
-    panel_->InvalidateLayout();
     panel_->Layout();
     auto window = panel_->GetWindow();
     if (window) {
