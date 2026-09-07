@@ -134,23 +134,20 @@ void TestCapabilityPolicyWorkspaceRules() {
     using namespace openbrowser::core;
 
     auto policy = CapabilityPolicy::CreateDefault();
-    policy.SetGlobal(Capability::Download, CapabilityDecision::Deny);
-    policy.SetWorkspace("work", Capability::Download, CapabilityDecision::Allow);
+    policy.SetGlobal(Capability::Geolocation, CapabilityDecision::Deny);
+    policy.SetWorkspace("work", Capability::Geolocation, CapabilityDecision::Allow);
 
-    const CapabilityContext work_ctx{
-        .origin = "https://internal.corp",
-        .workspace_id = "work",
-        .session_id = std::nullopt,
-    };
-    const CapabilityContext personal_ctx{
-        .origin = "https://random.site",
-        .workspace_id = "personal",
-        .session_id = std::nullopt,
-    };
+    CapabilityContext work_ctx;
+    work_ctx.workspace_id = "work";
+    work_ctx.origin = "https://internal.corp";
 
-    Require(policy.Evaluate(Capability::Download, work_ctx) == CapabilityDecision::Allow,
+    CapabilityContext personal_ctx;
+    personal_ctx.workspace_id = "personal";
+    personal_ctx.origin = "https://random.site";
+
+    Require(policy.Resolve(Capability::Geolocation, work_ctx) == CapabilityDecision::Allow,
             "Workspace rule should override global rule to Allow for work workspace");
-    Require(policy.Evaluate(Capability::Download, personal_ctx) == CapabilityDecision::Deny,
+    Require(policy.Resolve(Capability::Geolocation, personal_ctx) == CapabilityDecision::Deny,
             "Personal workspace without rule should fallback to global Deny");
 }
 
