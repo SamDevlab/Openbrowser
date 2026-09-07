@@ -234,6 +234,16 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_network_lab_enhanced_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_network_lab_enhanced_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_private_profile_isolation_tests tests/private_profile_isolation_tests.cpp)
+    target_link_libraries(openbrowser_private_profile_isolation_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_private_profile_isolation_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_private_profile_isolation_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_history_bookmark_persistence_tests tests/history_bookmark_persistence_tests.cpp)
+    target_link_libraries(openbrowser_history_bookmark_persistence_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_history_bookmark_persistence_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_history_bookmark_persistence_tests PRIVATE cxx_std_20)
+
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
@@ -341,6 +351,8 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.filter_decision_log COMMAND openbrowser_filter_decision_log_tests)
     add_test(NAME openbrowser.obtrace_recorder COMMAND openbrowser_obtrace_recorder_tests)
     add_test(NAME openbrowser.network_lab_enhanced COMMAND openbrowser_network_lab_enhanced_tests)
+    add_test(NAME openbrowser.private_profile_isolation COMMAND openbrowser_private_profile_isolation_tests)
+    add_test(NAME openbrowser.history_bookmark_persistence COMMAND openbrowser_history_bookmark_persistence_tests)
 endif()
 
 

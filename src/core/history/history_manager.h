@@ -4,8 +4,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace openbrowser::core {
@@ -37,6 +39,12 @@ public:
     void ClearWorkspaceHistory(const WorkspaceId& workspace_id);
 
     [[nodiscard]] std::size_t TotalEntries() const noexcept;
+
+    [[nodiscard]] std::string Serialize() const;
+    bool Deserialize(std::string_view json);
+
+    [[nodiscard]] bool SaveToFile(const std::filesystem::path& path) const;
+    bool LoadFromFile(const std::filesystem::path& path);
 
 private:
     std::vector<HistoryEntry> entries_;

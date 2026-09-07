@@ -1,4 +1,5 @@
 #include "devtools/network/network_trace.h"
+#include "core/network/filter_decision_log.h"
 
 #include <algorithm>
 #include <array>
@@ -139,6 +140,10 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
                 .response_headers = std::move(res_headers),
                 .body_preview = event.body_preview,
                 .attribution = event.attribution,
+                .connection_id = event.connection_id,
+                .filter_blocked = false,
+                .filter_rule_source = {},
+                .filter_layer = {},
             };
 
             if (event.type == NetworkEventType::RequestFinished) {
@@ -153,6 +158,9 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
             auto& summary = summaries[it->second];
             if (event.attribution != core::NetworkAttribution::Page) {
                 summary.attribution = event.attribution;
+            }
+            if (event.connection_id.has_value()) {
+                summary.connection_id = event.connection_id;
             }
             if (!event.url.empty() && (summary.url.empty() || event.type == NetworkEventType::Redirect)) {
                 summary.url = event.url;
@@ -194,7 +202,25 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
         }
     }
 
+    if (decision_log_ != nullptr) {
+        for (auto& summary : summaries) {
+            if (const auto dec = decision_log_->FindByRequestId(summary.request_id); dec.has_value()) {
+                summary.filter_blocked = dec->blocked;
+                summary.filter_rule_source = dec->rule_source;
+                summary.filter_layer = core::FilterDecisionLayerToString(dec->layer);
+            }
+        }
+    }
+
     return summaries;
+}
+
+void NetworkTraceBuffer::SetDecisionLog(const core::FilterDecisionLog* log) noexcept {
+    decision_log_ = log;
+}
+
+const core::FilterDecisionLog* NetworkTraceBuffer::DecisionLog() const noexcept {
+    return decision_log_;
 }
 
 std::vector<NetworkRequestSummary> NetworkTraceBuffer::QueryRequests(

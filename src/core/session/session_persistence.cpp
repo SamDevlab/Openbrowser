@@ -330,9 +330,11 @@ SessionSnapshot SessionPersistence::CaptureSnapshot(
     SessionSnapshot snapshot;
     snapshot.schema_version = 1;
     snapshot.clean_shutdown = clean_shutdown;
-    snapshot.active_tab_id = session.ActiveTabId();
 
     for (const auto& tab : session.Tabs()) {
+        if (tab.is_ephemeral) {
+            continue;
+        }
         snapshot.tabs.push_back({
             .id = tab.id,
             .url = tab.url,
@@ -342,7 +344,24 @@ SessionSnapshot SessionPersistence::CaptureSnapshot(
         });
     }
 
+    if (session.ActiveTabId().has_value()) {
+        const auto* active_tab = session.FindTab(*session.ActiveTabId());
+        if (active_tab != nullptr && !active_tab->is_ephemeral) {
+            snapshot.active_tab_id = session.ActiveTabId();
+        } else if (!snapshot.tabs.empty()) {
+            snapshot.active_tab_id = snapshot.tabs.front().id;
+        } else {
+            snapshot.active_tab_id = std::nullopt;
+        }
+    }
+
     for (const auto& item : queue.Items()) {
+        if (item.tab_id.has_value()) {
+            const auto* tab = session.FindTab(*item.tab_id);
+            if (tab != nullptr && tab->is_ephemeral) {
+                continue;
+            }
+        }
         snapshot.focus_items.push_back({
             .id = item.id,
             .url = item.url,

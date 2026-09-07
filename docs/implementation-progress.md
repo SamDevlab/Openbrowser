@@ -82,3 +82,14 @@ All five M2 milestones have been delivered, tested across unit test suites and t
 - **M7.3 Delivered**: Local `.obtrace` Trace Recorder & Versioned File Format (`ObtraceRecorder` subscribing to `NetworkTraceBuffer`, streaming versioned NDJSON events to disk with `trace_start` / `trace_end` sentinels; `NetworkTraceBuffer::ExportToObtrace` static batch export method; full sensitive header redaction preserved).
 - **M7.4 Delivered**: Desktop Network Lab Enhanced Views (`NetworkLabPanel` extended with three-tab design — `[▶ Requests]` / `[▶ Connections]` / `[▶ Decisions]` — surfacing `ConnectionRegistry` and `FilterDecisionLog` data; two new ActionRegistry entries: `devtools.export_har` (`Ctrl+Shift+H`) and `devtools.export_obtrace` (`Ctrl+Shift+O`); `DesktopApp` wired with all M7 subsystems).
 
+## Runtime Consolidation & End-to-End Integration (M1–M7)
+
+- **Live CEF Ephemeral Profile Isolation**: `CefBrowserEngine` provisions a dedicated in-memory `CefRequestContext` (empty `cache_path`, zero cookie persistence) for private tabs; `SessionPersistence` filters out ephemeral tabs and focus items; `DesktopApp` suppresses history visits and session writes during private sessions; `PurgeEphemeralContext()` guarantees memory cleanup. Tested via `openbrowser_private_profile_isolation_tests`.
+- **Live Filter Decision Correlation**: CEF resource requests generate Openbrowser trace request IDs prior to filtering; `CapabilityPolicy` and `ContentFilter::EvaluateWithId` populate `FilterDecisionLog` with correlated IDs; `NetworkTraceBuffer::AggregateRequests` automatically decorates summaries with filter decision outcomes.
+- **Live Connection Diagnostics & TLS**: Real endpoints, protocols (`h2`, `h3`, `http/1.1`), and TLS metadata are extracted from CEF response headers and registered into `ConnectionRegistry`, linking `NetworkEvent::connection_id` to observable connection diagnostics.
+- **Live User-Agent & Mitigation Enforcement**: `UserAgentPolicyEngine` dynamically generates User-Agent and Client Hints (`sec-ch-ua*`) applied directly to outgoing `CefRequest` headers; `CompatibilityMitigationRegistry` transparently evaluates site-scoped mitigation flags (`BypassTrackerProtection`).
+- **History & Bookmarks Disk Persistence**: Implemented JSON serialization and atomic file save/load in `HistoryManager` and `BookmarkManager` (`history.json`, `bookmarks.json`), with roundtrip test suite `openbrowser_history_bookmark_persistence_tests`.
+- **Local Filesystem Sync Integration**: `LocalFilesystemSyncProvider` integrated into `DesktopApp` with registered keyboard action `sync.trigger_local` (`Ctrl+Shift+S`).
+- **Streaming Trace Recording & Privacy Guards**: `ObtraceRecorder` wired to action `network_lab.toggle_recorder` (`Ctrl+Shift+R`), with automated flush/stop on shutdown and suppression of disk writes during private browsing.
+
+
