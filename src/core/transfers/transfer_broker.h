@@ -13,6 +13,8 @@
 
 namespace openbrowser::core {
 
+class FileBroker;
+
 class TransferObserver {
 public:
     virtual ~TransferObserver() = default;
@@ -20,6 +22,12 @@ public:
     virtual void OnTransferStarted(const TransferItem& item) = 0;
     virtual void OnTransferUpdated(const TransferItem& item) = 0;
     virtual void OnTransferFinished(const TransferItem& item) = 0;
+};
+
+struct TransferControl {
+    std::function<void()> pause;
+    std::function<void()> resume;
+    std::function<void()> cancel;
 };
 
 class TransferBroker {
@@ -33,12 +41,24 @@ public:
     void AddObserver(TransferObserver* observer);
     void RemoveObserver(TransferObserver* observer) noexcept;
 
+    void SetFileBroker(FileBroker* file_broker) noexcept;
+    [[nodiscard]] FileBroker* GetFileBroker() const noexcept;
+
     bool RegisterTransfer(TransferItem item);
+    bool UpdateMetadata(
+        const TransferId& id,
+        std::string url,
+        std::string suggested_filename,
+        std::string target_path,
+        std::string mime_type);
     bool UpdateProgress(
         const TransferId& id,
         std::int64_t received_bytes,
         std::int64_t total_bytes,
         std::int64_t current_speed);
+
+    void SetControl(const TransferId& id, TransferControl control);
+    void ClearControl(const TransferId& id) noexcept;
 
     bool CompleteTransfer(const TransferId& id);
     bool FailTransfer(const TransferId& id, std::string error_message);
@@ -57,7 +77,9 @@ private:
 
     mutable std::mutex mutex_;
     std::unordered_map<TransferId, TransferItem> transfers_;
+    std::unordered_map<TransferId, TransferControl> controls_;
     std::vector<TransferObserver*> observers_;
+    FileBroker* file_broker_{nullptr};
 };
 
 }  // namespace openbrowser::core
