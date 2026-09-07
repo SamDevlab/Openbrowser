@@ -49,19 +49,18 @@ private:
         Close
     };
 
-    class PanelActionDelegate;
+    class ActionDelegate;
 
-    void HandleTransferAction(TransferAction action, const std::string& transfer_id = {});
-    [[nodiscard]] std::string FormatStatus(const core::TransferItem& item) const;
-    [[nodiscard]] static std::string FormatBytes(std::uint64_t bytes);
-    [[nodiscard]] static std::string FormatRate(double bytes_per_second);
+    void HandleAction(TransferAction action, const std::string& transfer_id = "");
 
     core::TransferBroker& transfer_broker_;
     core::FileBroker& file_broker_;
 
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
-    std::vector<CefRefPtr<CefButtonDelegate>> delegates_;
+    CefRefPtr<CefPanel> list_panel_;
+    CefRefPtr<CefBoxLayout> list_layout_;
+    std::vector<CefRefPtr<CefButtonDelegate>> button_delegates_;
 };
 
-}  // namespace openbrowser::desktop
+} // namespace openbrowser::desktop
