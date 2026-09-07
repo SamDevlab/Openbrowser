@@ -99,6 +99,7 @@ function Write-ShutdownDiagnostics {
         }
     }
 
+    Start-Sleep -Seconds 1
     try {
         $since = (Get-Date).AddMinutes(-3)
         $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $since } -ErrorAction Stop |
@@ -111,6 +112,8 @@ function Write-ShutdownDiagnostics {
             foreach ($event in $events) {
                 Write-Host ("Event {0} Provider={1}: {2}" -f $event.Id, $event.ProviderName, $event.Message)
             }
+        } else {
+            Write-Host 'No matching Windows Application crash event was available yet.'
         }
     } catch {
         Write-Host "Windows event-log diagnostics unavailable: $($_.Exception.Message)"
@@ -243,9 +246,20 @@ try {
     $browser = $null
 
     if (-not (Test-Path -LiteralPath $sessionFile -PathType Leaf)) {
+        if ($firstExitCode -ne 0) {
+            Write-ShutdownDiagnostics -ExitCode $firstExitCode -RuntimeRoot $runtimeRoot -StateRoot $stateRoot
+        }
         throw 'Session file was not written after graceful shutdown.'
     }
-    $session = Get-Content -LiteralPath $sessionFile -Raw | ConvertFrom-Json
+
+    $sessionRaw = Get-Content -LiteralPath $sessionFile -Raw
+    $session = $sessionRaw | ConvertFrom-Json
+    if ($firstExitCode -ne 0) {
+        Write-Host "Persisted session after abnormal close:"
+        Write-Host $sessionRaw
+        Write-ShutdownDiagnostics -ExitCode $firstExitCode -RuntimeRoot $runtimeRoot -StateRoot $stateRoot
+    }
+
     if ($session.clean_shutdown -ne $true) {
         throw 'Session did not record a clean shutdown.'
     }
@@ -263,9 +277,7 @@ try {
     }
 
     if ($firstExitCode -ne 0) {
-        Write-Host 'The product persisted a clean shutdown before returning a non-zero process status.'
-        Write-ShutdownDiagnostics -ExitCode $firstExitCode -RuntimeRoot $runtimeRoot -StateRoot $stateRoot
-        throw "Openbrowser returned a non-zero status after a clean persisted shutdown."
+        throw "Openbrowser returned a non-zero status after window close."
     }
 
     $firstRequestCount = Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget
@@ -292,6 +304,9 @@ try {
     $restoredBrowser = $null
 
     $restoredSession = Get-Content -LiteralPath $sessionFile -Raw | ConvertFrom-Json
+    if ($secondExitCode -ne 0) {
+        Write-ShutdownDiagnostics -ExitCode $secondExitCode -RuntimeRoot $runtimeRoot -StateRoot $stateRoot
+    }
     if ($restoredSession.clean_shutdown -ne $true) {
         throw 'Relaunched product did not finish with a clean persisted shutdown.'
     }
@@ -300,8 +315,7 @@ try {
     }
 
     if ($secondExitCode -ne 0) {
-        Write-ShutdownDiagnostics -ExitCode $secondExitCode -RuntimeRoot $runtimeRoot -StateRoot $stateRoot
-        throw "Relaunched Openbrowser returned a non-zero status after a clean persisted shutdown."
+        throw "Relaunched Openbrowser returned a non-zero status after window close."
     }
 
     $finalRequestCount = Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget
