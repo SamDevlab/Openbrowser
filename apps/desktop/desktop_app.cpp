@@ -22,14 +22,20 @@ public:
     DesktopWindowDelegate(
         CefRefPtr<CefPanel> tab_strip_panel,
         CefRefPtr<CefPanel> chrome_panel,
+        CefRefPtr<CefPanel> command_palette_panel,
+        CefRefPtr<CefPanel> bookmarks_bar_panel,
         CefRefPtr<CefPanel> focus_sidebar_panel,
         CefRefPtr<CefPanel> browser_host,
+        CefRefPtr<CefPanel> downloads_panel,
         CefRefPtr<CefPanel> network_lab_panel,
         CefRefPtr<CefBrowserEngine> engine)
         : tab_strip_panel_(std::move(tab_strip_panel)),
           chrome_panel_(std::move(chrome_panel)),
+          command_palette_panel_(std::move(command_palette_panel)),
+          bookmarks_bar_panel_(std::move(bookmarks_bar_panel)),
           focus_sidebar_panel_(std::move(focus_sidebar_panel)),
           browser_host_(std::move(browser_host)),
+          downloads_panel_(std::move(downloads_panel)),
           network_lab_panel_(std::move(network_lab_panel)),
           engine_(std::move(engine)) {}
 
@@ -55,6 +61,14 @@ public:
             root_panel->AddChildView(chrome_panel_);
             root_layout->SetFlexForView(chrome_panel_, 0);
         }
+        if (command_palette_panel_) {
+            root_panel->AddChildView(command_palette_panel_);
+            root_layout->SetFlexForView(command_palette_panel_, 0);
+        }
+        if (bookmarks_bar_panel_) {
+            root_panel->AddChildView(bookmarks_bar_panel_);
+            root_layout->SetFlexForView(bookmarks_bar_panel_, 0);
+        }
 
         CefRefPtr<CefPanel> body_panel = CefPanel::CreatePanel(nullptr);
         CefBoxLayoutSettings body_settings{};
@@ -75,6 +89,10 @@ public:
         root_panel->AddChildView(body_panel);
         root_layout->SetFlexForView(body_panel, 1);
 
+        if (downloads_panel_) {
+            root_panel->AddChildView(downloads_panel_);
+            root_layout->SetFlexForView(downloads_panel_, 0);
+        }
         if (network_lab_panel_) {
             root_panel->AddChildView(network_lab_panel_);
             root_layout->SetFlexForView(network_lab_panel_, 0);
@@ -90,8 +108,11 @@ public:
         engine_->NotifyWindowDestroyed();
         tab_strip_panel_ = nullptr;
         chrome_panel_ = nullptr;
+        command_palette_panel_ = nullptr;
+        bookmarks_bar_panel_ = nullptr;
         focus_sidebar_panel_ = nullptr;
         browser_host_ = nullptr;
+        downloads_panel_ = nullptr;
         network_lab_panel_ = nullptr;
         engine_ = nullptr;
     }
@@ -109,13 +130,17 @@ public:
 private:
     CefRefPtr<CefPanel> tab_strip_panel_;
     CefRefPtr<CefPanel> chrome_panel_;
+    CefRefPtr<CefPanel> command_palette_panel_;
+    CefRefPtr<CefPanel> bookmarks_bar_panel_;
     CefRefPtr<CefPanel> focus_sidebar_panel_;
     CefRefPtr<CefPanel> browser_host_;
+    CefRefPtr<CefPanel> downloads_panel_;
     CefRefPtr<CefPanel> network_lab_panel_;
     CefRefPtr<CefBrowserEngine> engine_;
 
     IMPLEMENT_REFCOUNTING(DesktopWindowDelegate);
 };
+
 
 }  // namespace
 
@@ -147,6 +172,10 @@ void DesktopApp::OnContextInitialized() {
 
     file_broker_ = std::make_unique<core::FileBroker>(StorageDirectory() / "downloads");
 
+    profile_manager_ = std::make_unique<core::ProfileManager>();
+    mitigation_registry_ = std::make_unique<core::CompatibilityMitigationRegistry>();
+    ua_engine_ = std::make_unique<core::UserAgentPolicyEngine>();
+
     action_registry_ = std::make_unique<core::ActionRegistry>();
     action_registry_->RegisterAction({
         .id = "network_lab.toggle",
@@ -156,6 +185,50 @@ void DesktopApp::OnContextInitialized() {
         .shortcut_hint = "Ctrl+Shift+L",
         .handler = [this]() {
             ToggleNetworkLab();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "command_palette.toggle",
+        .title = "Toggle Command Palette",
+        .description = "Open or close the command palette search overlay",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+K",
+        .handler = [this]() {
+            ToggleCommandPalette();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "bookmarks.toggle_bar",
+        .title = "Toggle Bookmarks Bar",
+        .description = "Show or hide the horizontal bookmarks bar",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+Shift+B",
+        .handler = [this]() {
+            ToggleBookmarksBar();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "downloads.toggle_panel",
+        .title = "Toggle Downloads Panel",
+        .description = "Open or close the downloads transfer drawer",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+J",
+        .handler = [this]() {
+            ToggleDownloadsPanel();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "profile.toggle_incognito",
+        .title = "Toggle Private Profile",
+        .description = "Switch between Default profile and Ephemeral Incognito profile",
+        .category = core::ActionCategory::Privacy,
+        .shortcut_hint = "Ctrl+Shift+P",
+        .handler = [this]() {
+            ToggleProfile();
             return true;
         },
     });
@@ -192,9 +265,16 @@ void DesktopApp::OnContextInitialized() {
     }
 
     tab_strip_ = std::make_unique<TabStrip>(*session_, workspace_manager_.get());
-    chrome_ = std::make_unique<BrowserChrome>(*session_, engine_, [this]() {
-        ToggleNetworkLab();
-    });
+    bookmarks_bar_ = std::make_unique<BookmarksBar>(*bookmark_manager_, *session_);
+    downloads_panel_ = std::make_unique<DownloadsPanel>(*transfer_broker_, *file_broker_);
+    command_palette_overlay_ = std::make_unique<CommandPaletteOverlay>(*action_registry_);
+    chrome_ = std::make_unique<BrowserChrome>(
+        *session_, engine_,
+        [this]() { ToggleNetworkLab(); },
+        [this]() { ToggleCommandPalette(); },
+        [this]() { ToggleBookmarksBar(); },
+        [this]() { ToggleDownloadsPanel(); },
+        [this]() { ToggleProfile(); });
     focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);
     network_lab_panel_ = std::make_unique<NetworkLabPanel>(*network_trace_, *session_);
 
@@ -211,8 +291,11 @@ void DesktopApp::OnContextInitialized() {
         new DesktopWindowDelegate(
             tab_strip_->View(),
             chrome_->View(),
+            command_palette_overlay_->View(),
+            bookmarks_bar_->View(),
             focus_sidebar_->View(),
             browser_host_,
+            downloads_panel_->View(),
             network_lab_panel_->View(),
             engine_));
 }
@@ -231,6 +314,12 @@ void DesktopApp::ShutdownRuntime() {
         engine_->SetNetworkObservationSink(nullptr);
     }
 
+    command_palette_overlay_.reset();
+    bookmarks_bar_.reset();
+    downloads_panel_.reset();
+    ua_engine_.reset();
+    mitigation_registry_.reset();
+    profile_manager_.reset();
     action_registry_.reset();
     bookmark_manager_.reset();
     history_manager_.reset();
@@ -265,6 +354,50 @@ void DesktopApp::ToggleNetworkLab() {
     CEF_REQUIRE_UI_THREAD();
     if (network_lab_panel_) {
         network_lab_panel_->ToggleVisibility();
+    }
+}
+
+void DesktopApp::ToggleCommandPalette() {
+    CEF_REQUIRE_UI_THREAD();
+    if (command_palette_overlay_) {
+        command_palette_overlay_->ToggleVisibility();
+    }
+}
+
+void DesktopApp::ToggleBookmarksBar() {
+    CEF_REQUIRE_UI_THREAD();
+    if (bookmarks_bar_) {
+        bookmarks_bar_->ToggleVisibility();
+    }
+}
+
+void DesktopApp::ToggleDownloadsPanel() {
+    CEF_REQUIRE_UI_THREAD();
+    if (downloads_panel_) {
+        downloads_panel_->ToggleVisibility();
+    }
+}
+
+void DesktopApp::ToggleProfile() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!profile_manager_) {
+        return;
+    }
+    auto active = profile_manager_->GetActiveProfile();
+    if (active && active->IsEphemeral()) {
+        profile_manager_->SetActiveProfile("default");
+        profile_manager_->PurgeEphemeralProfiles();
+        if (chrome_) {
+            chrome_->SetProfileLabel("[👤 Default]");
+        }
+    } else {
+        auto eph = profile_manager_->CreateEphemeralProfile("Private Session");
+        if (eph) {
+            profile_manager_->SetActiveProfile(eph->GetId());
+            if (chrome_) {
+                chrome_->SetProfileLabel("[🕶 Private]");
+            }
+        }
     }
 }
 

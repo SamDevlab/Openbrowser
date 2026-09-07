@@ -68,5 +68,12 @@ All five M2 milestones have been delivered, tested across unit test suites and t
 - **M5.3 Delivered**: Structured Network Lab Filter Query Parser & Waterfall Phase Timeline (`NetworkFilterQuery` supporting status comparisons/ranges, method, host, state, attribution, and free-text queries, and `WaterfallTimeline` computing timing phase segments and ASCII visualization).
 - **M5.4 Delivered**: Native Adblock / EasyList Rule Parser & Rule List Compiler (`AdblockRuleParser` parsing EasyList/ABP syntax with domain anchors `||`, resource options `$script`, `$third-party`, allowlist rules `@@`, and high-speed compilation into `ContentFilter`).
 
+## Milestone M6: Desktop Chrome Expansion & Integration
+
+- **M6.1 Delivered**: Desktop Command Palette Overlay & Search Dialog (`CommandPaletteOverlay` UI connected to `CommandPalette` and `ActionRegistry`, live result scoring, category indicators, keyboard navigation, and action dispatch).
+- **M6.2 Delivered**: Desktop Bookmarks Bar & Favorites Quick Launcher (`BookmarksBar` horizontal bar component below the navigation chrome, single-click active tab navigation, workspace-scoped bookmark list, and `[+ Bookmark]` quick addition).
+- **M6.3 Delivered**: Downloads & Transfer Progress Drawer (`DownloadsPanel` drawer observing `TransferBroker` and `FileBroker`, tracking transfer state, progress percentages, download rates in KB/s, and pause/resume/cancel controls).
+- **M6.4 Delivered**: Profiles & Incognito Session Launcher & M5 Subsystem Wiring (wired `ProfileManager`, `CompatibilityMitigationRegistry`, and `UserAgentPolicyEngine` in `DesktopApp`, interactive profile chip `[👤 Default]` / `[🕶 Private]`, and quick actions in `ActionRegistry`).
+
 
 
