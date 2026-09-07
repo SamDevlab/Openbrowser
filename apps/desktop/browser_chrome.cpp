@@ -91,6 +91,11 @@ BrowserChrome::BrowserChrome(
     session_.AddObserver(this);
     if (engine_) {
         engine_->AddPermissionPromptObserver(this);
+        if (auto* policy = engine_->MutablePolicy(); policy != nullptr && !engine_->StorageRoot().empty()) {
+            const auto permissions_path = engine_->StorageRoot() / "permissions.json";
+            static_cast<void>(policy->LoadOriginRulesFromFile(permissions_path));
+            policy->SetAutoSavePath(permissions_path);
+        }
     }
 
     address_delegate_ = new AddressFieldDelegate(*this);
@@ -398,11 +403,15 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
 }
 
 void BrowserChrome::SetProfileLabel(const std::string& label) {
+    private_mode_ = label.find("Private") != std::string::npos;
     if (profile_button_) {
         profile_button_->SetText(label);
-        if (toolbar_) {
-            toolbar_->InvalidateLayout();
-        }
+    }
+    UpdatePrivatePresentation();
+    SyncAddressFromSession(session_);
+    UpdateSecurityDetails();
+    if (container_) {
+        container_->Layout();
     }
 }
 
