@@ -102,6 +102,7 @@ void SessionPrivacyOrchestrator::ExitPrivateMode() {
     // 4. Restore persistent profile
     profile_manager_.SetActiveProfile("default");
     profile_manager_.PurgeEphemeralProfiles();
+    session_.PurgeEphemeralClosedTabs();
 
     // 5. Notify callback (e.g. obtrace recorder restored)
     if (on_private_mode_changed_) {

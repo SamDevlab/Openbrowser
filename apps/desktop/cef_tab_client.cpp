@@ -174,6 +174,77 @@ CefRefPtr<CefDisplayHandler> CefTabClient::GetDisplayHandler() {
     return this;
 }
 
+CefRefPtr<CefKeyboardHandler> CefTabClient::GetKeyboardHandler() {
+    return this;
+}
+
+bool CefTabClient::OnPreKeyEvent(
+    CefRefPtr<CefBrowser> /*browser*/,
+    const CefKeyEvent& event,
+    CefEventHandle /*os_event*/,
+    bool* is_keyboard_shortcut) {
+    if (event.type != KEYEVENT_RAWKEYDOWN && event.type != KEYEVENT_KEYDOWN) {
+        return false;
+    }
+
+    const bool ctrl = (event.modifiers & EVENTFLAG_CONTROL_DOWN) != 0;
+    const bool shift = (event.modifiers & EVENTFLAG_SHIFT_DOWN) != 0;
+    const bool alt = (event.modifiers & EVENTFLAG_ALT_DOWN) != 0;
+    const int key = event.windows_key_code;
+
+    if (ctrl && !alt) {
+        if (!shift && (key == 'T' || key == 't')) {
+            if (engine_) engine_->PostAction("navigation.new_tab");
+            if (is_keyboard_shortcut) *is_keyboard_shortcut = true;
+            return true;
+        }
+        if (!shift && (key == 'W' || key == 'w')) {
+            if (engine_) engine_->PostAction("navigation.close_tab");
+            if (is_keyboard_shortcut) *is_keyboard_shortcut = true;
+            return true;
+        }
+        if (shift && (key == 'T' || key == 't')) {
+            if (engine_) engine_->PostAction("navigation.reopen_closed_tab");
+            if (is_keyboard_shortcut) *is_keyboard_shortcut = true;
+            return true;
+        }
+        if (key == 0x09 /*VK_TAB*/) {
+            if (shift) {
+                if (engine_) engine_->PostAction("navigation.prev_tab");
+            } else {
+                if (engine_) engine_->PostAction("navigation.next_tab");
+            }
+            if (is_keyboard_shortcut) *is_keyboard_shortcut = true;
+            return true;
+        }
+        if (!shift && (key == 'L' || key == 'l')) {
+            if (engine_) engine_->PostAction("navigation.focus_address_bar");
+            if (is_keyboard_shortcut) *is_keyboard_shortcut = true;
+            return true;
+        }
+        if (!shift && (key == 'R' || key == 'r')) {
+            if (engine_) engine_->PostAction("navigation.reload");
+            if (is_keyboard_shortcut) *is_keyboard_shortcut = true;
+            return true;
+        }
+    }
+
+    if (alt && !ctrl && !shift) {
+        if (key == 0x25 /*VK_LEFT*/) {
+            if (engine_) engine_->PostAction("navigation.back");
+            if (is_keyboard_shortcut) *is_keyboard_shortcut = true;
+            return true;
+        }
+        if (key == 0x27 /*VK_RIGHT*/) {
+            if (engine_) engine_->PostAction("navigation.forward");
+            if (is_keyboard_shortcut) *is_keyboard_shortcut = true;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 CefRefPtr<CefDownloadHandler> CefTabClient::GetDownloadHandler() {
     return this;
 }

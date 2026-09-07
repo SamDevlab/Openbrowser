@@ -77,6 +77,50 @@ bool IsLoopbackAddress(const std::string_view value) {
     return value.starts_with("[::1]");
 }
 
+std::string UrlEncode(const std::string_view value) {
+    std::string encoded;
+    encoded.reserve(value.size() * 3 / 2);
+    static const char hex_chars[] = "0123456789ABCDEF";
+
+    for (const unsigned char c : value) {
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded.push_back(static_cast<char>(c));
+        } else if (c == ' ') {
+            encoded.push_back('+');
+        } else {
+            encoded.push_back('%');
+            encoded.push_back(hex_chars[(c >> 4) & 0x0F]);
+            encoded.push_back(hex_chars[c & 0x0F]);
+        }
+    }
+    return encoded;
+}
+
+bool LooksLikeHostOrDomain(const std::string_view value) {
+    const std::size_t host_end = value.find_first_of("/?#:");
+    const std::string_view host = (host_end == std::string_view::npos) ? value : value.substr(0, host_end);
+    if (host.empty()) {
+        return false;
+    }
+
+    const std::size_t dot_pos = host.rfind('.');
+    if (dot_pos == std::string_view::npos || dot_pos == 0 || dot_pos == host.size() - 1) {
+        return false;
+    }
+
+    const std::string_view tld = host.substr(dot_pos + 1);
+    if (tld.size() < 2) {
+        return false;
+    }
+    for (const char c : tld) {
+        if (!std::isalnum(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 }  // namespace
 
 std::optional<std::string> NormalizeAddressInput(std::string input) {
@@ -104,6 +148,43 @@ std::optional<std::string> NormalizeAddressInput(std::string input) {
     }
 
     return "https://" + input;
+}
+
+std::optional<std::string> ResolveAddressInput(
+    std::string input,
+    const SearchProvider& provider) {
+    TrimAsciiWhitespace(input);
+    if (input.empty()) {
+        return std::nullopt;
+    }
+
+    if (StartsWithCaseInsensitive(input, "https://") ||
+        StartsWithCaseInsensitive(input, "http://") ||
+        StartsWithCaseInsensitive(input, "about:")) {
+        return input;
+    }
+
+    if (IsLoopbackAddress(input)) {
+        return "http://" + input;
+    }
+
+    const bool has_spaces_or_cntrl = std::any_of(input.begin(), input.end(), [](const unsigned char character) {
+        return std::isspace(character) != 0 || std::iscntrl(character) != 0;
+    });
+
+    if (!has_spaces_or_cntrl && !HasExplicitScheme(input) && LooksLikeHostOrDomain(input)) {
+        return "https://" + input;
+    }
+
+    const std::string encoded_query = UrlEncode(input);
+    std::string search_url = provider.search_url_template;
+    const std::size_t pos = search_url.find("%s");
+    if (pos != std::string::npos) {
+        search_url.replace(pos, 2, encoded_query);
+    } else {
+        search_url += encoded_query;
+    }
+    return search_url;
 }
 
 }  // namespace openbrowser::core::navigation

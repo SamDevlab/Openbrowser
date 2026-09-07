@@ -68,6 +68,64 @@ void TestUnexpectedSchemesAndWhitespaceAreRejected() {
     Require(!openbrowser::core::navigation::NormalizeAddressInput("").has_value(), "reject empty address");
 }
 
+void TestSearchQueryFallback() {
+    using openbrowser::core::navigation::ResolveAddressInput;
+
+    // Direct URLs and domains
+    Require(
+        ResolveAddressInput("https://github.com") == std::optional<std::string>{"https://github.com"},
+        "ResolveAddressInput direct https");
+    Require(
+        ResolveAddressInput("http://example.org/page") == std::optional<std::string>{"http://example.org/page"},
+        "ResolveAddressInput direct http");
+    Require(
+        ResolveAddressInput("about:blank") == std::optional<std::string>{"about:blank"},
+        "ResolveAddressInput about scheme");
+    Require(
+        ResolveAddressInput("github.com") == std::optional<std::string>{"https://github.com"},
+        "ResolveAddressInput naked domain");
+    Require(
+        ResolveAddressInput("localhost:8080") == std::optional<std::string>{"http://localhost:8080"},
+        "ResolveAddressInput loopback");
+
+    // Search query fallback for text with spaces
+    Require(
+        ResolveAddressInput("open source browser github") ==
+            std::optional<std::string>{"https://duckduckgo.com/?q=open+source+browser+github"},
+        "ResolveAddressInput search query with spaces");
+
+    // Single-word search queries (not domains)
+    Require(
+        ResolveAddressInput("browser") ==
+            std::optional<std::string>{"https://duckduckgo.com/?q=browser"},
+        "ResolveAddressInput single word query");
+
+    // Special characters encoding
+    Require(
+        ResolveAddressInput("c++ standard library") ==
+            std::optional<std::string>{"https://duckduckgo.com/?q=c%2B%2B+standard+library"},
+        "ResolveAddressInput encoded query");
+
+    // Empty and whitespace-only
+    Require(!ResolveAddressInput("").has_value(), "ResolveAddressInput empty rejected");
+    Require(!ResolveAddressInput("   ").has_value(), "ResolveAddressInput whitespace-only rejected");
+}
+
+void TestCustomSearchProvider() {
+    using openbrowser::core::navigation::ResolveAddressInput;
+    using openbrowser::core::navigation::SearchProvider;
+
+    const SearchProvider google_provider{
+        .name = "Google",
+        .search_url_template = "https://www.google.com/search?q=%s",
+    };
+
+    Require(
+        ResolveAddressInput("hello world", google_provider) ==
+            std::optional<std::string>{"https://www.google.com/search?q=hello+world"},
+        "custom search provider URL template");
+}
+
 }  // namespace
 
 int main() {
@@ -75,6 +133,8 @@ int main() {
     TestHttpsIsDefault();
     TestLoopbackUsesHttpForLocalDevelopment();
     TestUnexpectedSchemesAndWhitespaceAreRejected();
+    TestSearchQueryFallback();
+    TestCustomSearchProvider();
 
     if (failures != 0) {
         std::cerr << failures << " address input assertion(s) failed\n";

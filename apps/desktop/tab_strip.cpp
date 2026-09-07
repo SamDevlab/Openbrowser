@@ -152,6 +152,11 @@ void TabStrip::RebuildTabs() {
         if (is_discarded) {
             prefix += "💤 ";
         }
+        if (tab.navigation_state == core::NavigationState::Loading) {
+            prefix += "⏳ ";
+        } else if (tab.navigation_state == core::NavigationState::Failed) {
+            prefix += "⚠ ";
+        }
         if (tab.workspace_id.has_value() && !tab.workspace_id->empty() && *tab.workspace_id != "default") {
             prefix += "[" + *tab.workspace_id + "] ";
         }

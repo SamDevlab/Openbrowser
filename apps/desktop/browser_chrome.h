@@ -49,6 +49,7 @@ public:
     void OnPermissionPromptDismissed(uint64_t prompt_id) override;
 
     void SetProfileLabel(const std::string& label);
+    void FocusAddressBar();
 
 private:
     enum class ChromeAction {

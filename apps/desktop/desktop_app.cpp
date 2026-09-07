@@ -20,6 +20,18 @@ namespace {
 
 class DesktopWindowDelegate final : public CefWindowDelegate {
 public:
+    enum AcceleratorCommandId {
+        ID_NEW_TAB = 1001,
+        ID_CLOSE_TAB = 1002,
+        ID_REOPEN_CLOSED_TAB = 1003,
+        ID_NEXT_TAB = 1004,
+        ID_PREV_TAB = 1005,
+        ID_FOCUS_ADDRESS_BAR = 1006,
+        ID_RELOAD = 1007,
+        ID_BACK = 1008,
+        ID_FORWARD = 1009,
+    };
+
     DesktopWindowDelegate(
         CefRefPtr<CefPanel> tab_strip_panel,
         CefRefPtr<CefPanel> chrome_panel,
@@ -29,7 +41,8 @@ public:
         CefRefPtr<CefPanel> browser_host,
         CefRefPtr<CefPanel> downloads_panel,
         CefRefPtr<CefPanel> network_lab_panel,
-        CefRefPtr<CefBrowserEngine> engine)
+        CefRefPtr<CefBrowserEngine> engine,
+        core::ActionRegistry* action_registry = nullptr)
         : tab_strip_panel_(std::move(tab_strip_panel)),
           chrome_panel_(std::move(chrome_panel)),
           command_palette_panel_(std::move(command_palette_panel)),
@@ -38,7 +51,8 @@ public:
           browser_host_(std::move(browser_host)),
           downloads_panel_(std::move(downloads_panel)),
           network_lab_panel_(std::move(network_lab_panel)),
-          engine_(std::move(engine)) {}
+          engine_(std::move(engine)),
+          action_registry_(action_registry) {}
 
     DesktopWindowDelegate(const DesktopWindowDelegate&) = delete;
     DesktopWindowDelegate& operator=(const DesktopWindowDelegate&) = delete;
@@ -46,6 +60,17 @@ public:
     void OnWindowCreated(CefRefPtr<CefWindow> window) override {
         CEF_REQUIRE_UI_THREAD();
         window->SetTitle("Openbrowser");
+
+        // Register window keyboard accelerators
+        window->SetAccelerator(ID_NEW_TAB, 'T', false, true, false);
+        window->SetAccelerator(ID_CLOSE_TAB, 'W', false, true, false);
+        window->SetAccelerator(ID_REOPEN_CLOSED_TAB, 'T', true, true, false);
+        window->SetAccelerator(ID_NEXT_TAB, 0x09 /*VK_TAB*/, false, true, false);
+        window->SetAccelerator(ID_PREV_TAB, 0x09 /*VK_TAB*/, true, true, false);
+        window->SetAccelerator(ID_FOCUS_ADDRESS_BAR, 'L', false, true, false);
+        window->SetAccelerator(ID_RELOAD, 'R', false, true, false);
+        window->SetAccelerator(ID_BACK, 0x25 /*VK_LEFT*/, false, false, true);
+        window->SetAccelerator(ID_FORWARD, 0x27 /*VK_RIGHT*/, false, false, true);
 
         CefRefPtr<CefPanel> root_panel = CefPanel::CreatePanel(nullptr);
         CefBoxLayoutSettings root_settings{};
@@ -104,6 +129,35 @@ public:
         window->Show();
     }
 
+    bool OnAccelerator(CefRefPtr<CefWindow> /*window*/, int command_id) override {
+        CEF_REQUIRE_UI_THREAD();
+        if (!action_registry_) {
+            return false;
+        }
+        switch (command_id) {
+            case ID_NEW_TAB:
+                return action_registry_->ExecuteAction("navigation.new_tab");
+            case ID_CLOSE_TAB:
+                return action_registry_->ExecuteAction("navigation.close_tab");
+            case ID_REOPEN_CLOSED_TAB:
+                return action_registry_->ExecuteAction("navigation.reopen_closed_tab");
+            case ID_NEXT_TAB:
+                return action_registry_->ExecuteAction("navigation.next_tab");
+            case ID_PREV_TAB:
+                return action_registry_->ExecuteAction("navigation.prev_tab");
+            case ID_FOCUS_ADDRESS_BAR:
+                return action_registry_->ExecuteAction("navigation.focus_address_bar");
+            case ID_RELOAD:
+                return action_registry_->ExecuteAction("navigation.reload");
+            case ID_BACK:
+                return action_registry_->ExecuteAction("navigation.back");
+            case ID_FORWARD:
+                return action_registry_->ExecuteAction("navigation.forward");
+            default:
+                return false;
+        }
+    }
+
     void OnWindowDestroyed(CefRefPtr<CefWindow> /*window*/) override {
         CEF_REQUIRE_UI_THREAD();
         engine_->NotifyWindowDestroyed();
@@ -116,6 +170,7 @@ public:
         downloads_panel_ = nullptr;
         network_lab_panel_ = nullptr;
         engine_ = nullptr;
+        action_registry_ = nullptr;
     }
 
     bool CanClose(CefRefPtr<CefWindow> /*window*/) override {
@@ -138,6 +193,7 @@ private:
     CefRefPtr<CefPanel> downloads_panel_;
     CefRefPtr<CefPanel> network_lab_panel_;
     CefRefPtr<CefBrowserEngine> engine_;
+    core::ActionRegistry* action_registry_{nullptr};
 
     IMPLEMENT_REFCOUNTING(DesktopWindowDelegate);
 };
@@ -377,6 +433,120 @@ void DesktopApp::OnContextInitialized() {
     const bool show_network_lab = command_line && command_line->HasSwitch("network-lab");
     network_lab_panel_->SetVisible(show_network_lab);
 
+    action_registry_->RegisterAction({
+        .id = "navigation.new_tab",
+        .title = "New Tab",
+        .description = "Open a new browser tab",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+T",
+        .handler = [this]() {
+            OpenNewTab();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.close_tab",
+        .title = "Close Tab",
+        .description = "Close the current active tab",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+W",
+        .handler = [this]() {
+            CloseActiveTab();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.reopen_closed_tab",
+        .title = "Reopen Closed Tab",
+        .description = "Reopen the most recently closed tab",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+Shift+T",
+        .handler = [this]() {
+            ReopenClosedTab();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.next_tab",
+        .title = "Next Tab",
+        .description = "Cycle to the next visible tab",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+Tab",
+        .handler = [this]() {
+            CycleTab(true);
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.prev_tab",
+        .title = "Previous Tab",
+        .description = "Cycle to the previous visible tab",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+Shift+Tab",
+        .handler = [this]() {
+            CycleTab(false);
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.focus_address_bar",
+        .title = "Focus Address Bar",
+        .description = "Focus and select the address bar",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+L",
+        .handler = [this]() {
+            if (chrome_) {
+                chrome_->FocusAddressBar();
+            }
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.reload",
+        .title = "Reload Page",
+        .description = "Reload the current page",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+R",
+        .handler = [this]() {
+            if (session_ && session_->ActiveTabId().has_value()) {
+                session_->Reload(*session_->ActiveTabId());
+            }
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.back",
+        .title = "Go Back",
+        .description = "Navigate back in history",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Alt+Left",
+        .handler = [this]() {
+            if (session_ && session_->ActiveTabId().has_value()) {
+                session_->GoBack(*session_->ActiveTabId());
+            }
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.forward",
+        .title = "Go Forward",
+        .description = "Navigate forward in history",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Alt+Right",
+        .handler = [this]() {
+            if (session_ && session_->ActiveTabId().has_value()) {
+                session_->GoForward(*session_->ActiveTabId());
+            }
+            return true;
+        },
+    });
+
+    engine_->SetActionDispatcher([this](const std::string& action_id) {
+        if (action_registry_) {
+            action_registry_->ExecuteAction(action_id);
+        }
+    });
+
     session_->AddObserver(this);
 
     // Persist running session with clean_shutdown = false for crash detection
@@ -392,7 +562,8 @@ void DesktopApp::OnContextInitialized() {
             browser_host_,
             downloads_panel_->View(),
             network_lab_panel_->View(),
-            engine_));
+            engine_,
+            action_registry_.get()));
 }
 
 void DesktopApp::ShutdownRuntime() {
@@ -419,6 +590,7 @@ void DesktopApp::ShutdownRuntime() {
     }
 
     if (engine_) {
+        engine_->SetActionDispatcher(nullptr);
         engine_->SetDecisionLog(nullptr);
         engine_->SetMitigationRegistry(nullptr);
         engine_->SetUserAgentPolicyEngine(nullptr);
@@ -628,6 +800,59 @@ void DesktopApp::ExportNetworkObtrace() {
     if (auto f = std::ofstream(out_path); f.is_open()) {
         f << obtrace_content;
     }
+}
+
+void DesktopApp::OpenNewTab() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!session_) return;
+    std::string new_id = "tab-" + std::to_string(++next_tab_index_);
+    while (session_->FindTab(new_id) != nullptr) {
+        new_id = "tab-" + std::to_string(++next_tab_index_);
+    }
+    std::optional<core::WorkspaceId> ws_id = std::nullopt;
+    if (workspace_manager_ != nullptr) {
+        ws_id = workspace_manager_->ActiveWorkspaceId();
+    }
+    const bool is_ephemeral = (privacy_orchestrator_ != nullptr)
+        ? privacy_orchestrator_->IsPrivateModeActive()
+        : (profile_manager_ != nullptr &&
+           profile_manager_->GetActiveProfile() != nullptr &&
+           profile_manager_->GetActiveProfile()->IsEphemeral());
+    core::Tab new_tab;
+    new_tab.id = new_id;
+    new_tab.url = "https://example.com/";
+    new_tab.title = is_ephemeral ? "Private Tab" : "New Tab";
+    new_tab.lifecycle = core::TabLifecycle::Active;
+    new_tab.workspace_id = ws_id;
+    new_tab.is_ephemeral = is_ephemeral;
+    static_cast<void>(session_->OpenTab(std::move(new_tab), true));
+}
+
+void DesktopApp::CloseActiveTab() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!session_) return;
+    const auto& active_id = session_->ActiveTabId();
+    if (active_id.has_value()) {
+        session_->CloseTab(*active_id);
+    }
+}
+
+void DesktopApp::ReopenClosedTab() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!session_) return;
+    const bool allow_ephemeral = (privacy_orchestrator_ != nullptr) && privacy_orchestrator_->IsPrivateModeActive();
+    session_->ReopenLastClosedTab(allow_ephemeral);
+}
+
+void DesktopApp::CycleTab(const bool forward) {
+    CEF_REQUIRE_UI_THREAD();
+    if (!session_) return;
+    session_->CycleTab(forward, [this](const core::Tab& tab) {
+        if (privacy_orchestrator_ != nullptr) {
+            return privacy_orchestrator_->IsTabVisible(tab);
+        }
+        return true;
+    });
 }
 
 }  // namespace openbrowser::desktop

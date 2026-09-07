@@ -17,6 +17,13 @@ enum class CloseActivationPolicy {
     DoNotActivateFallback,
 };
 
+struct ClosedTabRecord {
+    std::string url;
+    std::string title;
+    std::optional<WorkspaceId> workspace_id;
+    bool is_ephemeral{false};
+};
+
 class BrowserSession final : public engine::BrowserEngineEventSink {
 public:
     explicit BrowserSession(engine::BrowserEngine& engine) noexcept;
@@ -43,6 +50,13 @@ public:
     [[nodiscard]] bool ResumeTab(const TabId& tab_id);
     [[nodiscard]] bool DiscardTab(const TabId& tab_id);
 
+    [[nodiscard]] std::optional<TabId> ReopenLastClosedTab(bool allow_ephemeral = true);
+    [[nodiscard]] const std::vector<ClosedTabRecord>& ClosedTabs() const noexcept;
+    void PurgeEphemeralClosedTabs();
+    [[nodiscard]] bool CycleTab(
+        bool forward,
+        const std::function<bool(const Tab&)>& filter = nullptr);
+
     [[nodiscard]] const Tab* FindTab(const TabId& tab_id) const;
     [[nodiscard]] const std::vector<Tab>& Tabs() const noexcept;
     [[nodiscard]] const std::optional<TabId>& ActiveTabId() const noexcept;
@@ -64,9 +78,11 @@ private:
 
     engine::BrowserEngine& engine_;
     std::vector<Tab> tabs_;
+    std::vector<ClosedTabRecord> closed_tabs_;
     std::optional<TabId> active_tab_id_;
     std::vector<BrowserSessionObserver*> observers_;
     std::uint64_t last_activated_counter_{0};
+    std::uint64_t restored_counter_{0};
 };
 
 }  // namespace openbrowser::core

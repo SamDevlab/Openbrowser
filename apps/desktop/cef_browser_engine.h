@@ -135,6 +135,9 @@ public:
     [[nodiscard]] bool CanCloseWindow();
     void NotifyWindowDestroyed();
 
+    void SetActionDispatcher(std::function<void(const std::string&)> dispatcher);
+    void PostAction(const std::string& action_id);
+
 private:
     struct Surface {
         CefRefPtr<CefBrowserView> view;
@@ -183,6 +186,7 @@ private:
     std::atomic<core::UserAgentPolicyEngine*> ua_engine_{nullptr};
     std::atomic<core::CompatibilityMitigationRegistry*> mitigation_registry_{nullptr};
     std::atomic<core::FilterDecisionLog*> filter_decision_log_{nullptr};
+    std::function<void(const std::string&)> action_dispatcher_;
 
     IMPLEMENT_REFCOUNTING(CefBrowserEngine);
 };

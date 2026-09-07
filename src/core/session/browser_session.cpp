@@ -66,6 +66,18 @@ bool BrowserSession::CloseTab(
         return false;
     }
 
+    if (!it->url.empty() && it->url != "about:blank") {
+        closed_tabs_.push_back(ClosedTabRecord{
+            .url = it->url,
+            .title = it->title,
+            .workspace_id = it->workspace_id,
+            .is_ephemeral = it->is_ephemeral,
+        });
+        if (closed_tabs_.size() > 25) {
+            closed_tabs_.erase(closed_tabs_.begin());
+        }
+    }
+
     const bool was_active = active_tab_id_.has_value() && *active_tab_id_ == tab_id;
     const auto closed_index = static_cast<std::size_t>(std::distance(tabs_.begin(), it));
 
@@ -81,6 +93,96 @@ bool BrowserSession::CloseTab(
 
     NotifyObservers();
     return true;
+}
+
+std::optional<TabId> BrowserSession::ReopenLastClosedTab(const bool allow_ephemeral) {
+    if (closed_tabs_.empty()) {
+        return std::nullopt;
+    }
+
+    for (auto it = closed_tabs_.rbegin(); it != closed_tabs_.rend(); ++it) {
+        if (!allow_ephemeral && it->is_ephemeral) {
+            continue;
+        }
+
+        ClosedTabRecord record = *it;
+        closed_tabs_.erase(std::next(it).base());
+
+        Tab restored_tab;
+        restored_tab.id = "restored-" + std::to_string(++restored_counter_);
+        restored_tab.url = record.url;
+        restored_tab.title = record.title.empty() ? record.url : record.title;
+        restored_tab.workspace_id = record.workspace_id;
+        restored_tab.is_ephemeral = record.is_ephemeral;
+        restored_tab.lifecycle = TabLifecycle::Active;
+
+        const std::string restored_id = restored_tab.id;
+        if (OpenTab(std::move(restored_tab), true)) {
+            return restored_id;
+        }
+        return std::nullopt;
+    }
+
+    return std::nullopt;
+}
+
+const std::vector<ClosedTabRecord>& BrowserSession::ClosedTabs() const noexcept {
+    return closed_tabs_;
+}
+
+void BrowserSession::PurgeEphemeralClosedTabs() {
+    std::erase_if(closed_tabs_, [](const ClosedTabRecord& record) {
+        return record.is_ephemeral;
+    });
+}
+
+bool BrowserSession::CycleTab(
+    const bool forward,
+    const std::function<bool(const Tab&)>& filter) {
+    if (tabs_.empty()) {
+        return false;
+    }
+
+    std::vector<std::size_t> visible_indices;
+    visible_indices.reserve(tabs_.size());
+    for (std::size_t i = 0; i < tabs_.size(); ++i) {
+        if (!filter || filter(tabs_[i])) {
+            visible_indices.push_back(i);
+        }
+    }
+
+    if (visible_indices.empty()) {
+        return false;
+    }
+
+    if (visible_indices.size() == 1) {
+        const auto target_id = tabs_[visible_indices[0]].id;
+        return ActivateTab(target_id);
+    }
+
+    std::size_t current_pos = 0;
+    bool found_active = false;
+    if (active_tab_id_.has_value()) {
+        for (std::size_t i = 0; i < visible_indices.size(); ++i) {
+            if (tabs_[visible_indices[i]].id == *active_tab_id_) {
+                current_pos = i;
+                found_active = true;
+                break;
+            }
+        }
+    }
+
+    std::size_t next_pos = 0;
+    if (!found_active) {
+        next_pos = 0;
+    } else if (forward) {
+        next_pos = (current_pos + 1) % visible_indices.size();
+    } else {
+        next_pos = (current_pos + visible_indices.size() - 1) % visible_indices.size();
+    }
+
+    const auto target_id = tabs_[visible_indices[next_pos]].id;
+    return ActivateTab(target_id);
 }
 
 bool BrowserSession::ActivateTab(const TabId& tab_id) {
