@@ -21,6 +21,18 @@ bool DiagnosticsEnabled() {
                static_cast<DWORD>(std::size(value))) > 0;
 }
 
+std::wstring DiagnosticSymbolPath() {
+    std::vector<wchar_t> buffer(32768);
+    const DWORD length = GetEnvironmentVariableW(
+        L"OPENBROWSER_SYMBOL_PATH",
+        buffer.data(),
+        static_cast<DWORD>(buffer.size()));
+    if (length == 0 || length >= buffer.size()) {
+        return {};
+    }
+    return std::wstring(buffer.data(), length);
+}
+
 std::filesystem::path RuntimeDirectory() {
     std::vector<wchar_t> buffer(32768);
     const DWORD length = GetModuleFileNameW(
@@ -52,17 +64,32 @@ void LogAccessViolation(EXCEPTION_POINTERS* exception_info) {
         return;
     }
 
-    const auto address = reinterpret_cast<std::uintptr_t>(
-        exception_info->ExceptionRecord->ExceptionAddress);
+    const auto* record = exception_info->ExceptionRecord;
+    const auto address = reinterpret_cast<std::uintptr_t>(record->ExceptionAddress);
 
     stream << "[openbrowser-crash] exception=0x"
            << std::hex << std::uppercase
-           << exception_info->ExceptionRecord->ExceptionCode
+           << record->ExceptionCode
            << " address=0x" << address;
+
+    if (record->NumberParameters >= 2) {
+        const ULONG_PTR operation = record->ExceptionInformation[0];
+        const ULONG_PTR target = record->ExceptionInformation[1];
+        const char* operation_name = "unknown";
+        if (operation == 0) {
+            operation_name = "read";
+        } else if (operation == 1) {
+            operation_name = "write";
+        } else if (operation == 8) {
+            operation_name = "execute";
+        }
+        stream << " operation=" << operation_name
+               << " target=0x" << static_cast<std::uintptr_t>(target);
+    }
 
     MEMORY_BASIC_INFORMATION memory_info{};
     if (VirtualQuery(
-            exception_info->ExceptionRecord->ExceptionAddress,
+            record->ExceptionAddress,
             &memory_info,
             sizeof(memory_info)) != 0 &&
         memory_info.AllocationBase != nullptr) {
@@ -84,7 +111,9 @@ void LogAccessViolation(EXCEPTION_POINTERS* exception_info) {
 
     HANDLE process = GetCurrentProcess();
     SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_LOAD_LINES);
-    if (SymInitialize(process, nullptr, TRUE)) {
+    const std::wstring symbol_path = DiagnosticSymbolPath();
+    const wchar_t* symbol_search_path = symbol_path.empty() ? nullptr : symbol_path.c_str();
+    if (SymInitializeW(process, symbol_search_path, TRUE)) {
         alignas(SYMBOL_INFO) unsigned char symbol_buffer[
             sizeof(SYMBOL_INFO) + MAX_SYM_NAME]{};
         auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbol_buffer);
