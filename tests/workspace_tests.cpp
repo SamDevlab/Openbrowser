@@ -157,7 +157,7 @@ void TestCapabilityPolicyWorkspaceRules() {
 void TestSessionPersistenceWorkspaceRoundTrip() {
     using namespace openbrowser::core;
 
-    tests::FakeBrowserEngine engine;
+    openbrowser::tests::FakeBrowserEngine engine;
     BrowserSession session(engine);
     FocusQueue queue;
 
@@ -175,8 +175,8 @@ void TestSessionPersistenceWorkspaceRoundTrip() {
     t2.lifecycle = TabLifecycle::Background;
     t2.workspace_id = "personal";
 
-    session.OpenTab(std::move(t1), true);
-    session.OpenTab(std::move(t2), false);
+    Require(session.OpenTab(std::move(t1), true), "OpenTab t1 should succeed");
+    Require(session.OpenTab(std::move(t2), false), "OpenTab t2 should succeed");
 
     const auto snapshot = SessionPersistence::CaptureSnapshot(session, queue, true);
     const auto serialized = SessionPersistence::Serialize(snapshot);
@@ -187,7 +187,7 @@ void TestSessionPersistenceWorkspaceRoundTrip() {
     Require(parsed->tabs[0].workspace_id == "work", "First tab workspace should be work");
     Require(parsed->tabs[1].workspace_id == "personal", "Second tab workspace should be personal");
 
-    tests::FakeBrowserEngine engine2;
+    openbrowser::tests::FakeBrowserEngine engine2;
     BrowserSession restored_session(engine2);
     FocusQueue restored_queue;
     const bool restored = SessionPersistence::RestoreSession(restored_session, restored_queue, *parsed);
