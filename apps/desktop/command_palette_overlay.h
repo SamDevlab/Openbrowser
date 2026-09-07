@@ -4,6 +4,7 @@
 #include "core/commands/command_palette.h"
 
 #include "include/cef_base.h"
+#include "include/views/cef_button.h"
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_panel.h"
 #include "include/views/cef_textfield.h"
