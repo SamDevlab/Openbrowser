@@ -3,8 +3,12 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cctype>
 #include <cstdio>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <unordered_map>
 #include <utility>
 
@@ -16,6 +20,28 @@ std::string LowerAscii(std::string value) {
         return static_cast<char>(std::tolower(character));
     });
     return value;
+}
+
+std::int64_t NowEpochMs() noexcept {
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+}
+
+std::string FormatIso8601Utc(const std::int64_t epoch_ms) {
+    if (epoch_ms <= 0) {
+        return {};
+    }
+
+    const std::time_t seconds = static_cast<std::time_t>(epoch_ms / 1000);
+    const std::tm* utc = std::gmtime(&seconds);
+    if (utc == nullptr) {
+        return {};
+    }
+
+    std::ostringstream out;
+    out << std::put_time(utc, "%Y-%m-%dT%H:%M:%S")
+        << '.' << std::setw(3) << std::setfill('0') << (epoch_ms % 1000) << 'Z';
+    return out.str();
 }
 
 void EscapeJsonString(const std::string_view str, std::string& out) {
@@ -41,6 +67,31 @@ void EscapeJsonString(const std::string_view str, std::string& out) {
         }
     }
     out += '"';
+}
+
+bool IsSensitiveQueryKey(const std::string_view raw_key) {
+    static constexpr std::array sensitive_keys{
+        "token",
+        "access_token",
+        "id_token",
+        "refresh_token",
+        "api_key",
+        "apikey",
+        "auth",
+        "authorization",
+        "password",
+        "passwd",
+        "secret",
+    };
+
+    std::string key(raw_key);
+    key = LowerAscii(std::move(key));
+    return std::find(sensitive_keys.begin(), sensitive_keys.end(), key) != sensitive_keys.end();
+}
+
+std::vector<Header> SafeHeaders(std::vector<Header> headers) {
+    NetworkTraceBuffer::RedactSensitiveHeaders(headers);
+    return headers;
 }
 
 }  // namespace
@@ -75,6 +126,9 @@ void NetworkTraceBuffer::Add(NetworkEvent event) {
         RedactSensitiveHeaders(event.headers);
     }
 
+    if (event.observed_at_ms <= 0) {
+        event.observed_at_ms = NowEpochMs();
+    }
     event.sequence = next_sequence_++;
 
     while (events_.size() >= policy_.max_events) {
@@ -132,7 +186,7 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
                 .method = event.method.empty() ? "GET" : event.method,
                 .url = event.url,
                 .status = event.status,
-                .protocol = event.protocol,
+                .protocol = event.type == NetworkEventType::ResponseReceived ? event.protocol : std::string{},
                 .transferred_bytes = event.transferred_bytes,
                 .state = RequestState::Active,
                 .error = event.error,
@@ -144,6 +198,9 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
                 .filter_blocked = false,
                 .filter_rule_source = {},
                 .filter_layer = {},
+                .started_at_ms = event.observed_at_ms,
+                .ended_at_ms = event.observed_at_ms,
+                .observed_duration_ms = 0,
             };
 
             if (event.type == NetworkEventType::RequestFinished) {
@@ -171,7 +228,10 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
             if (event.status.has_value()) {
                 summary.status = event.status;
             }
-            if (!event.protocol.empty()) {
+            // CEF request/redirect/failure callbacks do not expose negotiated
+            // transport protocol. Only a response event is allowed to publish
+            // protocol data into the aggregate summary.
+            if (event.type == NetworkEventType::ResponseReceived && !event.protocol.empty()) {
                 summary.protocol = event.protocol;
             }
             if (!event.tab_id.has_value() && summary.tab_id.has_value()) {
@@ -180,6 +240,17 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
                 summary.tab_id = event.tab_id;
             }
             summary.transferred_bytes += event.transferred_bytes;
+
+            if (event.observed_at_ms > 0) {
+                if (summary.started_at_ms <= 0 || event.observed_at_ms < summary.started_at_ms) {
+                    summary.started_at_ms = event.observed_at_ms;
+                }
+                if (event.observed_at_ms > summary.ended_at_ms) {
+                    summary.ended_at_ms = event.observed_at_ms;
+                }
+                summary.observed_duration_ms = std::max<std::int64_t>(
+                    0, summary.ended_at_ms - summary.started_at_ms);
+            }
 
             if (event.type == NetworkEventType::RequestStarted && !event.headers.empty()) {
                 summary.request_headers = event.headers;
@@ -350,7 +421,7 @@ std::optional<NetworkRequestSummary> NetworkTraceBuffer::FindRequest(
 std::string NetworkTraceBuffer::ExportToHar(
     const std::vector<NetworkRequestSummary>& requests) {
     std::string out;
-    out.reserve(requests.size() * 512 + 256);
+    out.reserve(requests.size() * 640 + 256);
 
     out += "{\n  \"log\": {\n    \"version\": \"1.2\",\n";
     out += "    \"creator\": {\n      \"name\": \"Openbrowser Network Lab\",\n      \"version\": \"1.0\"\n    },\n";
@@ -358,31 +429,42 @@ std::string NetworkTraceBuffer::ExportToHar(
 
     for (std::size_t i = 0; i < requests.size(); ++i) {
         const auto& req = requests[i];
+        const auto request_headers = SafeHeaders(req.request_headers);
+        const auto response_headers = SafeHeaders(req.response_headers);
+        const auto safe_url = RedactSensitiveUrl(req.url);
+        const auto start_time = FormatIso8601Utc(req.started_at_ms);
+        const auto protocol = req.protocol.empty() ? std::string{"unknown"} : req.protocol;
+
         if (i > 0) {
             out += ",";
         }
         out += "\n      {\n";
-        out += "        \"startedDateTime\": \"1970-01-01T00:00:00.000Z\",\n";
-        out += "        \"time\": 0,\n";
+        out += "        \"startedDateTime\": ";
+        EscapeJsonString(start_time, out);
+        out += ",\n        \"time\": " + std::to_string(std::max<std::int64_t>(0, req.observed_duration_ms)) + ",\n";
+        out += "        \"_openbrowserTimingBasis\": \"observed callback span; transport phases unavailable\",\n";
         out += "        \"_attribution\": ";
         EscapeJsonString(core::AttributionToString(req.attribution), out);
+        out += ",\n";
+        out += "        \"_filterBlocked\": ";
+        out += req.filter_blocked ? "true" : "false";
         out += ",\n";
         out += "        \"request\": {\n";
         out += "          \"method\": ";
         EscapeJsonString(req.method, out);
         out += ",\n          \"url\": ";
-        EscapeJsonString(req.url, out);
+        EscapeJsonString(safe_url, out);
         out += ",\n          \"httpVersion\": ";
-        EscapeJsonString(req.protocol.empty() ? "HTTP/1.1" : req.protocol, out);
+        EscapeJsonString(protocol, out);
         out += ",\n          \"headers\": [";
-        for (std::size_t h = 0; h < req.request_headers.size(); ++h) {
+        for (std::size_t h = 0; h < request_headers.size(); ++h) {
             if (h > 0) {
                 out += ",";
             }
             out += "\n            {\"name\": ";
-            EscapeJsonString(req.request_headers[h].name, out);
+            EscapeJsonString(request_headers[h].name, out);
             out += ", \"value\": ";
-            EscapeJsonString(req.request_headers[h].value, out);
+            EscapeJsonString(request_headers[h].value, out);
             out += "}";
         }
         out += "\n          ],\n";
@@ -392,32 +474,33 @@ std::string NetworkTraceBuffer::ExportToHar(
         out += "        \"response\": {\n";
         out += "          \"status\": " + std::to_string(req.status.value_or(0)) + ",\n";
         out += "          \"statusText\": ";
-        EscapeJsonString(req.error.empty() ? (req.status.has_value() && *req.status == 200 ? "OK" : "") : req.error, out);
+        EscapeJsonString(req.error, out);
         out += ",\n          \"httpVersion\": ";
-        EscapeJsonString(req.protocol.empty() ? "HTTP/1.1" : req.protocol, out);
+        EscapeJsonString(protocol, out);
         out += ",\n          \"headers\": [";
-        for (std::size_t h = 0; h < req.response_headers.size(); ++h) {
+        for (std::size_t h = 0; h < response_headers.size(); ++h) {
             if (h > 0) {
                 out += ",";
             }
             out += "\n            {\"name\": ";
-            EscapeJsonString(req.response_headers[h].name, out);
+            EscapeJsonString(response_headers[h].name, out);
             out += ", \"value\": ";
-            EscapeJsonString(req.response_headers[h].value, out);
+            EscapeJsonString(response_headers[h].value, out);
             out += "}";
         }
         out += "\n          ],\n";
         out += "          \"content\": {\n";
         out += "            \"size\": " + std::to_string(req.transferred_bytes) + ",\n";
-        out += "            \"mimeType\": \"text/plain\",\n";
-        out += "            \"text\": ";
-        EscapeJsonString(req.body_preview, out);
-        out += "\n          },\n";
+        out += "            \"mimeType\": \"\"\n";
+        out += "          },\n";
         out += "          \"headersSize\": -1,\n";
         out += "          \"bodySize\": " + std::to_string(req.transferred_bytes) + "\n";
         out += "        },\n";
+        if (!req.body_preview.empty()) {
+            out += "        \"_openbrowserBodyPreview\": \"<redacted>\",\n";
+        }
         out += "        \"cache\": {},\n";
-        out += "        \"timings\": {\"send\": 0, \"wait\": 0, \"receive\": 0}\n";
+        out += "        \"timings\": {\"send\": -1, \"wait\": -1, \"receive\": -1}\n";
         out += "      }";
     }
 
@@ -428,7 +511,6 @@ std::string NetworkTraceBuffer::ExportToHar(
 std::string NetworkTraceBuffer::ExportToObtrace(
     const std::vector<NetworkRequestSummary>& requests) {
     std::string out;
-    // Header record — schema version and entry count.
     out += "{\"schema\":\"obtrace/1\",\"type\":\"trace_start\",\"total_requests\":";
     out += std::to_string(requests.size());
     out += "}\n";
@@ -439,13 +521,15 @@ std::string NetworkTraceBuffer::ExportToObtrace(
         out += ",\"method\":";
         EscapeJsonString(req.method, out);
         out += ",\"url\":";
-        EscapeJsonString(req.url, out);
+        EscapeJsonString(RedactSensitiveUrl(req.url), out);
         out += ",\"status\":";
         out += req.status.has_value() ? std::to_string(*req.status) : "null";
         out += ",\"protocol\":";
-        EscapeJsonString(req.protocol, out);
+        EscapeJsonString(req.protocol.empty() ? "unknown" : req.protocol, out);
         out += ",\"transferred_bytes\":";
         out += std::to_string(req.transferred_bytes);
+        out += ",\"observed_started_at_ms\":" + std::to_string(req.started_at_ms);
+        out += ",\"observed_duration_ms\":" + std::to_string(std::max<std::int64_t>(0, req.observed_duration_ms));
         out += ",\"state\":\"";
         switch (req.state) {
             case RequestState::Active:   out += "active";   break;
@@ -468,13 +552,11 @@ std::string NetworkTraceBuffer::ExportToObtrace(
             out += ",\"filter_blocked\":false";
         }
         if (!req.body_preview.empty()) {
-            out += ",\"body_preview\":";
-            EscapeJsonString(req.body_preview, out);
+            out += ",\"body_preview\":\"<redacted>\"";
         }
         out += "}\n";
     }
 
-    // Sentinel record.
     out += "{\"type\":\"trace_end\",\"schema\":\"obtrace/1\",\"total_events\":";
     out += std::to_string(requests.size());
     out += "}\n";
@@ -503,6 +585,71 @@ void NetworkTraceBuffer::RedactSensitiveHeaders(std::vector<Header>& headers) {
             header.value = "<redacted>";
         }
     }
+}
+
+std::string NetworkTraceBuffer::RedactSensitiveUrl(std::string url) {
+    // Redact URL userinfo (https://user:pass@example/...).
+    const auto scheme_pos = url.find("://");
+    if (scheme_pos != std::string::npos) {
+        const auto authority_start = scheme_pos + 3;
+        const auto authority_end = url.find_first_of("/?#", authority_start);
+        const auto bounded_end = authority_end == std::string::npos ? url.size() : authority_end;
+        const auto at = url.rfind('@', bounded_end);
+        if (at != std::string::npos && at >= authority_start && at < bounded_end) {
+            url.replace(authority_start, at - authority_start, "<redacted>");
+        }
+    }
+
+    const auto query_pos = url.find('?');
+    if (query_pos == std::string::npos) {
+        return url;
+    }
+
+    const auto fragment_pos = url.find('#', query_pos + 1);
+    const std::string fragment = fragment_pos == std::string::npos ? std::string{} : url.substr(fragment_pos);
+    const auto query_end = fragment_pos == std::string::npos ? url.size() : fragment_pos;
+    const std::string prefix = url.substr(0, query_pos + 1);
+    const std::string query = url.substr(query_pos + 1, query_end - (query_pos + 1));
+
+    std::string rebuilt;
+    rebuilt.reserve(url.size() + 16);
+    rebuilt += prefix;
+
+    std::size_t cursor = 0;
+    bool first = true;
+    while (cursor <= query.size()) {
+        const auto amp = query.find('&', cursor);
+        const auto pair_end = amp == std::string::npos ? query.size() : amp;
+        const std::string_view pair(query.data() + cursor, pair_end - cursor);
+
+        if (!first) {
+            rebuilt += '&';
+        }
+        first = false;
+
+        const auto equals = pair.find('=');
+        if (equals == std::string_view::npos) {
+            rebuilt.append(pair.data(), pair.size());
+        } else {
+            const auto key = pair.substr(0, equals);
+            rebuilt.append(key.data(), key.size());
+            rebuilt += '=';
+            if (IsSensitiveQueryKey(key)) {
+                rebuilt += "<redacted>";
+            } else {
+                const auto value = pair.substr(equals + 1);
+                rebuilt.append(value.data(), value.size());
+            }
+        }
+
+        if (amp == std::string::npos) {
+            break;
+        }
+        cursor = amp + 1;
+    }
+
+    rebuilt += fragment;
+    return rebuilt;
 }
 
 void NetworkTraceBuffer::NotifyEventAppended(const NetworkEvent& event) {

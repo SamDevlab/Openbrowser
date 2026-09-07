@@ -52,8 +52,11 @@ struct NetworkEvent {
     std::string error;
     std::string body_preview;
     core::NetworkAttribution attribution{core::NetworkAttribution::Page};
-    // M7.1 — cross-reference to ConnectionRegistry
+    // Cross-reference to ConnectionRegistry when one is actually observed.
     std::optional<std::string> connection_id;
+    // Wall-clock time when Openbrowser accepted this observation. This is not
+    // transport-phase telemetry and must not be presented as DNS/TLS timing.
+    std::int64_t observed_at_ms{0};
 };
 
 struct CapturePolicy {
@@ -81,12 +84,14 @@ struct NetworkRequestSummary {
     std::vector<Header> response_headers;
     std::string body_preview;
     core::NetworkAttribution attribution{core::NetworkAttribution::Page};
-    // M7.1 — cross-reference to ConnectionRegistry
     std::optional<std::string> connection_id;
-    // M7.2 — last filter decision for this request (set by FilterDecisionLog)
     bool filter_blocked{false};
     std::string filter_rule_source;
     std::string filter_layer;
+    // Span between first and last callbacks observed for this request.
+    std::int64_t started_at_ms{0};
+    std::int64_t ended_at_ms{0};
+    std::int64_t observed_duration_ms{0};
 };
 
 struct NetworkTraceFilter {
@@ -129,10 +134,13 @@ public:
     [[nodiscard]] std::optional<NetworkRequestSummary> FindRequest(
         const std::string& request_id) const;
 
+    // Safe-by-default diagnostic exports. Headers, credential-like URL query
+    // values and captured body previews are redacted defensively here even if
+    // the caller supplies summaries that did not originate in the default
+    // redacting capture policy.
     [[nodiscard]] static std::string ExportToHar(
         const std::vector<NetworkRequestSummary>& requests);
 
-    // M7.3 — export to versioned NDJSON .obtrace format
     [[nodiscard]] static std::string ExportToObtrace(
         const std::vector<NetworkRequestSummary>& requests);
 
@@ -141,6 +149,7 @@ public:
 
     [[nodiscard]] static bool IsSensitiveHeaderName(const std::string& name);
     static void RedactSensitiveHeaders(std::vector<Header>& headers);
+    [[nodiscard]] static std::string RedactSensitiveUrl(std::string url);
 
 private:
     void NotifyEventAppended(const NetworkEvent& event);
