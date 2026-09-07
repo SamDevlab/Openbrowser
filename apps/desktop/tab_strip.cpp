@@ -2,6 +2,7 @@
 
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
+#include "core/session/session_privacy_orchestrator.h"
 #include "core/workspaces/workspace_manager.h"
 
 #include "include/views/cef_box_layout.h"
@@ -38,10 +39,12 @@ private:
 TabStrip::TabStrip(
     core::BrowserSession& session,
     core::WorkspaceManager* workspace_manager,
-    core::ProfileManager* profile_manager)
+    core::ProfileManager* profile_manager,
+    core::SessionPrivacyOrchestrator* privacy_orchestrator)
     : session_(session),
       workspace_manager_(workspace_manager),
-      profile_manager_(profile_manager) {
+      profile_manager_(profile_manager),
+      privacy_orchestrator_(privacy_orchestrator) {
     session_.AddObserver(this);
 
     panel_ = CefPanel::CreatePanel(nullptr);
@@ -76,7 +79,11 @@ void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id
     switch (action) {
         case TabAction::Activate:
             if (!tab_id.empty()) {
-                static_cast<void>(session_.ActivateTab(tab_id));
+                if (privacy_orchestrator_ != nullptr) {
+                    static_cast<void>(privacy_orchestrator_->ActivateTab(tab_id));
+                } else {
+                    static_cast<void>(session_.ActivateTab(tab_id));
+                }
             }
             break;
         case TabAction::Close:
@@ -99,9 +106,11 @@ void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id
             if (workspace_manager_ != nullptr) {
                 ws_id = workspace_manager_->ActiveWorkspaceId();
             }
-            const bool is_ephemeral = (profile_manager_ != nullptr &&
-                                       profile_manager_->GetActiveProfile() != nullptr &&
-                                       profile_manager_->GetActiveProfile()->IsEphemeral());
+            const bool is_ephemeral = (privacy_orchestrator_ != nullptr)
+                ? privacy_orchestrator_->IsPrivateModeActive()
+                : (profile_manager_ != nullptr &&
+                   profile_manager_->GetActiveProfile() != nullptr &&
+                   profile_manager_->GetActiveProfile()->IsEphemeral());
             core::Tab new_tab;
             new_tab.id = new_id;
             new_tab.url = "https://example.com/";
@@ -125,6 +134,16 @@ void TabStrip::RebuildTabs() {
     const auto& active_id = session_.ActiveTabId();
 
     for (const auto& tab : tabs) {
+        if (privacy_orchestrator_ != nullptr && !privacy_orchestrator_->IsTabVisible(tab)) {
+            continue;
+        } else if (privacy_orchestrator_ == nullptr && profile_manager_ != nullptr) {
+            const auto* active = profile_manager_->GetActiveProfile();
+            const bool is_profile_ephemeral = (active != nullptr && active->IsEphemeral());
+            if (is_profile_ephemeral && !tab.is_ephemeral) {
+                continue;
+            }
+        }
+
         const bool is_active = (active_id.has_value() && *active_id == tab.id);
         const bool is_discarded = (tab.lifecycle == core::TabLifecycle::Discarded);
         const std::string title_text = tab.title.empty() ? tab.url : tab.title;

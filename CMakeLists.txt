@@ -11,6 +11,7 @@ add_library(openbrowser_core
     src/core/capabilities/capability_policy.cpp
     src/core/navigation/address_input.cpp
     src/core/session/browser_session.cpp
+    src/core/session/session_privacy_orchestrator.cpp
     src/core/session/focus_session_controller.cpp
     src/core/session/session_persistence.cpp
     src/core/session/tab_discard_policy.cpp

@@ -13,6 +13,7 @@ namespace openbrowser::core {
 class BrowserSession;
 class WorkspaceManager;
 class ProfileManager;
+class SessionPrivacyOrchestrator;
 }
 
 class CefBoxLayout;
@@ -25,7 +26,8 @@ public:
     explicit TabStrip(
         core::BrowserSession& session,
         core::WorkspaceManager* workspace_manager = nullptr,
-        core::ProfileManager* profile_manager = nullptr);
+        core::ProfileManager* profile_manager = nullptr,
+        core::SessionPrivacyOrchestrator* privacy_orchestrator = nullptr);
     ~TabStrip() override;
 
     TabStrip(const TabStrip&) = delete;
@@ -51,6 +53,7 @@ private:
     core::BrowserSession& session_;
     core::WorkspaceManager* workspace_manager_{nullptr};
     core::ProfileManager* profile_manager_{nullptr};
+    core::SessionPrivacyOrchestrator* privacy_orchestrator_{nullptr};
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
     std::size_t next_tab_index_{1};

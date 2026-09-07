@@ -17,6 +17,8 @@
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
 #include "core/session/browser_session_observer.h"
+#include "core/session/session_history_bridge.h"
+#include "core/session/session_privacy_orchestrator.h"
 #include "core/sync/local_filesystem_sync.h"
 #include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
@@ -96,6 +98,8 @@ private:
     std::unique_ptr<devtools::network::ConnectionRegistry> connection_registry_; // M7.1
     std::unique_ptr<core::FilterDecisionLog> filter_decision_log_;               // M7.2
     std::unique_ptr<devtools::network::ObtraceRecorder> obtrace_recorder_;       // M7.3
+    std::unique_ptr<core::SessionHistoryBridge> session_history_bridge_;
+    std::unique_ptr<core::SessionPrivacyOrchestrator> privacy_orchestrator_;
     std::filesystem::path session_file_path_;
 
     IMPLEMENT_REFCOUNTING(DesktopApp);

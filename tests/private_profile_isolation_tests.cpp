@@ -5,6 +5,7 @@
 #include "core/session/browser_session.h"
 #include "core/session/session_history_bridge.h"
 #include "core/session/session_persistence.h"
+#include "core/session/session_privacy_orchestrator.h"
 #include "core/tabs/tab.h"
 #include "devtools/network/obtrace_recorder.h"
 #include "engine/browser_engine.h"
@@ -15,22 +16,53 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
-class DummyEngine final : public openbrowser::engine::BrowserEngine {
+class MockBrowserEngine final : public openbrowser::engine::BrowserEngine {
 public:
     void SetEventSink(openbrowser::engine::BrowserEngineEventSink*) noexcept override {}
-    void CreateTab(const openbrowser::core::Tab&) override {}
-    void CloseTab(const openbrowser::core::TabId&) override {}
-    void ActivateTab(const openbrowser::core::TabId&) override {}
+    void CreateTab(const openbrowser::core::Tab& tab) override {
+        created_tabs.push_back(tab);
+        was_ephemeral_when_created.push_back(is_ephemeral_mode_);
+        event_log.push_back("CreateTab:" + tab.id + ":" + (tab.is_ephemeral ? "eph" : "pers"));
+    }
+    void CloseTab(const openbrowser::core::TabId& tab_id) override {
+        closed_tabs.push_back(tab_id);
+        event_log.push_back("CloseTab:" + tab_id);
+    }
+    void ActivateTab(const openbrowser::core::TabId& tab_id) override {
+        activated_tabs.push_back(tab_id);
+        event_log.push_back("ActivateTab:" + tab_id);
+    }
     void Navigate(const openbrowser::engine::NavigationRequest&) override {}
     void GoBack(const openbrowser::core::TabId&) override {}
     void GoForward(const openbrowser::core::TabId&) override {}
     void Reload(const openbrowser::core::TabId&) override {}
     void Suspend(const openbrowser::core::TabId&) override {}
     void Resume(const openbrowser::core::TabId&) override {}
+
+    void SetEphemeralMode(bool enabled) noexcept override {
+        is_ephemeral_mode_ = enabled;
+        event_log.push_back(enabled ? "SetEphemeralMode(true)" : "SetEphemeralMode(false)");
+    }
+    bool IsEphemeralMode() const noexcept override { return is_ephemeral_mode_; }
+    void PurgeEphemeralContext() override {
+        purged_ephemeral_context = true;
+        event_log.push_back("PurgeEphemeralContext()");
+    }
+
+    bool is_ephemeral_mode_{false};
+    bool purged_ephemeral_context{false};
+    std::vector<std::string> event_log;
+    std::vector<openbrowser::core::Tab> created_tabs;
+    std::vector<openbrowser::core::TabId> closed_tabs;
+    std::vector<openbrowser::core::TabId> activated_tabs;
+    std::vector<bool> was_ephemeral_when_created;
 };
+
+using DummyEngine = MockBrowserEngine;
 
 void Require(bool condition, const std::string& message) {
     if (!condition) {
@@ -276,6 +308,158 @@ void TestEphemeralProfilePurge() {
     Require(!ephemeral->HasSessionData("session_state"), "Session data purged");
 }
 
+// 6. Behavioral Scenario: Private Tab Visibility and Activation Guard
+void TestPrivateTabVisibilityAndActivationGuard() {
+    using namespace openbrowser::core;
+    MockBrowserEngine engine;
+    BrowserSession session(engine);
+    ProfileManager profile_mgr;
+    SessionPrivacyOrchestrator orchestrator(session, profile_mgr, &engine);
+
+    // Initial state: normal tab exists
+    Tab normal_tab;
+    normal_tab.id = "tab-persistent-1";
+    normal_tab.url = "https://example.com/normal";
+    normal_tab.title = "Normal Tab";
+    normal_tab.lifecycle = TabLifecycle::Active;
+    normal_tab.is_ephemeral = false;
+    Require(session.OpenTab(std::move(normal_tab), true), "Opened normal tab");
+
+    // In normal mode: normal tab is visible and activatable
+    const auto* tab1 = session.FindTab("tab-persistent-1");
+    Require(tab1 != nullptr, "Tab 1 exists");
+    Require(orchestrator.IsTabVisible(*tab1), "Normal tab is visible in normal mode");
+    Require(orchestrator.CanActivateTab("tab-persistent-1"), "Normal tab can be activated in normal mode");
+
+    // Enter private mode
+    Require(orchestrator.EnterPrivateMode(), "Entered private mode");
+    Require(orchestrator.IsPrivateModeActive(), "Private mode active");
+    Require(session.Tabs().size() == 2, "Session has 2 tabs (1 normal, 1 private)");
+
+    const auto* priv_tab = session.FindTab(*session.ActiveTabId());
+    Require(priv_tab != nullptr, "Active tab is private tab");
+    Require(priv_tab->is_ephemeral, "Active tab is marked ephemeral");
+
+    // Private tab visibility: normal tabs are hidden, ephemeral tabs are visible
+    Require(!orchestrator.IsTabVisible(*tab1), "Normal tab must be HIDDEN in Private Mode");
+    Require(orchestrator.IsTabVisible(*priv_tab), "Ephemeral tab is VISIBLE in Private Mode");
+
+    // Activation guard: attempting to activate normal tab while in Private Mode is REJECTED
+    Require(!orchestrator.CanActivateTab("tab-persistent-1"), "CanActivateTab must return false for persistent tab in Private Mode");
+    const bool activation_result = orchestrator.ActivateTab("tab-persistent-1");
+    Require(!activation_result, "ActivateTab must REJECT activating persistent tab during Private Mode");
+    Require(*session.ActiveTabId() != "tab-persistent-1", "Active tab must NOT switch to persistent tab");
+    Require(*session.ActiveTabId() == priv_tab->id, "Active tab must remain the private tab");
+
+    // Ephemeral tab can be activated
+    Require(orchestrator.CanActivateTab(priv_tab->id), "CanActivateTab returns true for ephemeral tab in Private Mode");
+}
+
+// 7. Behavioral Scenario: Exit Private Mode with existing normal tabs restores persistent tab
+void TestPrivateExitWithNormalTabsRestoresPersistentTab() {
+    using namespace openbrowser::core;
+    MockBrowserEngine engine;
+    BrowserSession session(engine);
+    ProfileManager profile_mgr;
+    SessionPrivacyOrchestrator orchestrator(session, profile_mgr, &engine);
+
+    Tab normal_tab;
+    normal_tab.id = "tab-persistent-main";
+    normal_tab.url = "https://work.example.com";
+    normal_tab.title = "Work Tab";
+    normal_tab.lifecycle = TabLifecycle::Active;
+    normal_tab.is_ephemeral = false;
+    Require(session.OpenTab(std::move(normal_tab), true), "Opened normal tab");
+
+    // Enter Private Mode and navigate
+    Require(orchestrator.EnterPrivateMode(), "Entered Private Mode");
+    const auto priv_tab_id = *session.ActiveTabId();
+    Require(session.Navigate(priv_tab_id, "https://secret.org"), "Navigated private tab");
+
+    // Exit Private Mode
+    orchestrator.ExitPrivateMode();
+
+    // Invariants upon exit:
+    Require(!orchestrator.IsPrivateModeActive(), "Private mode inactive");
+    Require(profile_mgr.GetActiveProfile()->GetId() == "default", "Profile restored to default");
+    Require(!engine.IsEphemeralMode(), "Engine ephemeral mode disabled");
+    Require(engine.purged_ephemeral_context, "Engine purged ephemeral context");
+
+    // All ephemeral tabs are closed
+    for (const auto& t : session.Tabs()) {
+        Require(!t.is_ephemeral, "Zero ephemeral tabs remain in session");
+    }
+
+    // Original persistent tab is restored and active
+    Require(session.Tabs().size() == 1, "Only normal tab remains");
+    Require(session.ActiveTabId().has_value() && *session.ActiveTabId() == "tab-persistent-main",
+            "Persistent tab restored as active tab");
+    Require(orchestrator.IsTabVisible(*session.FindTab("tab-persistent-main")),
+            "Restored persistent tab is visible in tab strip");
+}
+
+// 8. Behavioral Scenario: Exit Private Mode without normal tabs creates new persistent tab AFTER engine reset
+void TestPrivateExitWithoutNormalTabsCreatesPersistentTabAfterEngineReset() {
+    using namespace openbrowser::core;
+    MockBrowserEngine engine;
+    BrowserSession session(engine);
+    ProfileManager profile_mgr;
+    SessionPrivacyOrchestrator orchestrator(session, profile_mgr, &engine);
+
+    Tab normal_tab;
+    normal_tab.id = "tab-temporary";
+    normal_tab.url = "https://temp.example.com";
+    normal_tab.lifecycle = TabLifecycle::Active;
+    normal_tab.is_ephemeral = false;
+    Require(session.OpenTab(std::move(normal_tab), true), "Opened temp normal tab");
+
+    Require(orchestrator.EnterPrivateMode(), "Entered private mode");
+    Require(engine.IsEphemeralMode(), "Engine is in ephemeral mode");
+
+    // Close all normal tabs while in private mode
+    Require(session.CloseTab("tab-temporary"), "Closed all normal tabs");
+    Require(session.Tabs().size() == 1, "Only private tab remains");
+
+    // Clear event log to inspect exact sequence during ExitPrivateMode
+    engine.event_log.clear();
+
+    // Exit Private Mode
+    orchestrator.ExitPrivateMode();
+
+    // Verify invariants:
+    Require(!orchestrator.IsPrivateModeActive(), "Private mode inactive");
+    Require(!engine.IsEphemeralMode(), "Engine is in persistent mode");
+    Require(session.Tabs().size() == 1, "Exactly one new persistent tab created");
+
+    const auto& new_tab = session.Tabs().front();
+    Require(!new_tab.is_ephemeral, "New tab is strictly PERSISTENT (is_ephemeral == false)");
+    Require(engine.was_ephemeral_when_created.back() == false,
+            "CRITICAL: Tab must NOT be created while engine is in ephemeral mode");
+
+    // Verify strict operation order in engine event log:
+    // SetEphemeralMode(false) must happen BEFORE CreateTab!
+    // PurgeEphemeralContext() must happen BEFORE CreateTab!
+    std::size_t set_ephemeral_false_idx = std::string::npos;
+    std::size_t purge_idx = std::string::npos;
+    std::size_t create_tab_idx = std::string::npos;
+
+    for (std::size_t i = 0; i < engine.event_log.size(); ++i) {
+        if (engine.event_log[i] == "SetEphemeralMode(false)") {
+            set_ephemeral_false_idx = i;
+        } else if (engine.event_log[i] == "PurgeEphemeralContext()") {
+            purge_idx = i;
+        } else if (engine.event_log[i].rfind("CreateTab:", 0) == 0) {
+            create_tab_idx = i;
+        }
+    }
+
+    Require(set_ephemeral_false_idx != std::string::npos, "SetEphemeralMode(false) was logged");
+    Require(purge_idx != std::string::npos, "PurgeEphemeralContext() was logged");
+    Require(create_tab_idx != std::string::npos, "CreateTab was logged");
+    Require(set_ephemeral_false_idx < create_tab_idx, "SetEphemeralMode(false) MUST precede CreateTab");
+    Require(purge_idx < create_tab_idx, "PurgeEphemeralContext() MUST precede CreateTab");
+}
+
 } // namespace
 
 int main() {
@@ -286,6 +470,9 @@ int main() {
     TestObtraceRecorderRejectsPrivateRecording();
     TestBookmarksUnchangedByPrivateBrowsing();
     TestEphemeralProfilePurge();
+    TestPrivateTabVisibilityAndActivationGuard();
+    TestPrivateExitWithNormalTabsRestoresPersistentTab();
+    TestPrivateExitWithoutNormalTabsCreatesPersistentTabAfterEngineReset();
 
     std::cout << "All Private Profile Isolation Negative Tests passed successfully." << std::endl;
     return 0;

@@ -129,7 +129,7 @@ The core contains:
 - expiration/scoping for compatibility rules;
 - User-Agent / Client Hints policy modes for standard Chromium, normalized anti-fingerprinting output, and site-scoped overrides.
 
-The desktop UI supports Default and Private profiles. Private profiles are backed by dedicated in-memory `CefRequestContext` instances with no disk cache or persistent cookies, automatic exclusion of private tabs from session snapshots, suppression of history recording, and context purging upon session termination. Dynamic User-Agent and client hint policies, along with site-scoped compatibility mitigations, are enforced directly at the live request boundary.
+The desktop UI supports Default and Private profiles managed by `SessionPrivacyOrchestrator`. Private profiles are backed by dedicated in-memory `CefRequestContext` instances with no disk cache or persistent cookies, automatic exclusion of private tabs from session snapshots, suppression of history recording via `SessionHistoryBridge`, TabStrip isolation (hiding normal tabs during private sessions), programmatic activation guards rejecting persistent tabs in private mode, and strict context purging upon session exit before persistent tabs are restored or created. Dynamic User-Agent and client hint policies, along with site-scoped compatibility mitigations, are enforced directly at the live request boundary.
 
 ### Native Network Lab
 
