@@ -28,7 +28,7 @@ Testing/
 # Local runtime/profile data
 /.openbrowser/
 /profile/
-profiles/
+/profiles/
 *.local.json
 
 # Secrets / environment
