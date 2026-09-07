@@ -3,6 +3,7 @@
 #include "core/session/browser_session.h"
 #include "core/session/focus_session_controller.h"
 
+#include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_label_button.h"
@@ -18,11 +19,11 @@ namespace openbrowser::desktop {
 class FocusSidebar::FocusPanelDelegate final : public CefPanelDelegate {
 public:
     CefSize GetPreferredSize(CefRefPtr<CefView> /*view*/) override {
-        return CefSize(200, 600);
+        return CefSize(240, 600);
     }
 
     CefSize GetMinimumSize(CefRefPtr<CefView> /*view*/) override {
-        return CefSize(160, 200);
+        return CefSize(180, 200);
     }
 
     IMPLEMENT_REFCOUNTING(FocusPanelDelegate);
@@ -49,6 +50,25 @@ private:
     IMPLEMENT_REFCOUNTING(FocusActionDelegate);
 };
 
+class FocusSidebar::SprintTickTask final : public CefTask {
+public:
+    SprintTickTask(FocusSidebar* sidebar, std::weak_ptr<bool> alive_token)
+        : sidebar_(sidebar), alive_token_(std::move(alive_token)) {}
+
+    void Execute() override {
+        auto alive = alive_token_.lock();
+        if (alive && *alive && sidebar_ != nullptr) {
+            sidebar_->OnTimerTick();
+        }
+    }
+
+private:
+    FocusSidebar* sidebar_;
+    std::weak_ptr<bool> alive_token_;
+
+    IMPLEMENT_REFCOUNTING(SprintTickTask);
+};
+
 FocusSidebar::FocusSidebar(core::BrowserSession& session, core::FocusQueue& focus_queue)
     : session_(session), focus_queue_(focus_queue) {
     session_.AddObserver(this);
@@ -68,6 +88,7 @@ FocusSidebar::FocusSidebar(core::BrowserSession& session, core::FocusQueue& focu
 }
 
 FocusSidebar::~FocusSidebar() {
+    *alive_token_ = false;
     session_.RemoveObserver(this);
 }
 
@@ -79,6 +100,33 @@ void FocusSidebar::OnBrowserSessionChanged(const core::BrowserSession& /*session
     CEF_REQUIRE_UI_THREAD();
     core::FocusSessionController::SynchronizeTabClosures(session_, focus_queue_);
     RebuildQueueView();
+}
+
+void FocusSidebar::OnTimerTick() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!timer_running_ || sprint_.State() != core::SprintState::Running) {
+        return;
+    }
+
+    const bool completed = core::FocusSessionController::RecordSprintTick(
+        sprint_, session_, focus_queue_, 1);
+    if (completed) {
+        timer_running_ = false;
+    }
+
+    RebuildQueueView();
+
+    if (timer_running_ && sprint_.State() == core::SprintState::Running) {
+        ScheduleTimerTick();
+    }
+}
+
+void FocusSidebar::ScheduleTimerTick() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!timer_running_) {
+        return;
+    }
+    CefPostDelayedTask(TID_UI, new SprintTickTask(this, alive_token_), 1000);
 }
 
 void FocusSidebar::HandleFocusAction(const FocusAction action, const std::string& item_id) {
@@ -107,6 +155,26 @@ void FocusSidebar::HandleFocusAction(const FocusAction action, const std::string
                 RebuildQueueView();
             }
             break;
+        case FocusAction::StartSprint:
+            if (sprint_.State() == core::SprintState::Paused) {
+                sprint_.Resume();
+            } else {
+                sprint_.Start();
+            }
+            timer_running_ = true;
+            ScheduleTimerTick();
+            RebuildQueueView();
+            break;
+        case FocusAction::PauseSprint:
+            sprint_.Pause();
+            timer_running_ = false;
+            RebuildQueueView();
+            break;
+        case FocusAction::ResetSprint:
+            sprint_.Reset();
+            timer_running_ = false;
+            RebuildQueueView();
+            break;
     }
 }
 
@@ -116,6 +184,78 @@ void FocusSidebar::RebuildQueueView() {
     panel_->RemoveAllChildViews();
     delegates_.clear();
 
+    // 1. Sprint Timer Section
+    auto sprint_panel = CefPanel::CreatePanel(nullptr);
+    CefBoxLayoutSettings sprint_settings{};
+    sprint_settings.horizontal = 0;
+    sprint_settings.between_child_spacing = 2;
+    sprint_settings.inside_border_horizontal_spacing = 4;
+    sprint_settings.inside_border_vertical_spacing = 4;
+    sprint_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
+    auto sprint_layout = sprint_panel->SetToBoxLayout(sprint_settings);
+
+    std::string state_str = "Idle";
+    if (sprint_.State() == core::SprintState::Running) {
+        state_str = "Running";
+    } else if (sprint_.State() == core::SprintState::Paused) {
+        state_str = "Paused";
+    } else if (sprint_.State() == core::SprintState::Completed) {
+        state_str = "Completed";
+    }
+
+    std::string timer_label = "Timer: " + sprint_.FormattedTime() + " (" + state_str + ")";
+    auto timer_btn = CefLabelButton::CreateLabelButton(nullptr, timer_label);
+    sprint_panel->AddChildView(timer_btn);
+    sprint_layout->SetFlexForView(timer_btn, 0);
+
+    auto controls_panel = CefPanel::CreatePanel(nullptr);
+    CefBoxLayoutSettings controls_settings{};
+    controls_settings.horizontal = 1;
+    controls_settings.between_child_spacing = 4;
+    controls_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
+    auto controls_layout = controls_panel->SetToBoxLayout(controls_settings);
+
+    if (sprint_.State() == core::SprintState::Running) {
+        auto pause_delegate = CefRefPtr<CefButtonDelegate>(
+            new FocusActionDelegate(*this, FocusAction::PauseSprint, ""));
+        delegates_.push_back(pause_delegate);
+        auto pause_btn = CefLabelButton::CreateLabelButton(pause_delegate, "Pause");
+        controls_panel->AddChildView(pause_btn);
+        controls_layout->SetFlexForView(pause_btn, 1);
+    } else if (sprint_.State() == core::SprintState::Paused) {
+        auto resume_delegate = CefRefPtr<CefButtonDelegate>(
+            new FocusActionDelegate(*this, FocusAction::StartSprint, ""));
+        delegates_.push_back(resume_delegate);
+        auto resume_btn = CefLabelButton::CreateLabelButton(resume_delegate, "Resume");
+        controls_panel->AddChildView(resume_btn);
+        controls_layout->SetFlexForView(resume_btn, 1);
+    } else {
+        auto start_delegate = CefRefPtr<CefButtonDelegate>(
+            new FocusActionDelegate(*this, FocusAction::StartSprint, ""));
+        delegates_.push_back(start_delegate);
+        auto start_btn = CefLabelButton::CreateLabelButton(start_delegate, "Start");
+        controls_panel->AddChildView(start_btn);
+        controls_layout->SetFlexForView(start_btn, 1);
+    }
+
+    auto reset_delegate = CefRefPtr<CefButtonDelegate>(
+        new FocusActionDelegate(*this, FocusAction::ResetSprint, ""));
+    delegates_.push_back(reset_delegate);
+    auto reset_btn = CefLabelButton::CreateLabelButton(reset_delegate, "Reset");
+    controls_panel->AddChildView(reset_btn);
+    controls_layout->SetFlexForView(reset_btn, 1);
+
+    sprint_panel->AddChildView(controls_panel);
+    sprint_layout->SetFlexForView(controls_panel, 0);
+
+    auto metrics_btn = CefLabelButton::CreateLabelButton(nullptr, sprint_.FormattedMetrics());
+    sprint_panel->AddChildView(metrics_btn);
+    sprint_layout->SetFlexForView(metrics_btn, 0);
+
+    panel_->AddChildView(sprint_panel);
+    layout_->SetFlexForView(sprint_panel, 0);
+
+    // 2. Add Active Tab Button
     auto enqueue_delegate = CefRefPtr<CefButtonDelegate>(
         new FocusActionDelegate(*this, FocusAction::EnqueueActiveTab, ""));
     delegates_.push_back(enqueue_delegate);
@@ -123,6 +263,7 @@ void FocusSidebar::RebuildQueueView() {
     panel_->AddChildView(enqueue_btn);
     layout_->SetFlexForView(enqueue_btn, 0);
 
+    // 3. Queue Items
     for (const auto& item : focus_queue_.Items()) {
         std::string state_prefix;
         switch (item.state) {

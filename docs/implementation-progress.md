@@ -33,10 +33,11 @@ The current M1 shell is not yet a usable daily browser:
 ## M2 implementation state
 
 - **M2.1 Delivered**: Interactive capability permission prompts (`CefPermissionHandler`, `OnRequestMediaAccessPermission`, `OnShowPermissionPrompt`) with responsive `[Allow] [Block] [Dismiss]` banners, and Security Badge UI (`[ 🔒 Secure ]`, `[ ⚠ Insecure ]`) with origin permission inspection and reset.
+- **M2.2 Delivered**: Focus session timer (Pomodoro/Sprint state machine) and attention dwell metrics (`FocusSprint`, `AttentionMetrics`, `FocusSessionController::RecordSprintTick`), integrated into `FocusSidebar` with responsive UI timer controls (`[Start]` / `[Pause]` / `[Resume]`, `[Reset]`, dwell percentage tracking).
 
 ## Remaining M2 roadmap
 
-1. Focus session timer and attention metrics;
-2. Advanced Network Lab inspection (body preview, header filtering);
-3. Renderer discard and memory pressure lifecycle policies;
-4. Workspace isolation for cookies and storage partitions.
+1. Advanced Network Lab inspection (body preview, header filtering);
+2. Renderer discard and memory pressure lifecycle policies;
+3. Workspace isolation for cookies and storage partitions.
+
