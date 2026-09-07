@@ -41,6 +41,8 @@ private:
         EnqueueActiveTab,
         ActivateItem,
         PromoteItem,
+        MarkNext,
+        MarkLater,
         RemoveItem,
         StartSprint,
         PauseSprint,
@@ -68,4 +70,3 @@ private:
 };
 
 }  // namespace openbrowser::desktop
-
