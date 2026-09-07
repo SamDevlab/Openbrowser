@@ -2,6 +2,7 @@
 
 #include "core/tabs/tab.h"
 
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
@@ -56,6 +57,11 @@ public:
     [[nodiscard]] std::map<Capability, CapabilityDecision> GetOriginRules(const std::string& origin) const;
     void ClearOriginRules(const std::string& origin);
 
+    void SetAutoSavePath(std::filesystem::path path);
+    [[nodiscard]] const std::filesystem::path& AutoSavePath() const noexcept;
+    [[nodiscard]] bool SaveOriginRulesToFile(const std::filesystem::path& path) const;
+    bool LoadOriginRulesFromFile(const std::filesystem::path& path);
+
     [[nodiscard]] CapabilityDecision Resolve(Capability capability, const CapabilityContext& context) const;
 
     [[nodiscard]] bool CanNavigate(const std::string& url, const CapabilityContext& context = {}) const;
@@ -70,11 +76,13 @@ private:
     [[nodiscard]] static std::optional<CapabilityDecision> FindDecision(
         const RuleSet& rules,
         Capability capability);
+    void TriggerAutoSave() const;
 
     RuleSet global_rules_;
     std::map<WorkspaceId, RuleSet> workspace_rules_;
     std::map<std::string, RuleSet> origin_rules_;
     std::map<std::string, RuleSet> session_rules_;
+    std::filesystem::path auto_save_path_;
 };
 
 }  // namespace openbrowser::core
