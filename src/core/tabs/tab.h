@@ -35,6 +35,7 @@ struct Tab {
     bool renderer_crashed{false};
     std::uint64_t last_activated_sequence{0};
     bool is_playing_audio{false};
+    bool is_ephemeral{false};
 };
 
 }  // namespace openbrowser::core

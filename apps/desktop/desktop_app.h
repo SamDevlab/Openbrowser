@@ -17,6 +17,7 @@
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
 #include "core/session/browser_session_observer.h"
+#include "core/sync/local_filesystem_sync.h"
 #include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
 #include "core/workspaces/workspace_manager.h"
@@ -62,6 +63,8 @@ private:
     void ToggleBookmarksBar();
     void ToggleDownloadsPanel();
     void ToggleProfile();
+    void SyncLocalData();
+    void ToggleLiveTraceRecording();
     void ExportNetworkHar();      // M7.4
     void ExportNetworkObtrace(); // M7.4
 
@@ -85,6 +88,7 @@ private:
     std::unique_ptr<core::HistoryManager> history_manager_;
     std::unique_ptr<core::BookmarkManager> bookmark_manager_;
     std::unique_ptr<core::ActionRegistry> action_registry_;
+    std::unique_ptr<core::LocalFilesystemSyncProvider> sync_provider_;
     std::unique_ptr<core::ProfileManager> profile_manager_;
     std::unique_ptr<core::CompatibilityMitigationRegistry> mitigation_registry_;
     std::unique_ptr<core::UserAgentPolicyEngine> ua_engine_;

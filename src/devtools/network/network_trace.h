@@ -11,6 +11,10 @@
 #include <string>
 #include <vector>
 
+namespace openbrowser::core {
+class FilterDecisionLog;
+}
+
 namespace openbrowser::devtools::network {
 
 enum class NetworkEventType {
@@ -132,6 +136,9 @@ public:
     [[nodiscard]] static std::string ExportToObtrace(
         const std::vector<NetworkRequestSummary>& requests);
 
+    void SetDecisionLog(const core::FilterDecisionLog* log) noexcept;
+    [[nodiscard]] const core::FilterDecisionLog* DecisionLog() const noexcept;
+
     [[nodiscard]] static bool IsSensitiveHeaderName(const std::string& name);
     static void RedactSensitiveHeaders(std::vector<Header>& headers);
 
@@ -142,6 +149,7 @@ private:
     CapturePolicy policy_;
     std::deque<NetworkEvent> events_;
     std::vector<NetworkTraceObserver*> observers_;
+    const core::FilterDecisionLog* decision_log_{nullptr};
     std::uint64_t next_sequence_{1};
     std::size_t dropped_event_count_{0};
 };

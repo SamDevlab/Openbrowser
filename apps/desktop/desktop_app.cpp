@@ -169,7 +169,13 @@ void DesktopApp::OnContextInitialized() {
     engine_->SetContentFilter(content_filter_.get());
 
     history_manager_ = std::make_unique<core::HistoryManager>();
+    history_manager_->LoadFromFile(StorageDirectory() / "history.json");
+
     bookmark_manager_ = std::make_unique<core::BookmarkManager>();
+    bookmark_manager_->LoadFromFile(StorageDirectory() / "bookmarks.json");
+
+    sync_provider_ = std::make_unique<core::LocalFilesystemSyncProvider>(
+        StorageDirectory() / "sync", "desktop-main");
 
     file_broker_ = std::make_unique<core::FileBroker>(StorageDirectory() / "downloads");
 
@@ -233,6 +239,28 @@ void DesktopApp::OnContextInitialized() {
             return true;
         },
     }));
+    static_cast<void>(action_registry_->RegisterAction({
+        .id = "sync.trigger_local",
+        .title = "Synchronize Local Data",
+        .description = "Synchronize bookmarks and workspaces using local filesystem provider",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+Shift+S",
+        .handler = [this]() {
+            SyncLocalData();
+            return true;
+        },
+    }));
+    static_cast<void>(action_registry_->RegisterAction({
+        .id = "network_lab.toggle_recorder",
+        .title = "Toggle .obtrace Live Recording",
+        .description = "Start or stop streaming live network events to a local .obtrace file",
+        .category = core::ActionCategory::NetworkLab,
+        .shortcut_hint = "Ctrl+Shift+R",
+        .handler = [this]() {
+            ToggleLiveTraceRecording();
+            return true;
+        },
+    }));
     // M7.4 — Developer tools export actions.
     static_cast<void>(action_registry_->RegisterAction({
         .id = "devtools.export_har",
@@ -262,10 +290,19 @@ void DesktopApp::OnContextInitialized() {
 
     // M7.1 — Connection diagnostics registry.
     connection_registry_ = std::make_unique<devtools::network::ConnectionRegistry>();
+    engine_->SetConnectionRegistry(connection_registry_.get());
 
-    // M7.2 — Filter decision log; wire into ContentFilter.
+    // M7.2 — Filter decision log; wire into ContentFilter and engine.
     filter_decision_log_ = std::make_unique<core::FilterDecisionLog>();
     content_filter_->SetDecisionLog(filter_decision_log_.get());
+    engine_->SetDecisionLog(filter_decision_log_.get());
+
+    // Wire UserAgentEngine and MitigationRegistry into engine.
+    engine_->SetUserAgentPolicyEngine(ua_engine_.get());
+    engine_->SetMitigationRegistry(mitigation_registry_.get());
+
+    // Attach decision log to network trace buffer for live correlation
+    network_trace_->SetDecisionLog(filter_decision_log_.get());
 
     // M7.3 — .obtrace trace recorder (begins recording on user request).
     obtrace_recorder_ = std::make_unique<devtools::network::ObtraceRecorder>();
@@ -344,9 +381,29 @@ void DesktopApp::ShutdownRuntime() {
         session_->RemoveObserver(this);
     }
 
-    SaveCurrentSession(true);
+    const bool is_ephemeral = (engine_ && engine_->IsEphemeralMode()) ||
+        (profile_manager_ && profile_manager_->GetActiveProfile() &&
+         profile_manager_->GetActiveProfile()->IsEphemeral());
+
+    if (!is_ephemeral) {
+        SaveCurrentSession(true);
+        if (history_manager_) {
+            history_manager_->SaveToFile(StorageDirectory() / "history.json");
+        }
+        if (bookmark_manager_) {
+            bookmark_manager_->SaveToFile(StorageDirectory() / "bookmarks.json");
+        }
+    }
+
+    if (obtrace_recorder_ && obtrace_recorder_->IsRecording()) {
+        obtrace_recorder_->StopRecording();
+    }
 
     if (engine_) {
+        engine_->SetDecisionLog(nullptr);
+        engine_->SetMitigationRegistry(nullptr);
+        engine_->SetUserAgentPolicyEngine(nullptr);
+        engine_->SetConnectionRegistry(nullptr);
         engine_->SetTransferBroker(nullptr);
         engine_->SetContentFilter(nullptr);
         engine_->SetCapabilityPolicy(nullptr);
@@ -359,6 +416,7 @@ void DesktopApp::ShutdownRuntime() {
     ua_engine_.reset();
     mitigation_registry_.reset();
     profile_manager_.reset();
+    sync_provider_.reset();
     action_registry_.reset();
     bookmark_manager_.reset();
     history_manager_.reset();
@@ -380,13 +438,19 @@ void DesktopApp::ShutdownRuntime() {
 
 void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& session) {
     CEF_REQUIRE_UI_THREAD();
-    if (history_manager_ && session.ActiveTabId().has_value()) {
+    const bool is_private = (engine_ && engine_->IsEphemeralMode()) ||
+        (profile_manager_ && profile_manager_->GetActiveProfile() &&
+         profile_manager_->GetActiveProfile()->IsEphemeral());
+
+    if (!is_private && history_manager_ && session.ActiveTabId().has_value()) {
         const auto* active_tab = session.FindTab(*session.ActiveTabId());
-        if (active_tab && !active_tab->url.empty() && active_tab->url != "about:blank") {
+        if (active_tab && !active_tab->is_ephemeral && !active_tab->url.empty() && active_tab->url != "about:blank") {
             history_manager_->RecordVisit(active_tab->url, active_tab->title);
         }
     }
-    SaveCurrentSession(false);
+    if (!is_private) {
+        SaveCurrentSession(false);
+    }
 }
 
 void DesktopApp::ToggleNetworkLab() {
@@ -426,6 +490,10 @@ void DesktopApp::ToggleProfile() {
     if (active && active->IsEphemeral()) {
         profile_manager_->SetActiveProfile("default");
         profile_manager_->PurgeEphemeralProfiles();
+        if (engine_) {
+            engine_->SetEphemeralMode(false);
+            engine_->PurgeEphemeralContext();
+        }
         if (chrome_) {
             chrome_->SetProfileLabel("[👤 Default]");
         }
@@ -433,9 +501,56 @@ void DesktopApp::ToggleProfile() {
         auto eph = profile_manager_->CreateEphemeralProfile("Private Session");
         if (eph) {
             profile_manager_->SetActiveProfile(eph->GetId());
+            if (engine_) {
+                engine_->SetEphemeralMode(true);
+            }
             if (chrome_) {
                 chrome_->SetProfileLabel("[🕶 Private]");
             }
+        }
+    }
+}
+
+void DesktopApp::SyncLocalData() {
+    CEF_REQUIRE_UI_THREAD();
+    const bool is_private = (engine_ && engine_->IsEphemeralMode()) ||
+        (profile_manager_ && profile_manager_->GetActiveProfile() &&
+         profile_manager_->GetActiveProfile()->IsEphemeral());
+    if (is_private || !sync_provider_ || !bookmark_manager_) {
+        return;
+    }
+
+    std::vector<core::SyncRecord> records;
+    const auto bookmarks = bookmark_manager_->ListBookmarks();
+    for (const auto& bm : bookmarks) {
+        records.push_back({
+            .entity_type = core::SyncEntityType::Bookmark,
+            .record_id = bm.id,
+            .version = 1,
+            .timestamp = static_cast<std::uint64_t>(bm.created_at_ms > 0 ? bm.created_at_ms : 1),
+            .payload_json = "{\"url\":\"" + bm.url + "\",\"title\":\"" + bm.title + "\"}",
+            .is_deleted = false,
+        });
+    }
+
+    sync_provider_->PushRecords(records);
+    sync_provider_->SaveToDisk();
+}
+
+void DesktopApp::ToggleLiveTraceRecording() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!obtrace_recorder_) {
+        return;
+    }
+    if (obtrace_recorder_->IsRecording()) {
+        obtrace_recorder_->StopRecording();
+    } else {
+        const bool is_private = (engine_ && engine_->IsEphemeralMode()) ||
+            (profile_manager_ && profile_manager_->GetActiveProfile() &&
+             profile_manager_->GetActiveProfile()->IsEphemeral());
+        if (!is_private) {
+            const auto trace_path = StorageDirectory() / "live_trace.obtrace";
+            obtrace_recorder_->StartRecording(trace_path.string());
         }
     }
 }
@@ -465,7 +580,10 @@ std::filesystem::path DesktopApp::SessionFilePath() const {
 }
 
 void DesktopApp::SaveCurrentSession(const bool clean_shutdown) {
-    if (!session_ || !focus_queue_ || session_file_path_.empty()) {
+    const bool is_private = (engine_ && engine_->IsEphemeralMode()) ||
+        (profile_manager_ && profile_manager_->GetActiveProfile() &&
+         profile_manager_->GetActiveProfile()->IsEphemeral());
+    if (is_private || !session_ || !focus_queue_ || session_file_path_.empty()) {
         return;
     }
 

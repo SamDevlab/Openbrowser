@@ -51,9 +51,33 @@ const std::filesystem::path& CefBrowserEngine::StorageRoot() const noexcept {
     return storage_root_;
 }
 
-CefRefPtr<CefRequestContext> CefBrowserEngine::GetOrCreateRequestContext(
-    const std::optional<core::WorkspaceId>& workspace_id) {
+void CefBrowserEngine::SetEphemeralMode(const bool enabled) noexcept {
+    is_ephemeral_mode_.store(enabled, std::memory_order_release);
+}
+
+bool CefBrowserEngine::IsEphemeralMode() const noexcept {
+    return is_ephemeral_mode_.load(std::memory_order_acquire);
+}
+
+void CefBrowserEngine::PurgeEphemeralContext() {
     CEF_REQUIRE_UI_THREAD();
+    ephemeral_context_ = nullptr;
+}
+
+CefRefPtr<CefRequestContext> CefBrowserEngine::GetOrCreateRequestContext(
+    const std::optional<core::WorkspaceId>& workspace_id,
+    const bool is_ephemeral) {
+    CEF_REQUIRE_UI_THREAD();
+
+    if (is_ephemeral || IsEphemeralMode()) {
+        if (!ephemeral_context_) {
+            CefRequestContextSettings settings{};
+            // Empty cache_path forces an isolated, non-persistent in-memory context.
+            settings.persist_session_cookies = 0;
+            ephemeral_context_ = CefRequestContext::CreateContext(settings, nullptr);
+        }
+        return ephemeral_context_;
+    }
 
     if (!workspace_id.has_value() || workspace_id->empty() || *workspace_id == "default") {
         return nullptr;
@@ -88,7 +112,8 @@ void CefBrowserEngine::CreateTab(const core::Tab& tab) {
     CefRefPtr<CefBrowserEngine> self(this);
     CefRefPtr<CefTabClient> client(new CefTabClient(tab.id, self));
     CefBrowserSettings browser_settings;
-    CefRefPtr<CefRequestContext> request_context = GetOrCreateRequestContext(tab.workspace_id);
+    CefRefPtr<CefRequestContext> request_context = GetOrCreateRequestContext(
+        tab.workspace_id, tab.is_ephemeral);
     CefRefPtr<CefBrowserView> view = CefBrowserView::CreateBrowserView(
         client,
         tab.url,
@@ -278,6 +303,38 @@ void CefBrowserEngine::SetContentFilter(core::ContentFilter* filter) noexcept {
 
 core::ContentFilter* CefBrowserEngine::ContentFilter() const noexcept {
     return content_filter_.load(std::memory_order_acquire);
+}
+
+void CefBrowserEngine::SetConnectionRegistry(devtools::network::ConnectionRegistry* registry) noexcept {
+    connection_registry_.store(registry, std::memory_order_release);
+}
+
+devtools::network::ConnectionRegistry* CefBrowserEngine::ConnectionRegistry() const noexcept {
+    return connection_registry_.load(std::memory_order_acquire);
+}
+
+void CefBrowserEngine::SetUserAgentPolicyEngine(core::UserAgentPolicyEngine* ua_engine) noexcept {
+    ua_engine_.store(ua_engine, std::memory_order_release);
+}
+
+const core::UserAgentPolicyEngine* CefBrowserEngine::UserAgentEngine() const noexcept {
+    return ua_engine_.load(std::memory_order_acquire);
+}
+
+void CefBrowserEngine::SetMitigationRegistry(core::CompatibilityMitigationRegistry* mitigations) noexcept {
+    mitigation_registry_.store(mitigations, std::memory_order_release);
+}
+
+const core::CompatibilityMitigationRegistry* CefBrowserEngine::MitigationRegistry() const noexcept {
+    return mitigation_registry_.load(std::memory_order_acquire);
+}
+
+void CefBrowserEngine::SetDecisionLog(core::FilterDecisionLog* log) noexcept {
+    filter_decision_log_.store(log, std::memory_order_release);
+}
+
+core::FilterDecisionLog* CefBrowserEngine::DecisionLog() const noexcept {
+    return filter_decision_log_.load(std::memory_order_acquire);
 }
 
 void CefBrowserEngine::AddPermissionPromptObserver(

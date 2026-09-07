@@ -24,6 +24,13 @@
 namespace openbrowser::core {
 class ContentFilter;
 class TransferBroker;
+class CompatibilityMitigationRegistry;
+class UserAgentPolicyEngine;
+class FilterDecisionLog;
+}
+
+namespace openbrowser::devtools::network {
+class ConnectionRegistry;
 }
 
 namespace openbrowser::desktop {
@@ -48,8 +55,13 @@ public:
 
     void SetStorageRoot(std::filesystem::path root);
     [[nodiscard]] const std::filesystem::path& StorageRoot() const noexcept;
+
+    void SetEphemeralMode(bool enabled) noexcept;
+    [[nodiscard]] bool IsEphemeralMode() const noexcept;
+    void PurgeEphemeralContext();
     [[nodiscard]] CefRefPtr<CefRequestContext> GetOrCreateRequestContext(
-        const std::optional<core::WorkspaceId>& workspace_id);
+        const std::optional<core::WorkspaceId>& workspace_id,
+        bool is_ephemeral = false);
 
     void SetNetworkObservationSink(devtools::network::NetworkObservationSink* sink) noexcept;
     [[nodiscard]] bool NetworkObservationEnabled() const noexcept;
@@ -63,6 +75,18 @@ public:
 
     void SetContentFilter(core::ContentFilter* filter) noexcept;
     [[nodiscard]] core::ContentFilter* ContentFilter() const noexcept;
+
+    void SetConnectionRegistry(devtools::network::ConnectionRegistry* registry) noexcept;
+    [[nodiscard]] devtools::network::ConnectionRegistry* ConnectionRegistry() const noexcept;
+
+    void SetUserAgentPolicyEngine(core::UserAgentPolicyEngine* ua_engine) noexcept;
+    [[nodiscard]] const core::UserAgentPolicyEngine* UserAgentEngine() const noexcept;
+
+    void SetMitigationRegistry(core::CompatibilityMitigationRegistry* mitigations) noexcept;
+    [[nodiscard]] const core::CompatibilityMitigationRegistry* MitigationRegistry() const noexcept;
+
+    void SetDecisionLog(core::FilterDecisionLog* log) noexcept;
+    [[nodiscard]] core::FilterDecisionLog* DecisionLog() const noexcept;
 
     void AddPermissionPromptObserver(core::PermissionPromptObserver* observer);
     void RemovePermissionPromptObserver(core::PermissionPromptObserver* observer) noexcept;
@@ -153,6 +177,12 @@ private:
 
     std::filesystem::path storage_root_;
     std::unordered_map<core::WorkspaceId, CefRefPtr<CefRequestContext>> workspace_contexts_;
+    std::atomic<bool> is_ephemeral_mode_{false};
+    CefRefPtr<CefRequestContext> ephemeral_context_;
+    std::atomic<devtools::network::ConnectionRegistry*> connection_registry_{nullptr};
+    std::atomic<core::UserAgentPolicyEngine*> ua_engine_{nullptr};
+    std::atomic<core::CompatibilityMitigationRegistry*> mitigation_registry_{nullptr};
+    std::atomic<core::FilterDecisionLog*> filter_decision_log_{nullptr};
 
     IMPLEMENT_REFCOUNTING(CefBrowserEngine);
 };
