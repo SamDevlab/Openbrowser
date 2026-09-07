@@ -27,6 +27,12 @@ add_library(openbrowser_core
     src/core/sync/local_filesystem_sync.cpp
     src/core/compatibility/compatibility_scenario.cpp
     src/core/compatibility/compatibility_runner.cpp
+    src/core/profiles/profile_manager.cpp
+    src/core/compatibility/compatibility_mitigations.cpp
+    src/core/compatibility/user_agent_policy.cpp
+    src/core/network/network_filter_query.cpp
+    src/core/network/waterfall_timeline.cpp
+    src/core/filters/adblock_rule_parser.cpp
 )
 
 add_library(Openbrowser::Core ALIAS openbrowser_core)
@@ -159,6 +165,31 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_compatibility_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_compatibility_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_profile_manager_tests tests/profile_manager_tests.cpp)
+    target_link_libraries(openbrowser_profile_manager_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_profile_manager_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_profile_manager_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_compatibility_mitigation_tests tests/compatibility_mitigation_tests.cpp)
+    target_link_libraries(openbrowser_compatibility_mitigation_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_compatibility_mitigation_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_compatibility_mitigation_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_network_filter_query_tests tests/network_filter_query_tests.cpp)
+    target_link_libraries(openbrowser_network_filter_query_tests PRIVATE Openbrowser::NetworkTrace Openbrowser::Core)
+    target_include_directories(openbrowser_network_filter_query_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_network_filter_query_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_waterfall_timeline_tests tests/waterfall_timeline_tests.cpp)
+    target_link_libraries(openbrowser_waterfall_timeline_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_waterfall_timeline_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_waterfall_timeline_tests PRIVATE cxx_std_20)
+
+    add_executable(openbrowser_adblock_parser_tests tests/adblock_parser_tests.cpp)
+    target_link_libraries(openbrowser_adblock_parser_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_adblock_parser_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_adblock_parser_tests PRIVATE cxx_std_20)
+
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
@@ -181,6 +212,11 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_command_palette_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_sync_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_compatibility_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_profile_manager_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_compatibility_mitigation_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_network_filter_query_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_waterfall_timeline_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_adblock_parser_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
@@ -203,6 +239,11 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_command_palette_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_sync_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_compatibility_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_profile_manager_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_compatibility_mitigation_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_network_filter_query_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_waterfall_timeline_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_adblock_parser_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
@@ -226,7 +267,13 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.command_palette COMMAND openbrowser_command_palette_tests)
     add_test(NAME openbrowser.sync COMMAND openbrowser_sync_tests)
     add_test(NAME openbrowser.compatibility COMMAND openbrowser_compatibility_tests)
+    add_test(NAME openbrowser.profile_manager COMMAND openbrowser_profile_manager_tests)
+    add_test(NAME openbrowser.compatibility_mitigations COMMAND openbrowser_compatibility_mitigation_tests)
+    add_test(NAME openbrowser.network_filter_query COMMAND openbrowser_network_filter_query_tests)
+    add_test(NAME openbrowser.waterfall_timeline COMMAND openbrowser_waterfall_timeline_tests)
+    add_test(NAME openbrowser.adblock_parser COMMAND openbrowser_adblock_parser_tests)
 endif()
+
 
 if(OPENBROWSER_BUILD_DESKTOP)
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/OpenbrowserCEF.cmake")
