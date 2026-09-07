@@ -23,6 +23,16 @@ std::string SecurityBadgeLabel(const bool private_mode, std::string_view state) 
     return "[ " + std::string(state) + " ]";
 }
 
+class PassiveButtonDelegate final : public CefButtonDelegate {
+public:
+    void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
+        CEF_REQUIRE_UI_THREAD();
+    }
+
+private:
+    IMPLEMENT_REFCOUNTING(PassiveButtonDelegate);
+};
+
 }  // namespace
 
 class BrowserChrome::ChromeButtonDelegate final : public CefButtonDelegate {
@@ -166,7 +176,8 @@ BrowserChrome::BrowserChrome(
     prompt_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     prompt_layout_ = prompt_panel_->SetToBoxLayout(prompt_settings);
 
-    prompt_label_ = CefLabelButton::CreateLabelButton(nullptr, "[ Permission Request ]");
+    prompt_label_ = CefLabelButton::CreateLabelButton(
+        new PassiveButtonDelegate(), "[ Permission Request ]");
     prompt_label_->SetEnabled(false);
     allow_once_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::AllowPermissionOnce), "[ Allow once ]");
@@ -197,7 +208,8 @@ BrowserChrome::BrowserChrome(
     details_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     security_details_layout_ = security_details_panel_->SetToBoxLayout(details_settings);
 
-    security_details_label_ = CefLabelButton::CreateLabelButton(nullptr, "[ Site Security Info ]");
+    security_details_label_ = CefLabelButton::CreateLabelButton(
+        new PassiveButtonDelegate(), "[ Site Security Info ]");
     security_details_label_->SetEnabled(false);
     reset_permissions_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ResetOriginPermissions), "[ Reset Rules ]");
