@@ -34,7 +34,6 @@ public:
 
     void RebuildView();
 
-    // TransferObserver
     void OnTransferStarted(const core::TransferItem& item) override;
     void OnTransferUpdated(const core::TransferItem& item) override;
     void OnTransferFinished(const core::TransferItem& item) override;
@@ -44,6 +43,8 @@ private:
         Pause,
         Resume,
         Cancel,
+        Open,
+        ShowInFolder,
         Close
     };
 
