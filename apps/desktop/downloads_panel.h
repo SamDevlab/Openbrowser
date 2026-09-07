@@ -4,6 +4,7 @@
 #include "core/transfers/transfer_broker.h"
 
 #include "include/cef_base.h"
+#include "include/views/cef_button.h"
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_panel.h"
 
@@ -48,18 +49,19 @@ private:
         Close
     };
 
-    class ActionDelegate;
+    class PanelActionDelegate;
 
-    void HandleAction(TransferAction action, const std::string& transfer_id = "");
+    void HandleTransferAction(TransferAction action, const std::string& transfer_id = {});
+    [[nodiscard]] std::string FormatStatus(const core::TransferItem& item) const;
+    [[nodiscard]] static std::string FormatBytes(std::uint64_t bytes);
+    [[nodiscard]] static std::string FormatRate(double bytes_per_second);
 
     core::TransferBroker& transfer_broker_;
     core::FileBroker& file_broker_;
 
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
-    CefRefPtr<CefPanel> list_panel_;
-    CefRefPtr<CefBoxLayout> list_layout_;
-    std::vector<CefRefPtr<CefButtonDelegate>> button_delegates_;
+    std::vector<CefRefPtr<CefButtonDelegate>> delegates_;
 };
 
-} // namespace openbrowser::desktop
+}  // namespace openbrowser::desktop
