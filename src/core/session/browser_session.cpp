@@ -96,13 +96,16 @@ bool BrowserSession::CloseTab(
     return true;
 }
 
-std::optional<TabId> BrowserSession::ReopenLastClosedTab(const bool allow_ephemeral) {
+std::optional<TabId> BrowserSession::ReopenLastClosedTab(const ClosedTabMode mode) {
     if (closed_tabs_.empty()) {
         return std::nullopt;
     }
 
     for (auto it = closed_tabs_.rbegin(); it != closed_tabs_.rend(); ++it) {
-        if (!allow_ephemeral && it->is_ephemeral) {
+        if (mode == ClosedTabMode::PersistentOnly && it->is_ephemeral) {
+            continue;
+        }
+        if (mode == ClosedTabMode::EphemeralOnly && !it->is_ephemeral) {
             continue;
         }
 

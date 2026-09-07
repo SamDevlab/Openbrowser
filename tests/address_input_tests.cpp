@@ -126,6 +126,44 @@ void TestCustomSearchProvider() {
         "custom search provider URL template");
 }
 
+void TestIpLiteralsAreDirectNavigation() {
+    using openbrowser::core::navigation::ResolveAddressInput;
+    using openbrowser::core::navigation::NormalizeAddressInput;
+
+    // IPv4 literals
+    Require(
+        ResolveAddressInput("192.168.1.1") == std::optional<std::string>{"https://192.168.1.1"},
+        "IPv4 literal resolves to https");
+    Require(
+        ResolveAddressInput("192.168.1.1:8080") == std::optional<std::string>{"https://192.168.1.1:8080"},
+        "IPv4 literal with port resolves to https");
+    Require(
+        ResolveAddressInput("10.0.0.5/path") == std::optional<std::string>{"https://10.0.0.5/path"},
+        "IPv4 literal with path resolves to https");
+
+    // IPv6 literals
+    Require(
+        ResolveAddressInput("[2001:db8::1]") == std::optional<std::string>{"https://[2001:db8::1]"},
+        "IPv6 literal resolves to https");
+    Require(
+        ResolveAddressInput("[2001:db8::1]:8080") == std::optional<std::string>{"https://[2001:db8::1]:8080"},
+        "IPv6 literal with port resolves to https");
+
+    // NormalizeAddressInput directly
+    Require(
+        NormalizeAddressInput("192.168.1.1") == std::optional<std::string>{"https://192.168.1.1"},
+        "NormalizeAddressInput IPv4 literal");
+    Require(
+        NormalizeAddressInput("[2001:db8::1]:8080") == std::optional<std::string>{"https://[2001:db8::1]:8080"},
+        "NormalizeAddressInput IPv6 literal");
+
+    // IP address inside a search phrase with spaces must still be sent to search provider
+    Require(
+        ResolveAddressInput("find 192.168.1.1 device") ==
+            std::optional<std::string>{"https://duckduckgo.com/?q=find+192.168.1.1+device"},
+        "search phrase containing IP falls through to search provider");
+}
+
 }  // namespace
 
 int main() {
@@ -135,6 +173,7 @@ int main() {
     TestUnexpectedSchemesAndWhitespaceAreRejected();
     TestSearchQueryFallback();
     TestCustomSearchProvider();
+    TestIpLiteralsAreDirectNavigation();
 
     if (failures != 0) {
         std::cerr << failures << " address input assertion(s) failed\n";

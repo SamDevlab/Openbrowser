@@ -130,46 +130,130 @@ void TestTabReopeningLifecycle() {
     Require(!session.ReopenLastClosedTab().has_value(), "reopen on empty stack returns nullopt");
 }
 
+void TestPrivacyAwareCloseTab() {
+    MockBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+    openbrowser::core::ProfileManager profile_mgr;
+    openbrowser::core::SessionPrivacyOrchestrator orchestrator(session, profile_mgr, &engine);
+
+    // 1. Persistent tab A
+    openbrowser::core::Tab pers_a;
+    pers_a.id = "pers_a";
+    pers_a.url = "https://persistent.org/a";
+    pers_a.title = "Persistent A";
+    pers_a.is_ephemeral = false;
+    session.OpenTab(pers_a);
+    Require(session.ActiveTabId() == "pers_a", "active is pers_a");
+
+    // 2. Enter private mode -> creates private-tab-1, active
+    Require(orchestrator.EnterPrivateMode(), "enter private mode");
+    Require(orchestrator.IsPrivateModeActive(), "private mode is active");
+    const auto priv_1_id = session.ActiveTabId();
+    Require(priv_1_id.has_value(), "private tab is active");
+    const auto* priv_1 = session.FindTab(*priv_1_id);
+    Require(priv_1 != nullptr && priv_1->is_ephemeral, "active tab is ephemeral");
+
+    engine.activated_tabs.clear();
+
+    // 3. Close the active private tab using orchestrator.CloseActiveTab()
+    Require(orchestrator.CloseActiveTab(), "CloseActiveTab in private mode succeeds");
+
+    // Persistent A must NEVER have been activated!
+    for (const auto& activated : engine.activated_tabs) {
+        Require(activated != "pers_a", "engine never activated persistent tab in private mode");
+    }
+    Require(session.ActiveTabId() != "pers_a", "persistent A is not active in session");
+
+    // A new private tab must have been spawned and made active
+    const auto new_priv_id = session.ActiveTabId();
+    Require(new_priv_id.has_value(), "new private tab active after closing lone private tab");
+    const auto* new_priv = session.FindTab(*new_priv_id);
+    Require(new_priv != nullptr && new_priv->is_ephemeral, "new active tab is ephemeral");
+
+    // 4. Test multiple private tabs: persistent A, private B, private C active
+    openbrowser::core::Tab priv_c;
+    priv_c.id = "priv_c";
+    priv_c.url = "https://secret.org/c";
+    priv_c.title = "Secret C";
+    priv_c.is_ephemeral = true;
+    session.OpenTab(priv_c, true);
+    Require(session.ActiveTabId() == "priv_c", "priv_c is active");
+
+    engine.activated_tabs.clear();
+
+    // Close priv_c -> previous ephemeral tab must become active, persistent A must never be activated
+    Require(orchestrator.CloseActiveTab(), "close priv_c");
+    for (const auto& activated : engine.activated_tabs) {
+        Require(activated != "pers_a", "engine never activated persistent tab when closing C");
+    }
+    Require(session.ActiveTabId() != "pers_a", "persistent A not active");
+    const auto* active_after_c = session.FindTab(*session.ActiveTabId());
+    Require(active_after_c != nullptr && active_after_c->is_ephemeral, "ephemeral tab active after C closed");
+
+    // Clean up
+    orchestrator.ExitPrivateMode();
+    Require(session.ActiveTabId() == "pers_a", "persistent A restored on exit private mode");
+}
+
 void TestPrivateModeClosedTabIsolation() {
     MockBrowserEngine engine;
     openbrowser::core::BrowserSession session(engine);
     openbrowser::core::ProfileManager profile_mgr;
     openbrowser::core::SessionPrivacyOrchestrator orchestrator(session, profile_mgr, &engine);
 
-    // 1. Open persistent tab
+    // 1. Open and close persistent tab A
     openbrowser::core::Tab pers_tab;
     pers_tab.id = "pers_1";
     pers_tab.url = "https://persistent.org/";
     pers_tab.title = "Persistent";
     pers_tab.is_ephemeral = false;
     session.OpenTab(pers_tab);
+    session.CloseTab("pers_1");
+    Require(session.ClosedTabs().size() == 1, "closed tabs has persistent tab");
 
     // 2. Enter private mode
     Require(orchestrator.EnterPrivateMode(), "entered private mode");
 
-    // 3. Open ephemeral tab in private mode
+    // 3. Reopen closed tab while in private mode:
+    // orchestrator.ReopenClosedTab() requests EphemeralOnly; persistent tab must NOT be reopened!
+    Require(!orchestrator.ReopenClosedTab().has_value(), "persistent tab is NOT reopened in private mode");
+    Require(!session.ReopenLastClosedTab(openbrowser::core::ClosedTabMode::EphemeralOnly).has_value(),
+            "EphemeralOnly rejects persistent closed tab");
+
+    // 4. Open ephemeral tab in private mode and close it
     openbrowser::core::Tab eph_tab;
     eph_tab.id = "eph_1";
     eph_tab.url = "https://secret.org/dashboard";
     eph_tab.title = "Secret Dashboard";
     eph_tab.is_ephemeral = true;
     session.OpenTab(eph_tab);
+    orchestrator.CloseTab("eph_1");
 
-    // 4. Close ephemeral tab
-    session.CloseTab("eph_1");
-    Require(session.ClosedTabs().size() == 1, "closed tabs has ephemeral tab");
-    Require(session.ClosedTabs()[0].is_ephemeral == true, "closed tab is marked ephemeral");
+    // 5. Reopen in private mode -> ephemeral tab B MUST be reopened!
+    const auto reopened_eph = orchestrator.ReopenClosedTab();
+    Require(reopened_eph.has_value(), "ephemeral tab reopened in private mode");
+    const auto* eph_restored = session.FindTab(*reopened_eph);
+    Require(eph_restored != nullptr && eph_restored->is_ephemeral, "restored tab is ephemeral");
+    Require(eph_restored != nullptr && eph_restored->url == "https://secret.org/dashboard", "restored tab url matches");
 
-    // 5. Normal-mode reopen (allow_ephemeral = false) must NOT reopen ephemeral tab
-    Require(!session.ReopenLastClosedTab(false).has_value(), "reopen(allow_ephemeral=false) ignores private tabs");
+    // Re-close ephemeral tab
+    orchestrator.CloseTab(*reopened_eph);
 
     // 6. Exit private mode
     orchestrator.ExitPrivateMode();
     Require(!orchestrator.IsPrivateModeActive(), "exited private mode");
 
     // 7. Verify all ephemeral closed tabs were purged
-    Require(session.ClosedTabs().empty(), "closed tabs purged upon private exit");
-    Require(!session.ReopenLastClosedTab(true).has_value(), "cannot reopen private tab after exit");
+    for (const auto& closed : session.ClosedTabs()) {
+        Require(!closed.is_ephemeral, "no ephemeral closed tab records after exit");
+    }
+
+    // 8. Normal mode reopen restores the persistent tab A
+    const auto reopened_pers = orchestrator.ReopenClosedTab();
+    Require(reopened_pers.has_value(), "persistent tab reopened in normal mode");
+    const auto* pers_restored = session.FindTab(*reopened_pers);
+    Require(pers_restored != nullptr && !pers_restored->is_ephemeral, "restored tab is persistent");
+    Require(pers_restored != nullptr && pers_restored->url == "https://persistent.org/", "persistent url matches");
 }
 
 void TestTabCycling() {
@@ -210,6 +294,46 @@ void TestTabCycling() {
 
     Require(session.CycleTab(false, filter_hide_t2), "cycle backward with filter");
     Require(session.ActiveTabId() == "t1", "skipped hidden t2 backward, back to t1");
+}
+
+void TestTabCyclingWithWorkspaceFilter() {
+    MockBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    openbrowser::core::Tab t1;
+    t1.id = "t1";
+    t1.url = "https://def1.com";
+    t1.workspace_id = "default";
+    session.OpenTab(t1);
+
+    openbrowser::core::Tab t2;
+    t2.id = "t2";
+    t2.url = "https://work1.com";
+    t2.workspace_id = "work";
+    session.OpenTab(t2);
+
+    openbrowser::core::Tab t3;
+    t3.id = "t3";
+    t3.url = "https://def2.com";
+    t3.workspace_id = "default";
+    session.OpenTab(t3);
+
+    const std::string active_ws = "default";
+    auto ws_filter = [&](const openbrowser::core::Tab& t) {
+        return t.workspace_id.has_value() && *t.workspace_id == active_ws;
+    };
+
+    session.ActivateTab("t1");
+    Require(session.ActiveTabId() == "t1", "initial active is t1");
+
+    Require(session.CycleTab(true, ws_filter), "cycle forward in default ws");
+    Require(session.ActiveTabId() == "t3", "cycled to t3, skipped t2");
+
+    Require(session.CycleTab(true, ws_filter), "cycle forward wrap");
+    Require(session.ActiveTabId() == "t1", "wrapped back to t1");
+
+    Require(session.CycleTab(false, ws_filter), "cycle backward wrap");
+    Require(session.ActiveTabId() == "t3", "cycled backward to t3");
 }
 
 void TestActionRegistryShortcutBindings() {
@@ -266,8 +390,10 @@ void TestActionRegistryShortcutBindings() {
 
 int main() {
     TestTabReopeningLifecycle();
+    TestPrivacyAwareCloseTab();
     TestPrivateModeClosedTabIsolation();
     TestTabCycling();
+    TestTabCyclingWithWorkspaceFilter();
     TestActionRegistryShortcutBindings();
 
     if (failures != 0) {

@@ -830,6 +830,10 @@ void DesktopApp::OpenNewTab() {
 
 void DesktopApp::CloseActiveTab() {
     CEF_REQUIRE_UI_THREAD();
+    if (privacy_orchestrator_ != nullptr) {
+        static_cast<void>(privacy_orchestrator_->CloseActiveTab());
+        return;
+    }
     if (!session_) return;
     const auto& active_id = session_->ActiveTabId();
     if (active_id.has_value()) {
@@ -839,17 +843,30 @@ void DesktopApp::CloseActiveTab() {
 
 void DesktopApp::ReopenClosedTab() {
     CEF_REQUIRE_UI_THREAD();
+    if (privacy_orchestrator_ != nullptr) {
+        static_cast<void>(privacy_orchestrator_->ReopenClosedTab());
+        return;
+    }
     if (!session_) return;
-    const bool allow_ephemeral = (privacy_orchestrator_ != nullptr) && privacy_orchestrator_->IsPrivateModeActive();
-    static_cast<void>(session_->ReopenLastClosedTab(allow_ephemeral));
+    static_cast<void>(session_->ReopenLastClosedTab(core::ClosedTabMode::PersistentOnly));
 }
 
 void DesktopApp::CycleTab(const bool forward) {
     CEF_REQUIRE_UI_THREAD();
     if (!session_) return;
     static_cast<void>(session_->CycleTab(forward, [this](const core::Tab& tab) {
-        if (privacy_orchestrator_ != nullptr) {
-            return privacy_orchestrator_->IsTabVisible(tab);
+        if (privacy_orchestrator_ != nullptr && !privacy_orchestrator_->IsTabVisible(tab)) {
+            return false;
+        }
+        if (workspace_manager_ != nullptr) {
+            const auto& active_ws = workspace_manager_->ActiveWorkspaceId();
+            if (tab.workspace_id.has_value()) {
+                if (*tab.workspace_id != active_ws) {
+                    return false;
+                }
+            } else if (active_ws != "default") {
+                return false;
+            }
         }
         return true;
     }));

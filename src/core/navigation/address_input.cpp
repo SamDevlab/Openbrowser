@@ -77,6 +77,103 @@ bool IsLoopbackAddress(const std::string_view value) {
     return value.starts_with("[::1]");
 }
 
+bool LooksLikeIpv4Literal(const std::string_view value) {
+    const std::size_t host_end = value.find_first_of("/?#:");
+    const std::string_view host = (host_end == std::string_view::npos) ? value : value.substr(0, host_end);
+    if (host.empty()) {
+        return false;
+    }
+
+    int dots = 0;
+    std::size_t start = 0;
+    for (std::size_t i = 0; i <= host.size(); ++i) {
+        if (i == host.size() || host[i] == '.') {
+            const std::string_view octet = host.substr(start, i - start);
+            if (octet.empty() || octet.size() > 3) {
+                return false;
+            }
+            int val = 0;
+            for (const char ch : octet) {
+                if (!std::isdigit(static_cast<unsigned char>(ch))) {
+                    return false;
+                }
+                val = val * 10 + (ch - '0');
+            }
+            if (val < 0 || val > 255) {
+                return false;
+            }
+            if (i < host.size()) {
+                ++dots;
+                start = i + 1;
+            }
+        }
+    }
+    if (dots != 3) {
+        return false;
+    }
+
+    if (host_end != std::string_view::npos && value[host_end] == ':') {
+        const std::size_t port_end = value.find_first_of("/?#", host_end + 1);
+        const std::string_view port = (port_end == std::string_view::npos)
+            ? value.substr(host_end + 1)
+            : value.substr(host_end + 1, port_end - (host_end + 1));
+        if (port.empty() || port.size() > 5) {
+            return false;
+        }
+        for (const char ch : port) {
+            if (!std::isdigit(static_cast<unsigned char>(ch))) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool LooksLikeIpv6Literal(const std::string_view value) {
+    if (value.empty() || value.front() != '[') {
+        return false;
+    }
+    const std::size_t closing = value.find(']');
+    if (closing == std::string_view::npos || closing < 2) {
+        return false;
+    }
+    const std::string_view inside = value.substr(1, closing - 1);
+    bool has_colon = false;
+    for (const char ch : inside) {
+        if (ch == ':') {
+            has_colon = true;
+        } else if (!std::isxdigit(static_cast<unsigned char>(ch)) && ch != '.') {
+            return false;
+        }
+    }
+    if (!has_colon) {
+        return false;
+    }
+
+    if (closing + 1 < value.size()) {
+        const char next = value[closing + 1];
+        if (next == ':') {
+            const std::size_t port_end = value.find_first_of("/?#", closing + 2);
+            const std::string_view port = (port_end == std::string_view::npos)
+                ? value.substr(closing + 2)
+                : value.substr(closing + 2, port_end - (closing + 2));
+            if (port.empty() || port.size() > 5) {
+                return false;
+            }
+            for (const char ch : port) {
+                if (!std::isdigit(static_cast<unsigned char>(ch))) {
+                    return false;
+                }
+            }
+        } else if (next != '/' && next != '?' && next != '#') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool LooksLikeHostOrDomain(const std::string_view value) {
     const std::size_t host_end = value.find_first_of("/?#:");
     const std::string_view host = (host_end == std::string_view::npos) ? value : value.substr(0, host_end);
@@ -148,7 +245,11 @@ std::optional<std::string> NormalizeAddressInput(std::string input) {
         return std::nullopt;
     }
 
-    return "https://" + input;
+    if (LooksLikeIpv4Literal(input) || LooksLikeIpv6Literal(input) || LooksLikeHostOrDomain(input)) {
+        return "https://" + input;
+    }
+
+    return std::nullopt;
 }
 
 std::optional<std::string> ResolveAddressInput(
@@ -173,8 +274,10 @@ std::optional<std::string> ResolveAddressInput(
         return std::isspace(character) != 0 || std::iscntrl(character) != 0;
     });
 
-    if (!has_spaces_or_cntrl && !HasExplicitScheme(input) && LooksLikeHostOrDomain(input)) {
-        return "https://" + input;
+    if (!has_spaces_or_cntrl && !HasExplicitScheme(input)) {
+        if (LooksLikeIpv4Literal(input) || LooksLikeIpv6Literal(input) || LooksLikeHostOrDomain(input)) {
+            return "https://" + input;
+        }
     }
 
     const std::string encoded_query = UrlEncode(input);

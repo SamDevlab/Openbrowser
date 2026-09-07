@@ -25,6 +25,12 @@ struct ClosedTabRecord {
     bool is_ephemeral{false};
 };
 
+enum class ClosedTabMode {
+    PersistentOnly,
+    EphemeralOnly,
+    Any,
+};
+
 class BrowserSession final : public engine::BrowserEngineEventSink {
 public:
     explicit BrowserSession(engine::BrowserEngine& engine) noexcept;
@@ -51,7 +57,8 @@ public:
     [[nodiscard]] bool ResumeTab(const TabId& tab_id);
     [[nodiscard]] bool DiscardTab(const TabId& tab_id);
 
-    [[nodiscard]] std::optional<TabId> ReopenLastClosedTab(bool allow_ephemeral = true);
+    [[nodiscard]] std::optional<TabId> ReopenLastClosedTab(
+        ClosedTabMode mode = ClosedTabMode::PersistentOnly);
     [[nodiscard]] const std::vector<ClosedTabRecord>& ClosedTabs() const noexcept;
     void PurgeEphemeralClosedTabs();
     [[nodiscard]] bool CycleTab(

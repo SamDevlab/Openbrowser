@@ -88,7 +88,11 @@ void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id
             break;
         case TabAction::Close:
             if (!tab_id.empty()) {
-                static_cast<void>(session_.CloseTab(tab_id));
+                if (privacy_orchestrator_ != nullptr) {
+                    static_cast<void>(privacy_orchestrator_->CloseTab(tab_id));
+                } else {
+                    static_cast<void>(session_.CloseTab(tab_id));
+                }
             }
             break;
         case TabAction::CycleWorkspace:
