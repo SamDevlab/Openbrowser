@@ -161,21 +161,27 @@ void TestSessionHistoryBridgeSuppressesPrivateVisits() {
     Require(history.Search("confidential").empty(), "No confidential site in history");
     Require(history.Search("bank").empty(), "No bank in history");
 
-    // Step C: When active profile is ephemeral, even non-ephemeral tab activity is suppressed.
+    // Step C: When active profile is ephemeral, visits are suppressed even if tab is not marked ephemeral.
     auto eph_profile = profile_mgr.CreateEphemeralProfile("Temp Private");
     Require(eph_profile != nullptr, "Created ephemeral profile");
     profile_mgr.SetActiveProfile(eph_profile->GetId());
 
-    Require(session.ActivateTab("tab-persistent"), "Activated persistent tab while profile is private");
+    Tab tab_c;
+    tab_c.id = "tab-in-private-profile";
+    tab_c.url = "https://another-secret.com";
+    tab_c.title = "Another Secret";
+    tab_c.lifecycle = TabLifecycle::Active;
+    tab_c.is_ephemeral = false; // Even if tab itself is not flagged ephemeral, ephemeral profile suppresses recording
+
     session_save_called = false;
-    Require(session.Navigate("tab-persistent", "https://another-secret.com"), "Navigated persistent tab while profile is private");
-    session.OnNavigationCommitted(openbrowser::engine::NavigationCommittedEvent{.tab_id = "tab-persistent", .url = "https://another-secret.com"});
+    Require(session.OpenTab(std::move(tab_c), true), "Opened tab while profile is ephemeral");
     Require(history.TotalEntries() == 1, "History count still unchanged while in ephemeral profile");
     Require(!session_save_called, "Session save NOT called while profile is ephemeral");
     Require(history.Search("another-secret").empty(), "No visit recorded while profile is ephemeral");
 
-    // Step D: Return to default profile -> close private tab and resume normal visits.
+    // Step D: Return to default profile -> close private tabs and resume normal visits.
     Require(session.CloseTab("tab-private"), "Closed private tab on exit");
+    Require(session.CloseTab("tab-in-private-profile"), "Closed tab opened in private profile");
     profile_mgr.SetActiveProfile("default");
     profile_mgr.PurgeEphemeralProfiles();
 
