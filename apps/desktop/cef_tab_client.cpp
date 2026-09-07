@@ -1,6 +1,8 @@
 #include "cef_tab_client.h"
 
 #include "cef_browser_engine.h"
+#include "core/filters/content_filter.h"
+#include "core/transfers/transfer_broker.h"
 #include "devtools/network/network_trace.h"
 
 #include "include/wrapper/cef_helpers.h"
@@ -96,6 +98,65 @@ CefTabClient::CefTabClient(core::TabId tab_id, CefRefPtr<CefBrowserEngine> engin
 
 CefRefPtr<CefDisplayHandler> CefTabClient::GetDisplayHandler() {
     return this;
+}
+
+CefRefPtr<CefDownloadHandler> CefTabClient::GetDownloadHandler() {
+    return this;
+}
+
+bool CefTabClient::CanDownload(
+    CefRefPtr<CefBrowser> /*browser*/,
+    const CefString& /*url*/,
+    const CefString& /*request_method*/) {
+    return true;
+}
+
+bool CefTabClient::OnBeforeDownload(
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefDownloadItem> download_item,
+    const CefString& suggested_name,
+    CefRefPtr<CefBeforeDownloadCallback> callback) {
+    if (download_item && engine_) {
+        auto* broker = engine_->TransferBroker();
+        if (broker) {
+            core::TransferItem item;
+            item.id = std::to_string(download_item->GetId());
+            item.url = download_item->GetURL().ToString();
+            item.suggested_filename = suggested_name.empty() ? download_item->GetSuggestedFileName().ToString() : suggested_name.ToString();
+            item.target_path = download_item->GetFullPath().ToString();
+            item.total_bytes = static_cast<std::size_t>(std::max<int64_t>(0, download_item->GetTotalBytes()));
+            item.state = core::TransferState::InProgress;
+            broker->RegisterTransfer(item);
+        }
+    }
+    if (callback) {
+        callback->Continue("", true);
+    }
+    return true;
+}
+
+void CefTabClient::OnDownloadUpdated(
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefDownloadItem> download_item,
+    CefRefPtr<CefDownloadItemCallback> /*callback*/) {
+    if (!download_item || !engine_) {
+        return;
+    }
+    auto* broker = engine_->TransferBroker();
+    if (!broker) {
+        return;
+    }
+    const std::string id = std::to_string(download_item->GetId());
+    if (download_item->IsComplete()) {
+        broker->CompleteTransfer(id);
+    } else if (download_item->IsCanceled()) {
+        broker->CancelTransfer(id);
+    } else if (download_item->IsInProgress()) {
+        const auto received = static_cast<std::size_t>(std::max<int64_t>(0, download_item->GetReceivedBytes()));
+        const auto total = static_cast<std::size_t>(std::max<int64_t>(0, download_item->GetTotalBytes()));
+        const auto speed = static_cast<std::size_t>(std::max<int64_t>(0, download_item->GetCurrentSpeed()));
+        broker->UpdateProgress(id, received, total, speed);
+    }
 }
 
 CefRefPtr<CefLifeSpanHandler> CefTabClient::GetLifeSpanHandler() {
@@ -366,35 +427,97 @@ CefResourceRequestHandler::ReturnValue CefTabClient::OnBeforeResourceLoad(
     if (policy != nullptr && !policy->CanLoadResource(url, initiator)) {
         const std::string request_id = TraceRequestId(request);
         const std::string method = request ? request->GetMethod().ToString() : "GET";
-        engine_->PostNetworkEvent({
-            .request_id = request_id,
-            .tab_id = tab_id_,
-            .type = devtools::network::NetworkEventType::RequestStarted,
-            .url = url,
-            .method = method,
-            .headers = request ? RequestHeaders(request) : std::vector<devtools::network::Header>{},
-        });
-        engine_->PostNetworkEvent({
-            .request_id = request_id,
-            .tab_id = tab_id_,
-            .type = devtools::network::NetworkEventType::RequestFailed,
-            .url = url,
-            .method = method,
-            .error = "BLOCKED_BY_CAPABILITY_POLICY",
-        });
+        devtools::network::NetworkEvent start_ev;
+        start_ev.sequence = 0;
+        start_ev.request_id = request_id;
+        start_ev.tab_id = tab_id_;
+        start_ev.type = devtools::network::NetworkEventType::RequestStarted;
+        start_ev.url = url;
+        start_ev.method = method;
+        start_ev.status = std::nullopt;
+        start_ev.protocol = {};
+        start_ev.headers = request ? RequestHeaders(request) : std::vector<devtools::network::Header>{};
+        start_ev.transferred_bytes = 0;
+        start_ev.error = {};
+        start_ev.body_preview = {};
+        start_ev.attribution = core::NetworkAttribution::Page;
+        engine_->PostNetworkEvent(std::move(start_ev));
+
+        devtools::network::NetworkEvent fail_ev;
+        fail_ev.sequence = 0;
+        fail_ev.request_id = request_id;
+        fail_ev.tab_id = tab_id_;
+        fail_ev.type = devtools::network::NetworkEventType::RequestFailed;
+        fail_ev.url = url;
+        fail_ev.method = method;
+        fail_ev.status = std::nullopt;
+        fail_ev.protocol = {};
+        fail_ev.headers = {};
+        fail_ev.transferred_bytes = 0;
+        fail_ev.error = "BLOCKED_BY_CAPABILITY_POLICY";
+        fail_ev.body_preview = {};
+        fail_ev.attribution = core::NetworkAttribution::Page;
+        engine_->PostNetworkEvent(std::move(fail_ev));
+
         ForgetTraceRequest(request);
         return RV_CANCEL;
     }
 
-    engine_->PostNetworkEvent({
-        .request_id = TraceRequestId(request),
-        .tab_id = tab_id_,
-        .type = devtools::network::NetworkEventType::RequestStarted,
-        .url = url,
-        .method = request ? request->GetMethod().ToString() : "GET",
-        .headers = request ? RequestHeaders(request) : std::vector<devtools::network::Header>{},
-        .body_preview = RequestBodyPreview(request),
-    });
+    const auto* filter = engine_->ContentFilter();
+    if (filter != nullptr && filter->Evaluate(url) == core::FilterDecision::Block) {
+        const std::string request_id = TraceRequestId(request);
+        const std::string method = request ? request->GetMethod().ToString() : "GET";
+        devtools::network::NetworkEvent start_ev;
+        start_ev.sequence = 0;
+        start_ev.request_id = request_id;
+        start_ev.tab_id = tab_id_;
+        start_ev.type = devtools::network::NetworkEventType::RequestStarted;
+        start_ev.url = url;
+        start_ev.method = method;
+        start_ev.status = std::nullopt;
+        start_ev.protocol = {};
+        start_ev.headers = request ? RequestHeaders(request) : std::vector<devtools::network::Header>{};
+        start_ev.transferred_bytes = 0;
+        start_ev.error = {};
+        start_ev.body_preview = {};
+        start_ev.attribution = core::NetworkAttribution::Page;
+        engine_->PostNetworkEvent(std::move(start_ev));
+
+        devtools::network::NetworkEvent fail_ev;
+        fail_ev.sequence = 0;
+        fail_ev.request_id = request_id;
+        fail_ev.tab_id = tab_id_;
+        fail_ev.type = devtools::network::NetworkEventType::RequestFailed;
+        fail_ev.url = url;
+        fail_ev.method = method;
+        fail_ev.status = std::nullopt;
+        fail_ev.protocol = {};
+        fail_ev.headers = {};
+        fail_ev.transferred_bytes = 0;
+        fail_ev.error = "BLOCKED_BY_CONTENT_FILTER";
+        fail_ev.body_preview = {};
+        fail_ev.attribution = core::NetworkAttribution::Page;
+        engine_->PostNetworkEvent(std::move(fail_ev));
+
+        ForgetTraceRequest(request);
+        return RV_CANCEL;
+    }
+
+    devtools::network::NetworkEvent ev;
+    ev.sequence = 0;
+    ev.request_id = TraceRequestId(request);
+    ev.tab_id = tab_id_;
+    ev.type = devtools::network::NetworkEventType::RequestStarted;
+    ev.url = url;
+    ev.method = request ? request->GetMethod().ToString() : "GET";
+    ev.status = std::nullopt;
+    ev.protocol = {};
+    ev.headers = request ? RequestHeaders(request) : std::vector<devtools::network::Header>{};
+    ev.transferred_bytes = 0;
+    ev.error = {};
+    ev.body_preview = RequestBodyPreview(request);
+    ev.attribution = core::NetworkAttribution::Page;
+    engine_->PostNetworkEvent(std::move(ev));
 
     return RV_CONTINUE;
 }
@@ -407,15 +530,21 @@ void CefTabClient::OnResourceRedirect(
     CefString& new_url) {
     CEF_REQUIRE_IO_THREAD();
 
-    engine_->PostNetworkEvent({
-        .request_id = TraceRequestId(request),
-        .tab_id = tab_id_,
-        .type = devtools::network::NetworkEventType::Redirect,
-        .url = new_url.ToString(),
-        .method = request->GetMethod().ToString(),
-        .status = response ? std::optional<int>{response->GetStatus()} : std::nullopt,
-        .headers = response ? ResponseHeaders(response) : std::vector<devtools::network::Header>{},
-    });
+    devtools::network::NetworkEvent ev;
+    ev.sequence = 0;
+    ev.request_id = TraceRequestId(request);
+    ev.tab_id = tab_id_;
+    ev.type = devtools::network::NetworkEventType::Redirect;
+    ev.url = new_url.ToString();
+    ev.method = request ? request->GetMethod().ToString() : "";
+    ev.status = response ? std::optional<int>{response->GetStatus()} : std::nullopt;
+    ev.protocol = {};
+    ev.headers = response ? ResponseHeaders(response) : std::vector<devtools::network::Header>{};
+    ev.transferred_bytes = 0;
+    ev.error = {};
+    ev.body_preview = {};
+    ev.attribution = core::NetworkAttribution::Page;
+    engine_->PostNetworkEvent(std::move(ev));
 }
 
 bool CefTabClient::OnResourceResponse(
@@ -425,15 +554,21 @@ bool CefTabClient::OnResourceResponse(
     CefRefPtr<CefResponse> response) {
     CEF_REQUIRE_IO_THREAD();
 
-    engine_->PostNetworkEvent({
-        .request_id = TraceRequestId(request),
-        .tab_id = tab_id_,
-        .type = devtools::network::NetworkEventType::ResponseReceived,
-        .url = request->GetURL().ToString(),
-        .method = request->GetMethod().ToString(),
-        .status = response ? std::optional<int>{response->GetStatus()} : std::nullopt,
-        .headers = response ? ResponseHeaders(response) : std::vector<devtools::network::Header>{},
-    });
+    devtools::network::NetworkEvent ev;
+    ev.sequence = 0;
+    ev.request_id = TraceRequestId(request);
+    ev.tab_id = tab_id_;
+    ev.type = devtools::network::NetworkEventType::ResponseReceived;
+    ev.url = request ? request->GetURL().ToString() : "";
+    ev.method = request ? request->GetMethod().ToString() : "";
+    ev.status = response ? std::optional<int>{response->GetStatus()} : std::nullopt;
+    ev.protocol = {};
+    ev.headers = response ? ResponseHeaders(response) : std::vector<devtools::network::Header>{};
+    ev.transferred_bytes = 0;
+    ev.error = {};
+    ev.body_preview = {};
+    ev.attribution = core::NetworkAttribution::Page;
+    engine_->PostNetworkEvent(std::move(ev));
 
     return false;
 }
@@ -448,18 +583,23 @@ void CefTabClient::OnResourceLoadComplete(
     CEF_REQUIRE_IO_THREAD();
 
     const bool succeeded = status == UR_SUCCESS;
-    engine_->PostNetworkEvent({
-        .request_id = TraceRequestId(request),
-        .tab_id = tab_id_,
-        .type = succeeded ? devtools::network::NetworkEventType::RequestFinished
-                          : devtools::network::NetworkEventType::RequestFailed,
-        .url = request->GetURL().ToString(),
-        .method = request->GetMethod().ToString(),
-        .status = response ? std::optional<int>{response->GetStatus()} : std::nullopt,
-        .transferred_bytes = ToTransferredBytes(received_content_length),
-        .error = succeeded ? std::string{}
-                           : "cef_urlrequest_status=" + std::to_string(static_cast<int>(status)),
-    });
+    devtools::network::NetworkEvent ev;
+    ev.sequence = 0;
+    ev.request_id = TraceRequestId(request);
+    ev.tab_id = tab_id_;
+    ev.type = succeeded ? devtools::network::NetworkEventType::RequestFinished
+                        : devtools::network::NetworkEventType::RequestFailed;
+    ev.url = request ? request->GetURL().ToString() : "";
+    ev.method = request ? request->GetMethod().ToString() : "";
+    ev.status = response ? std::optional<int>{response->GetStatus()} : std::nullopt;
+    ev.protocol = {};
+    ev.headers = {};
+    ev.transferred_bytes = ToTransferredBytes(received_content_length);
+    ev.error = succeeded ? std::string{}
+                         : "cef_urlrequest_status=" + std::to_string(static_cast<int>(status));
+    ev.body_preview = {};
+    ev.attribution = core::NetworkAttribution::Page;
+    engine_->PostNetworkEvent(std::move(ev));
 
     ForgetTraceRequest(request);
 }

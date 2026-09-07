@@ -21,6 +21,11 @@
 #include <string>
 #include <unordered_map>
 
+namespace openbrowser::core {
+class ContentFilter;
+class TransferBroker;
+}
+
 namespace openbrowser::desktop {
 
 class CefBrowserEngine final : public engine::BrowserEngine, public CefBaseRefCounted {
@@ -52,6 +57,12 @@ public:
     void SetCapabilityPolicy(core::CapabilityPolicy* policy) noexcept;
     [[nodiscard]] const core::CapabilityPolicy* Policy() const noexcept;
     [[nodiscard]] core::CapabilityPolicy* MutablePolicy() const noexcept;
+
+    void SetTransferBroker(core::TransferBroker* broker) noexcept;
+    [[nodiscard]] core::TransferBroker* TransferBroker() const noexcept;
+
+    void SetContentFilter(core::ContentFilter* filter) noexcept;
+    [[nodiscard]] core::ContentFilter* ContentFilter() const noexcept;
 
     void AddPermissionPromptObserver(core::PermissionPromptObserver* observer);
     void RemovePermissionPromptObserver(core::PermissionPromptObserver* observer) noexcept;
@@ -130,6 +141,8 @@ private:
     engine::BrowserEngineEventSink* event_sink_{nullptr};
     std::atomic<devtools::network::NetworkObservationSink*> network_sink_{nullptr};
     std::atomic<core::CapabilityPolicy*> capability_policy_{nullptr};
+    std::atomic<core::TransferBroker*> transfer_broker_{nullptr};
+    std::atomic<core::ContentFilter*> content_filter_{nullptr};
     std::unordered_map<uint64_t, PendingPrompt> pending_prompts_;
     std::vector<core::PermissionPromptObserver*> prompt_observers_;
     uint64_t next_media_prompt_id_{0x8000000000000000ULL};

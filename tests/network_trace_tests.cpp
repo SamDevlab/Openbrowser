@@ -30,6 +30,8 @@ openbrowser::devtools::network::NetworkEvent MakeEvent(const std::string& reques
         .headers = {},
         .transferred_bytes = 0,
         .error = {},
+        .body_preview = {},
+        .attribution = openbrowser::core::NetworkAttribution::Page,
     };
 }
 

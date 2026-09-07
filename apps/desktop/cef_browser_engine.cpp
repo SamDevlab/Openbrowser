@@ -264,6 +264,22 @@ core::CapabilityPolicy* CefBrowserEngine::MutablePolicy() const noexcept {
     return capability_policy_.load(std::memory_order_acquire);
 }
 
+void CefBrowserEngine::SetTransferBroker(core::TransferBroker* broker) noexcept {
+    transfer_broker_.store(broker, std::memory_order_release);
+}
+
+core::TransferBroker* CefBrowserEngine::TransferBroker() const noexcept {
+    return transfer_broker_.load(std::memory_order_acquire);
+}
+
+void CefBrowserEngine::SetContentFilter(core::ContentFilter* filter) noexcept {
+    content_filter_.store(filter, std::memory_order_release);
+}
+
+core::ContentFilter* CefBrowserEngine::ContentFilter() const noexcept {
+    return content_filter_.load(std::memory_order_acquire);
+}
+
 void CefBrowserEngine::AddPermissionPromptObserver(
     core::PermissionPromptObserver* observer) {
     CEF_REQUIRE_UI_THREAD();

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdio>
 #include <unordered_map>
 #include <utility>
 
@@ -14,6 +15,31 @@ std::string LowerAscii(std::string value) {
         return static_cast<char>(std::tolower(character));
     });
     return value;
+}
+
+void EscapeJsonString(const std::string_view str, std::string& out) {
+    out += '"';
+    for (const char c : str) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned int>(static_cast<unsigned char>(c)));
+                    out += buf;
+                } else {
+                    out += c;
+                }
+                break;
+        }
+    }
+    out += '"';
 }
 
 }  // namespace
@@ -112,6 +138,7 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
                 .request_headers = std::move(req_headers),
                 .response_headers = std::move(res_headers),
                 .body_preview = event.body_preview,
+                .attribution = event.attribution,
             };
 
             if (event.type == NetworkEventType::RequestFinished) {
@@ -124,6 +151,9 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
             summaries.push_back(std::move(summary));
         } else {
             auto& summary = summaries[it->second];
+            if (event.attribution != core::NetworkAttribution::Page) {
+                summary.attribution = event.attribution;
+            }
             if (!event.url.empty() && (summary.url.empty() || event.type == NetworkEventType::Redirect)) {
                 summary.url = event.url;
             }
@@ -289,6 +319,84 @@ std::optional<NetworkRequestSummary> NetworkTraceBuffer::FindRequest(
         }
     }
     return std::nullopt;
+}
+
+std::string NetworkTraceBuffer::ExportToHar(
+    const std::vector<NetworkRequestSummary>& requests) {
+    std::string out;
+    out.reserve(requests.size() * 512 + 256);
+
+    out += "{\n  \"log\": {\n    \"version\": \"1.2\",\n";
+    out += "    \"creator\": {\n      \"name\": \"Openbrowser Network Lab\",\n      \"version\": \"1.0\"\n    },\n";
+    out += "    \"entries\": [";
+
+    for (std::size_t i = 0; i < requests.size(); ++i) {
+        const auto& req = requests[i];
+        if (i > 0) {
+            out += ",";
+        }
+        out += "\n      {\n";
+        out += "        \"startedDateTime\": \"1970-01-01T00:00:00.000Z\",\n";
+        out += "        \"time\": 0,\n";
+        out += "        \"_attribution\": ";
+        EscapeJsonString(core::AttributionToString(req.attribution), out);
+        out += ",\n";
+        out += "        \"request\": {\n";
+        out += "          \"method\": ";
+        EscapeJsonString(req.method, out);
+        out += ",\n          \"url\": ";
+        EscapeJsonString(req.url, out);
+        out += ",\n          \"httpVersion\": ";
+        EscapeJsonString(req.protocol.empty() ? "HTTP/1.1" : req.protocol, out);
+        out += ",\n          \"headers\": [";
+        for (std::size_t h = 0; h < req.request_headers.size(); ++h) {
+            if (h > 0) {
+                out += ",";
+            }
+            out += "\n            {\"name\": ";
+            EscapeJsonString(req.request_headers[h].name, out);
+            out += ", \"value\": ";
+            EscapeJsonString(req.request_headers[h].value, out);
+            out += "}";
+        }
+        out += "\n          ],\n";
+        out += "          \"headersSize\": -1,\n";
+        out += "          \"bodySize\": -1\n";
+        out += "        },\n";
+        out += "        \"response\": {\n";
+        out += "          \"status\": " + std::to_string(req.status.value_or(0)) + ",\n";
+        out += "          \"statusText\": ";
+        EscapeJsonString(req.error.empty() ? (req.status.has_value() && *req.status == 200 ? "OK" : "") : req.error, out);
+        out += ",\n          \"httpVersion\": ";
+        EscapeJsonString(req.protocol.empty() ? "HTTP/1.1" : req.protocol, out);
+        out += ",\n          \"headers\": [";
+        for (std::size_t h = 0; h < req.response_headers.size(); ++h) {
+            if (h > 0) {
+                out += ",";
+            }
+            out += "\n            {\"name\": ";
+            EscapeJsonString(req.response_headers[h].name, out);
+            out += ", \"value\": ";
+            EscapeJsonString(req.response_headers[h].value, out);
+            out += "}";
+        }
+        out += "\n          ],\n";
+        out += "          \"content\": {\n";
+        out += "            \"size\": " + std::to_string(req.transferred_bytes) + ",\n";
+        out += "            \"mimeType\": \"text/plain\",\n";
+        out += "            \"text\": ";
+        EscapeJsonString(req.body_preview, out);
+        out += "\n          },\n";
+        out += "          \"headersSize\": -1,\n";
+        out += "          \"bodySize\": " + std::to_string(req.transferred_bytes) + "\n";
+        out += "        },\n";
+        out += "        \"cache\": {},\n";
+        out += "        \"timings\": {\"send\": 0, \"wait\": 0, \"receive\": 0}\n";
+        out += "      }";
+    }
+
+    out += "\n    ]\n  }\n}\n";
+    return out;
 }
 
 bool NetworkTraceBuffer::IsSensitiveHeaderName(const std::string& name) {

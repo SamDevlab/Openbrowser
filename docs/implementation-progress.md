@@ -47,5 +47,12 @@ All five M2 milestones have been delivered, tested across unit test suites and t
 4. M2.4: Renderer Discard & Memory Pressure Lifecycle
 5. M2.5: Workspace Isolation & Partitioned Request Contexts
 
+## Milestone M3: Native Subsystems & Protection Engine
+
+- **M3.1 Delivered**: Native Transfer Manager & Download Broker (`TransferBroker`, `TransferItem`, `TransferObserver`, `CefDownloadHandler` integration in `CefTabClient`, thread-safe progress, speed calculation, pause, resume, and cancellation).
+- **M3.2 Delivered**: Native Content Filtering & Tracker Protection Engine (`ContentFilter`, domain and pattern matching, tracker categorizations including Advertising, Analytics, Fingerprinting, Cryptomining, Social, allowlists, and `OnBeforeResourceLoad` pre-flight enforcement).
+- **M3.3 Delivered**: Native History & Bookmarks Engine (`HistoryManager`, `BookmarkManager`, visit deduplication, recency/visit count ranking, tag filtering, and workspace partition isolation).
+- **M3.4 Delivered**: Browser-Owned Network Attribution & HAR Diagnostic Export (`NetworkAttribution` tagging across Page, UpdateCheck, FilterListSync, Telemetry, and Transfer, and standard HAR 1.2 JSON export via `NetworkTraceBuffer::ExportToHar`).
+
 
 
