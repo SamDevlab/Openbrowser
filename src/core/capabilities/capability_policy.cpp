@@ -1,9 +1,110 @@
 #include "core/capabilities/capability_policy.h"
 
+#include "core/storage/atomic_file_store.h"
+#include "core/storage/json_helper.h"
+
 #include <algorithm>
 #include <cctype>
+#include <utility>
 
 namespace openbrowser::core {
+namespace {
+
+constexpr std::string_view CapabilityKey(const Capability capability) noexcept {
+    switch (capability) {
+        case Capability::PageNetwork: return "PageNetwork";
+        case Capability::UpdateCheck: return "UpdateCheck";
+        case Capability::FilterUpdate: return "FilterUpdate";
+        case Capability::Sync: return "Sync";
+        case Capability::Dns: return "Dns";
+        case Capability::Torrent: return "Torrent";
+        case Capability::CrashReport: return "CrashReport";
+        case Capability::ExternalService: return "ExternalService";
+        case Capability::Camera: return "Camera";
+        case Capability::Microphone: return "Microphone";
+        case Capability::Geolocation: return "Geolocation";
+        case Capability::Notifications: return "Notifications";
+        case Capability::ClipboardRead: return "ClipboardRead";
+        case Capability::ClipboardWrite: return "ClipboardWrite";
+        case Capability::PersistentStorage: return "PersistentStorage";
+        case Capability::ThirdPartyStorage: return "ThirdPartyStorage";
+        case Capability::Automation: return "Automation";
+        case Capability::UserScript: return "UserScript";
+    }
+    return "Unknown";
+}
+
+std::optional<Capability> CapabilityFromKey(const std::string_view key) {
+    if (key == "PageNetwork") return Capability::PageNetwork;
+    if (key == "UpdateCheck") return Capability::UpdateCheck;
+    if (key == "FilterUpdate") return Capability::FilterUpdate;
+    if (key == "Sync") return Capability::Sync;
+    if (key == "Dns") return Capability::Dns;
+    if (key == "Torrent") return Capability::Torrent;
+    if (key == "CrashReport") return Capability::CrashReport;
+    if (key == "ExternalService") return Capability::ExternalService;
+    if (key == "Camera") return Capability::Camera;
+    if (key == "Microphone") return Capability::Microphone;
+    if (key == "Geolocation") return Capability::Geolocation;
+    if (key == "Notifications") return Capability::Notifications;
+    if (key == "ClipboardRead") return Capability::ClipboardRead;
+    if (key == "ClipboardWrite") return Capability::ClipboardWrite;
+    if (key == "PersistentStorage") return Capability::PersistentStorage;
+    if (key == "ThirdPartyStorage") return Capability::ThirdPartyStorage;
+    if (key == "Automation") return Capability::Automation;
+    if (key == "UserScript") return Capability::UserScript;
+    return std::nullopt;
+}
+
+constexpr std::string_view DecisionKey(const CapabilityDecision decision) noexcept {
+    switch (decision) {
+        case CapabilityDecision::Allow: return "Allow";
+        case CapabilityDecision::Deny: return "Deny";
+        case CapabilityDecision::Ask: return "Ask";
+    }
+    return "Deny";
+}
+
+std::optional<CapabilityDecision> DecisionFromKey(const std::string_view key) {
+    if (key == "Allow") return CapabilityDecision::Allow;
+    if (key == "Deny") return CapabilityDecision::Deny;
+    if (key == "Ask") return CapabilityDecision::Ask;
+    return std::nullopt;
+}
+
+bool ValidateOriginRulesDocument(const std::string_view content) {
+    const auto root = storage::ParseJson(content);
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object ||
+        root->GetSizeT("schema_version", 0) != 1) {
+        return false;
+    }
+
+    const auto* origins = root->Find("origin_rules");
+    if (origins == nullptr || origins->type != storage::JsonValue::Type::Array) {
+        return false;
+    }
+
+    for (const auto& origin_item : origins->arr_val) {
+        if (origin_item.type != storage::JsonValue::Type::Object ||
+            origin_item.GetString("origin").empty()) {
+            return false;
+        }
+        const auto* rules = origin_item.Find("rules");
+        if (rules == nullptr || rules->type != storage::JsonValue::Type::Array) {
+            return false;
+        }
+        for (const auto& rule : rules->arr_val) {
+            if (rule.type != storage::JsonValue::Type::Object ||
+                !CapabilityFromKey(rule.GetString("capability")).has_value() ||
+                !DecisionFromKey(rule.GetString("decision")).has_value()) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+}  // namespace
 
 CapabilityPolicy CapabilityPolicy::CreateDefault() {
     CapabilityPolicy policy;
@@ -85,7 +186,11 @@ void CapabilityPolicy::SetOrigin(
     const std::string& origin,
     const Capability capability,
     const CapabilityDecision decision) {
+    if (origin.empty()) {
+        return;
+    }
     origin_rules_[origin][capability] = decision;
+    TriggerAutoSave();
 }
 
 void CapabilityPolicy::SetSession(
@@ -105,7 +210,95 @@ std::map<Capability, CapabilityDecision> CapabilityPolicy::GetOriginRules(
 }
 
 void CapabilityPolicy::ClearOriginRules(const std::string& origin) {
-    origin_rules_.erase(origin);
+    if (origin_rules_.erase(origin) > 0) {
+        TriggerAutoSave();
+    }
+}
+
+void CapabilityPolicy::SetAutoSavePath(std::filesystem::path path) {
+    auto_save_path_ = std::move(path);
+}
+
+const std::filesystem::path& CapabilityPolicy::AutoSavePath() const noexcept {
+    return auto_save_path_;
+}
+
+void CapabilityPolicy::TriggerAutoSave() const {
+    if (!auto_save_path_.empty()) {
+        static_cast<void>(SaveOriginRulesToFile(auto_save_path_));
+    }
+}
+
+bool CapabilityPolicy::SaveOriginRulesToFile(const std::filesystem::path& path) const {
+    if (path.empty()) {
+        return false;
+    }
+
+    std::string out;
+    out += "{\n  \"schema_version\": 1,\n  \"origin_rules\": [\n";
+    std::size_t origin_index = 0;
+    for (const auto& [origin, rules] : origin_rules_) {
+        out += "    {\n      \"origin\": ";
+        storage::EscapeJsonString(origin, out);
+        out += ",\n      \"rules\": [\n";
+
+        std::size_t rule_index = 0;
+        for (const auto& [capability, decision] : rules) {
+            out += "        {\"capability\": ";
+            storage::EscapeJsonString(CapabilityKey(capability), out);
+            out += ", \"decision\": ";
+            storage::EscapeJsonString(DecisionKey(decision), out);
+            out += "}";
+            if (++rule_index < rules.size()) {
+                out += ",";
+            }
+            out += "\n";
+        }
+
+        out += "      ]\n    }";
+        if (++origin_index < origin_rules_.size()) {
+            out += ",";
+        }
+        out += "\n";
+    }
+    out += "  ]\n}\n";
+
+    return storage::AtomicWriteFile(path, out, true).success;
+}
+
+bool CapabilityPolicy::LoadOriginRulesFromFile(const std::filesystem::path& path) {
+    if (path.empty()) {
+        return false;
+    }
+
+    const auto result = storage::ReadFileWithBackupRecovery(path, ValidateOriginRulesDocument);
+    if (!result.success) {
+        return false;
+    }
+
+    const auto root = storage::ParseJson(result.content);
+    if (!root.has_value()) {
+        return false;
+    }
+
+    std::map<std::string, RuleSet> loaded;
+    const auto* origins = root->Find("origin_rules");
+    for (const auto& origin_item : origins->arr_val) {
+        const auto origin = origin_item.GetString("origin");
+        RuleSet rules;
+        const auto* rule_array = origin_item.Find("rules");
+        for (const auto& rule : rule_array->arr_val) {
+            const auto capability = CapabilityFromKey(rule.GetString("capability"));
+            const auto decision = DecisionFromKey(rule.GetString("decision"));
+            if (capability.has_value() && decision.has_value()) {
+                rules[*capability] = *decision;
+            }
+        }
+        loaded[origin] = std::move(rules);
+    }
+
+    origin_rules_ = std::move(loaded);
+    return true;
 }
 
 CapabilityDecision CapabilityPolicy::Resolve(

@@ -14,6 +14,16 @@
 #include <utility>
 
 namespace openbrowser::desktop {
+namespace {
+
+std::string SecurityBadgeLabel(const bool private_mode, std::string_view state) {
+    if (private_mode) {
+        return "[ 🕶 Private · " + std::string(state) + " ]";
+    }
+    return "[ " + std::string(state) + " ]";
+}
+
+}  // namespace
 
 class BrowserChrome::ChromeButtonDelegate final : public CefButtonDelegate {
 public:
@@ -81,6 +91,11 @@ BrowserChrome::BrowserChrome(
     session_.AddObserver(this);
     if (engine_) {
         engine_->AddPermissionPromptObserver(this);
+        if (auto* policy = engine_->MutablePolicy(); policy != nullptr && !engine_->StorageRoot().empty()) {
+            const auto permissions_path = engine_->StorageRoot() / "permissions.json";
+            static_cast<void>(policy->LoadOriginRulesFromFile(permissions_path));
+            policy->SetAutoSavePath(permissions_path);
+        }
     }
 
     address_delegate_ = new AddressFieldDelegate(*this);
@@ -91,14 +106,12 @@ BrowserChrome::BrowserChrome(
         return del;
     };
 
-    // Container Panel (Vertical)
     container_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings container_settings{};
     container_settings.horizontal = 0;
     container_settings.between_child_spacing = 2;
     container_layout_ = container_->SetToBoxLayout(container_settings);
 
-    // Main Navigation Toolbar (Horizontal)
     toolbar_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings toolbar_settings{};
     toolbar_settings.horizontal = 1;
@@ -122,38 +135,28 @@ BrowserChrome::BrowserChrome(
 
     toolbar_->AddChildView(back_button_);
     toolbar_layout_->SetFlexForView(back_button_, 0);
-
     toolbar_->AddChildView(forward_button_);
     toolbar_layout_->SetFlexForView(forward_button_, 0);
-
     toolbar_->AddChildView(reload_button_);
     toolbar_layout_->SetFlexForView(reload_button_, 0);
-
     toolbar_->AddChildView(security_badge_);
     toolbar_layout_->SetFlexForView(security_badge_, 0);
-
     toolbar_->AddChildView(address_bar_);
     toolbar_layout_->SetFlexForView(address_bar_, 1);
-
     toolbar_->AddChildView(palette_button_);
     toolbar_layout_->SetFlexForView(palette_button_, 0);
-
     toolbar_->AddChildView(bookmarks_button_);
     toolbar_layout_->SetFlexForView(bookmarks_button_, 0);
-
     toolbar_->AddChildView(downloads_button_);
     toolbar_layout_->SetFlexForView(downloads_button_, 0);
-
     toolbar_->AddChildView(profile_button_);
     toolbar_layout_->SetFlexForView(profile_button_, 0);
-
     toolbar_->AddChildView(lab_button_);
     toolbar_layout_->SetFlexForView(lab_button_, 0);
 
     container_->AddChildView(toolbar_);
     container_layout_->SetFlexForView(toolbar_, 0);
 
-    // Permission Prompt Banner (Horizontal)
     prompt_panel_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings prompt_settings{};
     prompt_settings.horizontal = 1;
@@ -165,27 +168,26 @@ BrowserChrome::BrowserChrome(
 
     prompt_label_ = CefLabelButton::CreateLabelButton(nullptr, "[ Permission Request ]");
     prompt_label_->SetEnabled(false);
-    allow_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::AllowPermission), "[ Allow ]");
-    block_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::BlockPermission), "[ Block ]");
-    dismiss_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::DismissPermission), "[ Dismiss ]");
+    allow_once_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::AllowPermissionOnce), "[ Allow once ]");
+    always_allow_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::AlwaysAllowPermission), "[ Always allow ]");
+    block_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::BlockPermission), "[ Block ]");
 
     prompt_panel_->AddChildView(prompt_label_);
     prompt_layout_->SetFlexForView(prompt_label_, 1);
-
-    prompt_panel_->AddChildView(allow_button_);
-    prompt_layout_->SetFlexForView(allow_button_, 0);
-
+    prompt_panel_->AddChildView(allow_once_button_);
+    prompt_layout_->SetFlexForView(allow_once_button_, 0);
+    prompt_panel_->AddChildView(always_allow_button_);
+    prompt_layout_->SetFlexForView(always_allow_button_, 0);
     prompt_panel_->AddChildView(block_button_);
     prompt_layout_->SetFlexForView(block_button_, 0);
-
-    prompt_panel_->AddChildView(dismiss_button_);
-    prompt_layout_->SetFlexForView(dismiss_button_, 0);
 
     prompt_panel_->SetVisible(false);
     container_->AddChildView(prompt_panel_);
     container_layout_->SetFlexForView(prompt_panel_, 0);
 
-    // Security Details Panel (Horizontal)
     security_details_panel_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings details_settings{};
     details_settings.horizontal = 1;
@@ -197,11 +199,11 @@ BrowserChrome::BrowserChrome(
 
     security_details_label_ = CefLabelButton::CreateLabelButton(nullptr, "[ Site Security Info ]");
     security_details_label_->SetEnabled(false);
-    reset_permissions_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ResetOriginPermissions), "[ Reset Rules ]");
+    reset_permissions_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ResetOriginPermissions), "[ Reset Rules ]");
 
     security_details_panel_->AddChildView(security_details_label_);
     security_details_layout_->SetFlexForView(security_details_label_, 1);
-
     security_details_panel_->AddChildView(reset_permissions_button_);
     security_details_layout_->SetFlexForView(reset_permissions_button_, 0);
 
@@ -210,6 +212,7 @@ BrowserChrome::BrowserChrome(
     container_layout_->SetFlexForView(security_details_panel_, 0);
 
     SyncAddressFromSession(session_);
+    UpdatePrivatePresentation();
 }
 
 BrowserChrome::~BrowserChrome() {
@@ -266,7 +269,11 @@ void BrowserChrome::ShowPrompt(const core::PermissionPrompt& prompt) {
         }
         caps_str += core::ToString(prompt.capabilities[i]);
     }
-    prompt_label_->SetText("[ Permission ] " + prompt.origin + " wants access to: " + caps_str);
+
+    const std::string prefix = private_mode_ ? "[ Private Permission ] " : "[ Permission ] ";
+    prompt_label_->SetText(prefix + prompt.origin + " wants access to: " + caps_str);
+    always_allow_button_->SetEnabled(!private_mode_);
+    block_button_->SetText(private_mode_ ? "[ Block once ]" : "[ Block ]");
     prompt_panel_->SetVisible(true);
     container_->Layout();
 }
@@ -278,19 +285,24 @@ void BrowserChrome::UpdateSecurityDetails() {
     }
 
     std::string text = "[ Site ] " + (current_origin_.empty() ? "No Origin" : current_origin_);
+    if (private_mode_) {
+        text += " | Private session: permission choices are not persisted";
+    }
     if (engine_ && engine_->Policy() && !current_origin_.empty()) {
         const auto rules = engine_->Policy()->GetOriginRules(current_origin_);
         if (!rules.empty()) {
-            text += " | Custom Origin Rules: ";
+            text += " | Remembered Origin Rules: ";
             for (const auto& [cap, dec] : rules) {
                 text += std::string(core::ToString(cap)) + ": " +
-                    (dec == core::CapabilityDecision::Allow ? "Allow " : (dec == core::CapabilityDecision::Deny ? "Deny " : "Ask "));
+                    (dec == core::CapabilityDecision::Allow ? "Allow " :
+                     (dec == core::CapabilityDecision::Deny ? "Deny " : "Ask "));
             }
         } else {
-            text += " | Default Permissions Policy (Privacy Standard)";
+            text += " | Default Permissions Policy";
         }
     }
     security_details_label_->SetText(text);
+    reset_permissions_button_->SetEnabled(!private_mode_ && !current_origin_.empty());
     security_details_panel_->SetVisible(true);
 }
 
@@ -311,8 +323,15 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
         return;
     }
 
-    if (action == ChromeAction::AllowPermission) {
+    if (action == ChromeAction::AllowPermissionOnce) {
         if (current_prompt_id_.has_value() && engine_) {
+            engine_->RespondToPermission(*current_prompt_id_, core::PermissionResponse::Allow, false);
+        }
+        return;
+    }
+
+    if (action == ChromeAction::AlwaysAllowPermission) {
+        if (!private_mode_ && current_prompt_id_.has_value() && engine_) {
             engine_->RespondToPermission(*current_prompt_id_, core::PermissionResponse::Allow, true);
         }
         return;
@@ -320,20 +339,14 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
 
     if (action == ChromeAction::BlockPermission) {
         if (current_prompt_id_.has_value() && engine_) {
-            engine_->RespondToPermission(*current_prompt_id_, core::PermissionResponse::Block, true);
-        }
-        return;
-    }
-
-    if (action == ChromeAction::DismissPermission) {
-        if (current_prompt_id_.has_value() && engine_) {
-            engine_->RespondToPermission(*current_prompt_id_, core::PermissionResponse::Dismiss, false);
+            const bool remember = core::ShouldRememberPermissionForOrigin(true, private_mode_);
+            engine_->RespondToPermission(*current_prompt_id_, core::PermissionResponse::Block, remember);
         }
         return;
     }
 
     if (action == ChromeAction::ResetOriginPermissions) {
-        if (engine_ && engine_->MutablePolicy() && !current_origin_.empty()) {
+        if (!private_mode_ && engine_ && engine_->MutablePolicy() && !current_origin_.empty()) {
             engine_->MutablePolicy()->ClearOriginRules(current_origin_);
             UpdateSecurityDetails();
             container_->Layout();
@@ -390,11 +403,48 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
 }
 
 void BrowserChrome::SetProfileLabel(const std::string& label) {
+    private_mode_ = label.find("Private") != std::string::npos;
     if (profile_button_) {
         profile_button_->SetText(label);
-        if (toolbar_) {
-            toolbar_->InvalidateLayout();
-        }
+    }
+    UpdatePrivatePresentation();
+    SyncAddressFromSession(session_);
+    UpdateSecurityDetails();
+    if (container_) {
+        container_->Layout();
+    }
+}
+
+void BrowserChrome::SetPrivateMode(const bool enabled) {
+    CEF_REQUIRE_UI_THREAD();
+    private_mode_ = enabled;
+    UpdatePrivatePresentation();
+    SyncAddressFromSession(session_);
+    UpdateSecurityDetails();
+    if (container_) {
+        container_->Layout();
+    }
+}
+
+void BrowserChrome::UpdatePrivatePresentation() {
+    if (profile_button_) {
+        profile_button_->SetText(private_mode_ ? "[🕶 Private]" : "[👤 Default]");
+    }
+    if (address_bar_) {
+        address_bar_->SetPlaceholderText(
+            private_mode_ ? "Private — search or enter address" : "Search or enter address");
+    }
+    if (always_allow_button_) {
+        always_allow_button_->SetEnabled(!private_mode_);
+    }
+    if (block_button_) {
+        block_button_->SetText(private_mode_ ? "[ Block once ]" : "[ Block ]");
+    }
+    if (reset_permissions_button_) {
+        reset_permissions_button_->SetEnabled(!private_mode_ && !current_origin_.empty());
+    }
+    if (toolbar_) {
+        toolbar_->InvalidateLayout();
     }
 }
 
@@ -410,7 +460,6 @@ bool BrowserChrome::HandleAddressKeyEvent(
         return false;
     }
 
-    // VK_RETURN = 13 (Enter)
     if (event.windows_key_code == 13) {
         if (event.type == KEYEVENT_RAWKEYDOWN || event.type == KEYEVENT_KEYDOWN) {
             const auto text = textfield->GetText().ToString();
@@ -432,7 +481,6 @@ bool BrowserChrome::HandleAddressKeyEvent(
         }
     }
 
-    // VK_ESCAPE = 27 (Escape)
     if (event.windows_key_code == 27) {
         if (event.type == KEYEVENT_RAWKEYDOWN || event.type == KEYEVENT_KEYDOWN) {
             address_editing_ = false;
@@ -476,7 +524,7 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
     if (!active_id.has_value()) {
         address_bar_->SetText("");
         current_origin_.clear();
-        security_badge_->SetText("[ 🌐 Web ]");
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐 Web"));
         if (reload_button_) {
             reload_button_->SetText("Reload");
         }
@@ -488,7 +536,7 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
     if (tab == nullptr) {
         address_bar_->SetText("");
         current_origin_.clear();
-        security_badge_->SetText("[ 🌐 Web ]");
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐 Web"));
         if (reload_button_) {
             reload_button_->SetText("Reload");
         }
@@ -506,13 +554,13 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
 
     current_origin_ = core::CapabilityPolicy::ExtractOrigin(display_url).value_or("");
     if (display_url.rfind("https://", 0) == 0) {
-        security_badge_->SetText("[ 🔒 Secure ]");
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🔒 HTTPS"));
     } else if (display_url.rfind("http://", 0) == 0) {
-        security_badge_->SetText("[ ⚠ Insecure ]");
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "⚠ HTTP"));
     } else if (display_url.rfind("about:", 0) == 0) {
-        security_badge_->SetText("[ ⚙ System ]");
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "⚙ System"));
     } else {
-        security_badge_->SetText("[ 🌐 Web ]");
+        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐 Web"));
     }
 
     UpdateSecurityDetails();
