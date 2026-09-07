@@ -36,9 +36,8 @@ public:
 
     // TransferObserver
     void OnTransferStarted(const core::TransferItem& item) override;
-    void OnTransferProgress(const core::TransferItem& item) override;
-    void OnTransferCompleted(const core::TransferItem& item) override;
-    void OnTransferFailed(const core::TransferItem& item, const std::string& error) override;
+    void OnTransferUpdated(const core::TransferItem& item) override;
+    void OnTransferFinished(const core::TransferItem& item) override;
 
 private:
     enum class TransferAction {
@@ -50,7 +49,7 @@ private:
 
     class ActionDelegate;
 
-    void HandleAction(TransferAction action, uint64_t transfer_id = 0);
+    void HandleAction(TransferAction action, const std::string& transfer_id = "");
 
     core::TransferBroker& transfer_broker_;
     core::FileBroker& file_broker_;

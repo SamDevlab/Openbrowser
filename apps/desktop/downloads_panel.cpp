@@ -11,8 +11,8 @@ namespace openbrowser::desktop {
 
 class DownloadsPanel::ActionDelegate final : public CefButtonDelegate {
 public:
-    ActionDelegate(DownloadsPanel& panel, TransferAction action, uint64_t transfer_id = 0)
-        : panel_(panel), action_(action), transfer_id_(transfer_id) {}
+    ActionDelegate(DownloadsPanel& panel, TransferAction action, std::string transfer_id = "")
+        : panel_(panel), action_(action), transfer_id_(std::move(transfer_id)) {}
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
@@ -22,10 +22,30 @@ public:
 private:
     DownloadsPanel& panel_;
     TransferAction action_;
-    uint64_t transfer_id_;
+    std::string transfer_id_;
 
     IMPLEMENT_REFCOUNTING(ActionDelegate);
 };
+
+namespace {
+std::string FormatTransferState(core::TransferState state) {
+    switch (state) {
+    case core::TransferState::Queued:
+        return "Queued";
+    case core::TransferState::InProgress:
+        return "Downloading";
+    case core::TransferState::Paused:
+        return "Paused";
+    case core::TransferState::Completed:
+        return "Completed";
+    case core::TransferState::Failed:
+        return "Failed";
+    case core::TransferState::Cancelled:
+        return "Cancelled";
+    }
+    return "Unknown";
+}
+} // namespace
 
 DownloadsPanel::DownloadsPanel(
     core::TransferBroker& transfer_broker,
@@ -78,7 +98,7 @@ void DownloadsPanel::ToggleVisibility() {
     SetVisible(!IsVisible());
 }
 
-void DownloadsPanel::HandleAction(TransferAction action, uint64_t transfer_id) {
+void DownloadsPanel::HandleAction(TransferAction action, const std::string& transfer_id) {
     switch (action) {
     case TransferAction::Pause:
         transfer_broker_.PauseTransfer(transfer_id);
@@ -132,16 +152,19 @@ void DownloadsPanel::RebuildView() {
             row->SetAsBoxLayout(row_settings);
 
             const std::string safe_name = core::FileBroker::SanitizeFilename(item.suggested_filename);
+            const double pct = (item.total_bytes > 0)
+                ? (static_cast<double>(item.received_bytes) * 100.0 / static_cast<double>(item.total_bytes))
+                : 0.0;
             std::ostringstream oss;
             oss << safe_name << " - "
-                << std::fixed << std::setprecision(1) << item.ProgressPercentage() << "% ("
+                << std::fixed << std::setprecision(1) << pct << "% ("
                 << (item.speed_bytes_per_sec / 1024) << " KB/s) ["
-                << core::TransferStateToString(item.state) << "]";
+                << FormatTransferState(item.state) << "]";
 
             auto item_label = CefLabelButton::CreateLabelButton(nullptr, oss.str());
             row->AddChildView(item_label);
 
-            if (item.state == core::TransferState::Downloading) {
+            if (item.state == core::TransferState::InProgress) {
                 auto pause_delegate = new ActionDelegate(*this, TransferAction::Pause, item.id);
                 button_delegates_.push_back(pause_delegate);
                 auto pause_btn = CefLabelButton::CreateLabelButton(pause_delegate, "[Pause]");
@@ -176,19 +199,13 @@ void DownloadsPanel::OnTransferStarted(const core::TransferItem& /*item*/) {
     }
 }
 
-void DownloadsPanel::OnTransferProgress(const core::TransferItem& /*item*/) {
+void DownloadsPanel::OnTransferUpdated(const core::TransferItem& /*item*/) {
     if (IsVisible()) {
         RebuildView();
     }
 }
 
-void DownloadsPanel::OnTransferCompleted(const core::TransferItem& /*item*/) {
-    if (IsVisible()) {
-        RebuildView();
-    }
-}
-
-void DownloadsPanel::OnTransferFailed(const core::TransferItem& /*item*/, const std::string& /*error*/) {
+void DownloadsPanel::OnTransferFinished(const core::TransferItem& /*item*/) {
     if (IsVisible()) {
         RebuildView();
     }

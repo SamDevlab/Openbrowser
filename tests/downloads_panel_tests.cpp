@@ -19,27 +19,19 @@ public:
         last_item = item;
     }
 
-    void OnTransferProgress(const openbrowser::core::TransferItem& item) override {
-        progress_count++;
+    void OnTransferUpdated(const openbrowser::core::TransferItem& item) override {
+        updated_count++;
         last_item = item;
     }
 
-    void OnTransferCompleted(const openbrowser::core::TransferItem& item) override {
-        completed_count++;
-        last_item = item;
-    }
-
-    void OnTransferFailed(const openbrowser::core::TransferItem& item, const std::string& error) override {
-        failed_count++;
-        last_error = error;
+    void OnTransferFinished(const openbrowser::core::TransferItem& item) override {
+        finished_count++;
         last_item = item;
     }
 
     int started_count = 0;
-    int progress_count = 0;
-    int completed_count = 0;
-    int failed_count = 0;
-    std::string last_error;
+    int updated_count = 0;
+    int finished_count = 0;
     openbrowser::core::TransferItem last_item;
 };
 
@@ -50,28 +42,36 @@ void TestDownloadsPanelTransferObservation() {
     TestTransferObserver observer;
     broker.AddObserver(&observer);
 
-    const auto id = broker.StartTransfer("https://example.com/archive.zip", "archive.zip", 1000);
-    Require(id > 0, "Transfer started");
+    TransferItem item;
+    item.id = "dl-test-1";
+    item.url = "https://example.com/archive.zip";
+    item.suggested_filename = "archive.zip";
+    item.total_bytes = 1000;
+
+    Require(broker.RegisterTransfer(item), "Transfer registered and started");
     Require(observer.started_count == 1, "Observer notified of start");
 
     // Progress
-    broker.UpdateProgress(id, 500, 1000, 50000);
-    Require(observer.progress_count == 1, "Observer notified of progress");
-    Require(observer.last_item.ProgressPercentage() == 50.0, "Progress is 50%");
+    Require(broker.UpdateProgress("dl-test-1", 500, 1000, 50000), "Progress updated");
+    Require(observer.updated_count == 1, "Observer notified of update");
+    const double pct = (observer.last_item.total_bytes > 0)
+        ? (static_cast<double>(observer.last_item.received_bytes) * 100.0 / static_cast<double>(observer.last_item.total_bytes))
+        : 0.0;
+    Require(pct == 50.0, "Progress is 50%");
     Require(observer.last_item.speed_bytes_per_sec == 50000, "Speed is 50000 bytes/sec");
 
     // Pause and Resume
-    Require(broker.PauseTransfer(id), "Transfer paused");
-    auto item = broker.GetTransfer(id);
-    Require(item.has_value() && item->state == TransferState::Paused, "State is Paused");
+    Require(broker.PauseTransfer("dl-test-1"), "Transfer paused");
+    const auto* found = broker.FindTransfer("dl-test-1");
+    Require(found != nullptr && found->state == TransferState::Paused, "State is Paused");
 
-    Require(broker.ResumeTransfer(id), "Transfer resumed");
-    item = broker.GetTransfer(id);
-    Require(item.has_value() && item->state == TransferState::Downloading, "State is Downloading");
+    Require(broker.ResumeTransfer("dl-test-1"), "Transfer resumed");
+    found = broker.FindTransfer("dl-test-1");
+    Require(found != nullptr && found->state == TransferState::InProgress, "State is InProgress");
 
     // Complete
-    broker.CompleteTransfer(id);
-    Require(observer.completed_count == 1, "Observer notified of completion");
+    Require(broker.CompleteTransfer("dl-test-1"), "Transfer completed");
+    Require(observer.finished_count == 1, "Observer notified of completion");
 
     // Sanitize filename through FileBroker
     std::string sanitized = FileBroker::SanitizeFilename(observer.last_item.suggested_filename);
