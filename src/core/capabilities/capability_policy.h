@@ -53,6 +53,9 @@ public:
     void SetOrigin(const std::string& origin, Capability capability, CapabilityDecision decision);
     void SetSession(const std::string& session_id, Capability capability, CapabilityDecision decision);
 
+    [[nodiscard]] std::map<Capability, CapabilityDecision> GetOriginRules(const std::string& origin) const;
+    void ClearOriginRules(const std::string& origin);
+
     [[nodiscard]] CapabilityDecision Resolve(Capability capability, const CapabilityContext& context) const;
 
     [[nodiscard]] bool CanNavigate(const std::string& url, const CapabilityContext& context = {}) const;

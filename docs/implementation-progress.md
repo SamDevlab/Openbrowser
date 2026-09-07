@@ -27,15 +27,16 @@ Implemented in source:
 
 The current M1 shell is not yet a usable daily browser:
 
-- `Suspend` is currently a visibility/resource hint, not renderer discard;
-- macOS core remains tested, but the CEF desktop target is intentionally blocked until the required helper-app bundle layout is implemented correctly;
-- dynamic capability consent UI prompts ("Ask" decisions) will be expanded in M2;
+- dynamic capability consent UI prompts ("Ask" decisions) implemented in M2.1;
 - desktop runtime support is not considered validated until the dedicated CEF smoke build passes against the pinned distribution.
 
-## Next steps (M2 roadmap)
+## M2 implementation state
 
-1. Interactive capability permission prompts and security badge UI;
-2. Focus session timer and attention metrics;
-3. Advanced Network Lab inspection (body preview, header filtering);
-4. Renderer discard and memory pressure lifecycle policies;
-5. Workspace isolation for cookies and storage partitions.
+- **M2.1 Delivered**: Interactive capability permission prompts (`CefPermissionHandler`, `OnRequestMediaAccessPermission`, `OnShowPermissionPrompt`) with responsive `[Allow] [Block] [Dismiss]` banners, and Security Badge UI (`[ 🔒 Secure ]`, `[ ⚠ Insecure ]`) with origin permission inspection and reset.
+
+## Remaining M2 roadmap
+
+1. Focus session timer and attention metrics;
+2. Advanced Network Lab inspection (body preview, header filtering);
+3. Renderer discard and memory pressure lifecycle policies;
+4. Workspace isolation for cookies and storage partitions.

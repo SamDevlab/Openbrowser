@@ -6,6 +6,7 @@
 #include "include/cef_display_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
+#include "include/cef_permission_handler.h"
 #include "include/cef_request_handler.h"
 #include "include/cef_resource_request_handler.h"
 
@@ -21,6 +22,7 @@ class CefTabClient final : public CefClient,
                            public CefDisplayHandler,
                            public CefLifeSpanHandler,
                            public CefLoadHandler,
+                           public CefPermissionHandler,
                            public CefRequestHandler,
                            public CefResourceRequestHandler {
 public:
@@ -32,7 +34,27 @@ public:
     CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
     CefRefPtr<CefLoadHandler> GetLoadHandler() override;
+    CefRefPtr<CefPermissionHandler> GetPermissionHandler() override;
     CefRefPtr<CefRequestHandler> GetRequestHandler() override;
+
+    bool OnRequestMediaAccessPermission(
+        CefRefPtr<CefBrowser> browser,
+        CefRefPtr<CefFrame> frame,
+        const CefString& requesting_origin,
+        uint32_t requested_permissions,
+        CefRefPtr<CefMediaAccessCallback> callback) override;
+
+    bool OnShowPermissionPrompt(
+        CefRefPtr<CefBrowser> browser,
+        uint64_t prompt_id,
+        const CefString& requesting_origin,
+        uint32_t requested_permissions,
+        CefRefPtr<CefPermissionPromptCallback> callback) override;
+
+    void OnDismissPermissionPrompt(
+        CefRefPtr<CefBrowser> browser,
+        uint64_t prompt_id,
+        cef_permission_request_result_t result) override;
 
     void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;

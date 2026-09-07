@@ -165,7 +165,7 @@ void DesktopApp::OnContextInitialized() {
     }
 
     tab_strip_ = std::make_unique<TabStrip>(*session_);
-    chrome_ = std::make_unique<BrowserChrome>(*session_, [this]() {
+    chrome_ = std::make_unique<BrowserChrome>(*session_, engine_, [this]() {
         ToggleNetworkLab();
     });
     focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);

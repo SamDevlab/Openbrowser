@@ -95,6 +95,19 @@ void CapabilityPolicy::SetSession(
     session_rules_[session_id][capability] = decision;
 }
 
+std::map<Capability, CapabilityDecision> CapabilityPolicy::GetOriginRules(
+    const std::string& origin) const {
+    const auto it = origin_rules_.find(origin);
+    if (it != origin_rules_.end()) {
+        return it->second;
+    }
+    return {};
+}
+
+void CapabilityPolicy::ClearOriginRules(const std::string& origin) {
+    origin_rules_.erase(origin);
+}
+
 CapabilityDecision CapabilityPolicy::Resolve(
     const Capability capability,
     const CapabilityContext& context) const {

@@ -99,6 +99,16 @@ void CefBrowserEngine::CloseTab(const core::TabId& tab_id) {
         active_tab_id_.reset();
     }
 
+    std::vector<uint64_t> prompts_to_dismiss;
+    for (const auto& [id, prompt] : pending_prompts_) {
+        if (prompt.info.tab_id == tab_id) {
+            prompts_to_dismiss.push_back(id);
+        }
+    }
+    for (const auto id : prompts_to_dismiss) {
+        DismissPermissionPrompt(id);
+    }
+
     CefRefPtr<CefBrowser> browser = surface->second.view->GetBrowser();
     if (browser) {
         browser->GetHost()->CloseBrowser(false);
@@ -204,12 +214,167 @@ bool CefBrowserEngine::NetworkObservationEnabled() const noexcept {
 }
 
 void CefBrowserEngine::SetCapabilityPolicy(
-    const core::CapabilityPolicy* policy) noexcept {
+    core::CapabilityPolicy* policy) noexcept {
     capability_policy_.store(policy, std::memory_order_release);
 }
 
 const core::CapabilityPolicy* CefBrowserEngine::Policy() const noexcept {
     return capability_policy_.load(std::memory_order_acquire);
+}
+
+core::CapabilityPolicy* CefBrowserEngine::MutablePolicy() const noexcept {
+    return capability_policy_.load(std::memory_order_acquire);
+}
+
+void CefBrowserEngine::AddPermissionPromptObserver(
+    core::PermissionPromptObserver* observer) {
+    CEF_REQUIRE_UI_THREAD();
+    if (observer != nullptr &&
+        std::find(prompt_observers_.begin(), prompt_observers_.end(), observer) == prompt_observers_.end()) {
+        prompt_observers_.push_back(observer);
+    }
+}
+
+void CefBrowserEngine::RemovePermissionPromptObserver(
+    core::PermissionPromptObserver* observer) noexcept {
+    CEF_REQUIRE_UI_THREAD();
+    const auto it = std::find(prompt_observers_.begin(), prompt_observers_.end(), observer);
+    if (it != prompt_observers_.end()) {
+        prompt_observers_.erase(it);
+    }
+}
+
+void CefBrowserEngine::RegisterPermissionPrompt(
+    const uint64_t prompt_id,
+    core::TabId tab_id,
+    std::string origin,
+    std::vector<core::Capability> capabilities,
+    CefRefPtr<CefPermissionPromptCallback> callback) {
+    CEF_REQUIRE_UI_THREAD();
+
+    core::PermissionPrompt prompt_info{
+        .prompt_id = prompt_id,
+        .tab_id = std::move(tab_id),
+        .origin = std::move(origin),
+        .capabilities = std::move(capabilities),
+    };
+
+    pending_prompts_[prompt_id] = {
+        .info = prompt_info,
+        .permission_callback = std::move(callback),
+        .media_callback = nullptr,
+        .requested_media_permissions = 0,
+    };
+
+    for (auto* obs : prompt_observers_) {
+        if (obs != nullptr) {
+            obs->OnPermissionPromptRequested(prompt_info);
+        }
+    }
+}
+
+void CefBrowserEngine::RegisterMediaAccessPrompt(
+    core::TabId tab_id,
+    std::string origin,
+    const uint32_t requested_permissions,
+    std::vector<core::Capability> capabilities,
+    CefRefPtr<CefMediaAccessCallback> callback) {
+    CEF_REQUIRE_UI_THREAD();
+
+    const uint64_t prompt_id = ++next_media_prompt_id_;
+
+    core::PermissionPrompt prompt_info{
+        .prompt_id = prompt_id,
+        .tab_id = std::move(tab_id),
+        .origin = std::move(origin),
+        .capabilities = std::move(capabilities),
+    };
+
+    pending_prompts_[prompt_id] = {
+        .info = prompt_info,
+        .permission_callback = nullptr,
+        .media_callback = std::move(callback),
+        .requested_media_permissions = requested_permissions,
+    };
+
+    for (auto* obs : prompt_observers_) {
+        if (obs != nullptr) {
+            obs->OnPermissionPromptRequested(prompt_info);
+        }
+    }
+}
+
+void CefBrowserEngine::DismissPermissionPrompt(const uint64_t prompt_id) {
+    CEF_REQUIRE_UI_THREAD();
+    const auto it = pending_prompts_.find(prompt_id);
+    if (it == pending_prompts_.end()) {
+        return;
+    }
+    pending_prompts_.erase(it);
+    for (auto* obs : prompt_observers_) {
+        if (obs != nullptr) {
+            obs->OnPermissionPromptDismissed(prompt_id);
+        }
+    }
+}
+
+void CefBrowserEngine::RespondToPermission(
+    const uint64_t prompt_id,
+    const core::PermissionResponse response,
+    const bool remember_for_origin) {
+    CEF_REQUIRE_UI_THREAD();
+
+    const auto it = pending_prompts_.find(prompt_id);
+    if (it == pending_prompts_.end()) {
+        return;
+    }
+
+    auto prompt = std::move(it->second);
+    pending_prompts_.erase(it);
+
+    if (remember_for_origin) {
+        auto* policy = MutablePolicy();
+        if (policy != nullptr) {
+            const auto decision = (response == core::PermissionResponse::Allow)
+                ? core::CapabilityDecision::Allow
+                : core::CapabilityDecision::Deny;
+            for (const auto cap : prompt.info.capabilities) {
+                policy->SetOrigin(prompt.info.origin, cap, decision);
+            }
+        }
+    }
+
+    if (prompt.permission_callback) {
+        cef_permission_request_result_t result = CEF_PERMISSION_RESULT_DISMISS;
+        if (response == core::PermissionResponse::Allow) {
+            result = CEF_PERMISSION_RESULT_ACCEPT;
+        } else if (response == core::PermissionResponse::Block) {
+            result = CEF_PERMISSION_RESULT_DENY;
+        }
+        prompt.permission_callback->Continue(result);
+    } else if (prompt.media_callback) {
+        if (response == core::PermissionResponse::Allow) {
+            prompt.media_callback->Continue(prompt.requested_media_permissions);
+        } else {
+            prompt.media_callback->Cancel();
+        }
+    }
+
+    for (auto* obs : prompt_observers_) {
+        if (obs != nullptr) {
+            obs->OnPermissionPromptDismissed(prompt_id);
+        }
+    }
+}
+
+std::optional<core::PermissionPrompt> CefBrowserEngine::FindPromptForTab(
+    const core::TabId& tab_id) const {
+    for (const auto& [id, prompt] : pending_prompts_) {
+        if (prompt.info.tab_id == tab_id) {
+            return prompt.info;
+        }
+    }
+    return std::nullopt;
 }
 
 void CefBrowserEngine::NotifyBrowserCreated(
