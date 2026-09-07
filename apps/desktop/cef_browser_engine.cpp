@@ -650,13 +650,11 @@ void CefBrowserEngine::BeginWindowClose() {
 bool CefBrowserEngine::CanCloseWindow() {
     CEF_REQUIRE_UI_THREAD();
 
-    std::vector<core::TabId> uncreated_surfaces;
     bool can_close = true;
 
     for (auto& [tab_id, surface] : surfaces_) {
         CefRefPtr<CefBrowser> browser = surface.view->GetBrowser();
         if (!browser) {
-            uncreated_surfaces.push_back(tab_id);
             continue;
         }
 
@@ -665,16 +663,6 @@ bool CefBrowserEngine::CanCloseWindow() {
         }
     }
 
-    for (const auto& tab_id : uncreated_surfaces) {
-        const auto surface = FindSurface(tab_id);
-        if (surface != surfaces_.end()) {
-            browser_host_->RemoveChildView(surface->second.view);
-            surfaces_.erase(surface);
-        }
-    }
-
-    browser_host_->Layout();
-    MaybeQuitAfterClose();
     return can_close;
 }
 
