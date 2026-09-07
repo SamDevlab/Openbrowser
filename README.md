@@ -86,7 +86,7 @@ The current filtering stack includes:
 - resource modifiers such as `$script`, `$image`, `$stylesheet`, `$xmlhttprequest`, `$subdocument`, and `$third-party`;
 - a filter-decision model for explaining policy results.
 
-Live CEF content blocking is wired today. The newer per-request `FilterDecisionLog` exists in core and in the Network Lab UI, but the live CEF filtering path still uses the compatibility `Evaluate()` path rather than `EvaluateWithId()`, so full live decision correlation is still being completed.
+Live CEF content blocking evaluates through `ContentFilter::EvaluateWithId()` and correlates decisions into `FilterDecisionLog`, displaying block/allow decisions and explanations directly in the Network Lab Decisions view.
 
 ### Downloads and file safety
 
@@ -116,7 +116,7 @@ Openbrowser currently contains:
 - a `SyncPort` abstraction;
 - a `LocalFilesystemSyncProvider` with versioned records, conflict handling, manifests, and disk serialization.
 
-History and bookmark managers are currently memory-resident in the desktop runtime, and the local sync provider is not yet exposed as a complete desktop synchronization workflow.
+History and bookmark managers are persisted to disk in the desktop runtime (`history.json` and `bookmarks.json`), and the local filesystem sync provider is integrated into `DesktopApp` with the `sync.trigger_local` action (`Ctrl+Shift+S`).
 
 ### Profiles and compatibility policy
 
@@ -129,7 +129,7 @@ The core contains:
 - expiration/scoping for compatibility rules;
 - User-Agent / Client Hints policy modes for standard Chromium, normalized anti-fingerprinting output, and site-scoped overrides.
 
-The desktop UI can currently toggle the profile model between Default and Private states. **This is not yet a complete browser-wide incognito guarantee**: the active profile toggle is not yet fully coupled to CEF request-context/storage isolation and all persistence paths. The mitigation and User-Agent engines likewise exist as core policy components but still need complete live request-boundary wiring.
+The desktop UI supports Default and Private profiles. Private profiles are backed by dedicated in-memory `CefRequestContext` instances with no disk cache or persistent cookies, automatic exclusion of private tabs from session snapshots, suppression of history recording, and context purging upon session termination. Dynamic User-Agent and client hint policies, along with site-scoped compatibility mitigations, are enforced directly at the live request boundary.
 
 ### Native Network Lab
 
@@ -157,7 +157,7 @@ The M7 diagnostic layer also contains:
 - a streaming `ObtraceRecorder` core;
 - command actions for HAR and `.obtrace` export.
 
-The deeper M7 models and views are implemented and tested, but **live CEF population of connection/TLS diagnostics and full per-request filter-decision correlation is still in progress**. The streaming recorder core exists, while the currently wired desktop actions perform batch exports.
+Connection and TLS diagnostics are populated directly from live CEF response headers and registered in `ConnectionRegistry`, linking `NetworkEvent::connection_id` across request summaries. Per-request filter decisions correlate via `request_id`, and live `.obtrace` recording can be toggled via `network_lab.toggle_recorder` (`Ctrl+Shift+R`) with sensitive header redaction and private-mode write suppression.
 
 ### Compatibility engineering
 
@@ -292,7 +292,7 @@ The desktop CEF target has Linux and Windows source/build paths. macOS desktop p
 
 ## Testing and CI
 
-The current CMake configuration registers **34 CTest suites** spanning session invariants, navigation, permissions, workspaces, transfers, filtering, history/bookmarks, synchronization, compatibility, profiles, desktop-integration contracts, and M7 Network Lab diagnostics.
+The current CMake configuration registers **36 CTest suites** spanning session invariants, navigation, permissions, workspaces, transfers, filtering, history/bookmarks, synchronization, compatibility, profiles, private profile isolation, desktop-integration contracts, and M7 Network Lab diagnostics.
 
 GitHub Actions currently runs:
 
@@ -339,13 +339,7 @@ Openbrowser is intentionally explicit about what is not complete yet:
 - no packaged stable release or daily-driver support contract exists yet;
 - the dedicated CEF smoke workflow currently validates Linux x64 only;
 - macOS desktop support is not enabled yet;
-- the experimental Private profile toggle is not yet full browser-wide CEF/storage isolation;
-- User-Agent and compatibility mitigation engines are not fully applied on the live CEF request path yet;
-- M7 connection/TLS models and views are not yet fully populated from live CEF connection telemetry;
-- live content blocking works, but full `FilterDecisionLog` request correlation still needs adapter wiring;
-- history and bookmarks are currently memory-resident in the desktop runtime;
-- `LocalFilesystemSyncProvider` exists in core but has no complete desktop sync workflow yet;
-- streaming `.obtrace` recording has a core implementation, while the desktop currently exposes batch export actions;
+- multi-device remote synchronization backend is future work (currently local filesystem sync only);
 - full WPT/reference-browser differential testing is not implemented yet;
 - BitTorrent/magnet transfers and optional raw packet capture are not implemented.
 
