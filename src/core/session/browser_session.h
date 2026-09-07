@@ -5,6 +5,7 @@
 #include "engine/browser_engine.h"
 #include "engine/browser_engine_events.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -58,6 +59,7 @@ private:
     std::vector<Tab> tabs_;
     std::optional<TabId> active_tab_id_;
     std::vector<BrowserSessionObserver*> observers_;
+    std::uint64_t last_activated_counter_{0};
 };
 
 }  // namespace openbrowser::core

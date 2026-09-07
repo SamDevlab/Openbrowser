@@ -35,9 +35,10 @@ The current M1 shell is not yet a usable daily browser:
 - **M2.1 Delivered**: Interactive capability permission prompts (`CefPermissionHandler`, `OnRequestMediaAccessPermission`, `OnShowPermissionPrompt`) with responsive `[Allow] [Block] [Dismiss]` banners, and Security Badge UI (`[ 🔒 Secure ]`, `[ ⚠ Insecure ]`) with origin permission inspection and reset.
 - **M2.2 Delivered**: Focus session timer (Pomodoro/Sprint state machine) and attention dwell metrics (`FocusSprint`, `AttentionMetrics`, `FocusSessionController::RecordSprintTick`), integrated into `FocusSidebar` with responsive UI timer controls (`[Start]` / `[Pause]` / `[Resume]`, `[Reset]`, dwell percentage tracking).
 - **M2.3 Delivered**: Advanced Network Lab inspection, method and status filtering (`[Method: ALL/GET/POST]`, `[Status: ALL/2XX/ERR]`), request & response header separation, body preview extraction from `CefPostData`, and in-drawer request inspector with back navigation.
+- **M2.4 Delivered**: Renderer discard and memory pressure lifecycle policies (`TabDiscardPolicy`, `MemoryPressureLevel`), deterministic LRU activation sequence tracking, seamless on-demand tab revival upon activation, and `💤` power-saving indicators in `TabStrip`.
 
 ## Remaining M2 roadmap
 
-1. Renderer discard and memory pressure lifecycle policies;
-2. Workspace isolation for cookies and storage partitions.
+1. Workspace isolation for cookies and storage partitions (`CefRequestContext`).
+
 

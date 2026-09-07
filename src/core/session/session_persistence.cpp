@@ -396,13 +396,12 @@ bool SessionPersistence::RestoreSession(
         }
 
         const bool is_active = (target_active_id != nullptr && tab.id == *target_active_id);
-        Tab t{
-            .id = tab.id,
-            .url = tab.url,
-            .title = tab.title.empty() ? tab.url : tab.title,
-            .lifecycle = is_active ? TabLifecycle::Active : TabLifecycle::Background,
-            .workspace_id = tab.workspace_id,
-        };
+        Tab t;
+        t.id = tab.id;
+        t.url = tab.url;
+        t.title = tab.title.empty() ? tab.url : tab.title;
+        t.lifecycle = is_active ? TabLifecycle::Active : TabLifecycle::Background;
+        t.workspace_id = tab.workspace_id;
 
         static_cast<void>(session.OpenTab(std::move(t), is_active));
     }
