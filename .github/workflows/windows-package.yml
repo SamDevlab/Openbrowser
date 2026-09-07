@@ -42,20 +42,31 @@ env:
   CEF_VERSION: 151.3.17+gf059e67+chromium-151.0.7922.138
   CEF_PLATFORM: windows64
   CEF_BASE_URL: https://cef-builds.spotifycdn.com
-  PACKAGE_VERSION: 0.1.0
 
 jobs:
   windows-package:
     name: Windows x64 portable ZIP
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Resolve Openbrowser package version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cmake = Get-Content -LiteralPath ./CMakeLists.txt -Raw
+          if ($cmake -notmatch 'project\s*\(\s*Openbrowser\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+            throw 'Could not resolve Openbrowser VERSION from CMakeLists.txt.'
+          }
+          $version = $Matches[1]
+          "PACKAGE_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV
+          Write-Host "Openbrowser package version: $version"
 
       - name: Restore CEF archive cache
         id: cef-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .cache/cef/*.tar.bz2
           key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
@@ -141,7 +152,7 @@ jobs:
 
       - name: Save verified CEF archive cache
         if: steps.cef-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .cache/cef/*.tar.bz2
           key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
@@ -149,7 +160,7 @@ jobs:
       - name: Configure Windows desktop
         shell: pwsh
         run: |
-          cmake -S . -B build-windows -A x64 `
+          cmake -S . -B build-windows -G "Visual Studio 18 2026" -A x64 `
             -DOPENBROWSER_BUILD_TESTS=OFF `
             -DOPENBROWSER_BUILD_DESKTOP=ON `
             -DCEF_ROOT="$env:CEF_ROOT" `
@@ -171,14 +182,16 @@ jobs:
             -OutputDir ./artifacts `
             -Version "$env:PACKAGE_VERSION"
 
-      - name: Verify ZIP can be extracted
+      - name: Verify and smoke extracted portable package
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+
           $packageName = "Openbrowser-${env:PACKAGE_VERSION}-windows-x64"
           $zipPath = Join-Path $PWD "artifacts/$packageName.zip"
-          $verifyDir = Join-Path $PWD 'artifacts/verify'
-          if (Test-Path $verifyDir) { Remove-Item -Recurse -Force $verifyDir }
+          $verifyDir = Join-Path $env:RUNNER_TEMP "openbrowser-package-smoke-$([guid]::NewGuid().ToString('N'))"
+          New-Item -ItemType Directory -Force -Path $verifyDir | Out-Null
           Expand-Archive -LiteralPath $zipPath -DestinationPath $verifyDir
 
           $root = Join-Path $verifyDir $packageName
@@ -186,8 +199,11 @@ jobs:
             'openbrowser.exe',
             'openbrowser.dll',
             'libcef.dll',
+            'chrome_elf.dll',
             'icudtl.dat',
             'resources.pak',
+            'v8_context_snapshot.bin',
+            'START-HERE.txt',
             'OPENBROWSER-LICENSE.txt',
             'THIRD_PARTY.md',
             'CEF-LICENSE.txt',
@@ -202,16 +218,73 @@ jobs:
             throw 'ZIP verification failed: locales directory missing.'
           }
 
+          $developerArtifacts = @(Get-ChildItem -Path $root -Recurse -File | Where-Object {
+            $_.Extension -in @('.lib', '.exp', '.pdb', '.ilk', '.obj')
+          })
+          if ($developerArtifacts.Count -ne 0) {
+            throw "ZIP contains developer-only artifacts: $($developerArtifacts.FullName -join ', ')"
+          }
+
           $shaFile = Join-Path $PWD "artifacts/$packageName.zip.sha256"
           $expected = ((Get-Content -LiteralPath $shaFile -Raw) -split '\s+')[0].Trim().ToLowerInvariant()
           $actual = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne $expected) {
             throw "Portable ZIP SHA-256 mismatch. Expected=$expected Actual=$actual"
           }
-          Write-Host "Portable ZIP verified: $actual"
+
+          $smokeStorage = Join-Path $env:RUNNER_TEMP "openbrowser-smoke-state-$([guid]::NewGuid().ToString('N'))"
+          New-Item -ItemType Directory -Force -Path $smokeStorage | Out-Null
+          $sessionFile = Join-Path $smokeStorage 'session.json'
+          $exe = Join-Path $root 'openbrowser.exe'
+          $arguments = @(
+            '--url=https://example.com',
+            "--storage-dir=$smokeStorage",
+            "--session-file=$sessionFile"
+          )
+
+          $process = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru
+          try {
+            Start-Sleep -Seconds 10
+            if ($process.HasExited) {
+              throw "Extracted Openbrowser exited during startup smoke with code $($process.ExitCode)."
+            }
+
+            $lpacSid = 'S-1-15-2-2'
+            $acl = Get-Acl -LiteralPath $root
+            $lpacRule = $acl.Access | Where-Object {
+              try {
+                $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -eq $lpacSid
+              } catch {
+                $false
+              }
+            } | Where-Object {
+              ($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::ReadAndExecute) -ne 0 -and
+              ($_.InheritanceFlags -band [System.Security.AccessControl.InheritanceFlags]::ObjectInherit) -ne 0 -and
+              ($_.InheritanceFlags -band [System.Security.AccessControl.InheritanceFlags]::ContainerInherit) -ne 0
+            } | Select-Object -First 1
+            if ($null -eq $lpacRule) {
+              throw 'Extracted runtime did not establish the required LPAC read/execute ACL.'
+            }
+
+            $networkService = Get-CimInstance Win32_Process | Where-Object {
+              $_.CommandLine -like "*$root*" -and
+              $_.CommandLine -like '*network.mojom.NetworkService*'
+            } | Select-Object -First 1
+            if ($null -eq $networkService) {
+              throw 'CEF Network Service subprocess was not observed during extracted-package smoke.'
+            }
+
+            Write-Host "Portable ZIP runtime smoke passed. SHA-256: $actual"
+          } finally {
+            if (-not $process.HasExited) {
+              & taskkill.exe /PID $process.Id /T /F | Out-Null
+            }
+            Remove-Item -Recurse -Force $smokeStorage -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $verifyDir -ErrorAction SilentlyContinue
+          }
 
       - name: Upload Windows portable package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64
           path: |
