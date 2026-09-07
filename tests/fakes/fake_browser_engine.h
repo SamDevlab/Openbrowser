@@ -9,6 +9,13 @@
 
 namespace openbrowser::tests {
 
+using core::TabId;
+using core::WorkspaceId;
+using core::Tab;
+using engine::BrowserEngine;
+using engine::BrowserEngineEventSink;
+using engine::NavigationRequest;
+
 enum class EngineCommandType {
     Create,
     Close,

@@ -9,6 +9,7 @@
 #include "core/storage/atomic_file_store.h"
 #include "core/storage/json_helper.h"
 #include "core/workspaces/workspace_manager.h"
+#include "fakes/fake_browser_engine.h"
 
 #include <cassert>
 #include <chrono>
@@ -235,8 +236,6 @@ void TestHistoryCorrectnessAndCrud() {
 
     std::filesystem::remove(hist_path, ec);
 }
-
-#include "fakes/fake_browser_engine.h"
 
 // 5. SessionHistoryBridge semantics
 void TestSessionHistoryBridgeSemantics() {
