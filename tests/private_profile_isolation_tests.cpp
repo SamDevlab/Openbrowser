@@ -166,6 +166,7 @@ void TestSessionHistoryBridgeSuppressesPrivateVisits() {
     Require(eph_profile != nullptr, "Created ephemeral profile");
     profile_mgr.SetActiveProfile(eph_profile->GetId());
 
+    Require(session.ActivateTab("tab-persistent"), "Activated persistent tab while profile is private");
     session_save_called = false;
     Require(session.Navigate("tab-persistent", "https://another-secret.com"), "Navigated persistent tab while profile is private");
     session.OnNavigationCommitted(openbrowser::engine::NavigationCommittedEvent{.tab_id = "tab-persistent", .url = "https://another-secret.com"});
@@ -173,10 +174,12 @@ void TestSessionHistoryBridgeSuppressesPrivateVisits() {
     Require(!session_save_called, "Session save NOT called while profile is ephemeral");
     Require(history.Search("another-secret").empty(), "No visit recorded while profile is ephemeral");
 
-    // Step D: Return to default profile -> normal visits resume.
+    // Step D: Return to default profile -> close private tab and resume normal visits.
+    Require(session.CloseTab("tab-private"), "Closed private tab on exit");
     profile_mgr.SetActiveProfile("default");
     profile_mgr.PurgeEphemeralProfiles();
 
+    Require(session.ActivateTab("tab-persistent"), "Activated persistent tab in default profile");
     session_save_called = false;
     Require(session.Navigate("tab-persistent", "https://welcome-back.org"), "Navigated tab after restoring default profile");
     session.OnNavigationCommitted(openbrowser::engine::NavigationCommittedEvent{.tab_id = "tab-persistent", .url = "https://welcome-back.org"});
