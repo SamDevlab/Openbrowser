@@ -13,6 +13,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include <chrono>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -57,6 +58,12 @@ TabStrip::TabStrip(
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     layout_ = panel_->SetToBoxLayout(settings);
 
+    // WorkspacesManager is restored before BrowserSession. Honor its persisted
+    // active workspace even if the session snapshot happened to restore a tab
+    // from another workspace as the active surface.
+    if (workspace_manager_ != nullptr) {
+        static_cast<void>(ActivateOrCreateTabForActiveWorkspace());
+    }
     RebuildTabs();
 }
 
@@ -70,7 +77,112 @@ CefRefPtr<CefPanel> TabStrip::View() const noexcept {
 
 void TabStrip::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
     CEF_REQUIRE_UI_THREAD();
+
+    // Programmatic activation (for example a Focus Queue item) may intentionally
+    // jump to a tab in another workspace. Make that jump explicit at the
+    // workspace layer so the tab strip and CEF surface remain consistent.
+    SyncWorkspaceToActiveTab();
     RebuildTabs();
+}
+
+bool TabStrip::IsTabInActiveWorkspace(const core::Tab& tab) const {
+    if (workspace_manager_ == nullptr) {
+        return true;
+    }
+
+    const std::string tab_workspace =
+        (tab.workspace_id.has_value() && !tab.workspace_id->empty()) ? *tab.workspace_id : "default";
+    return tab_workspace == workspace_manager_->ActiveWorkspaceId();
+}
+
+bool TabStrip::IsTabVisibleInCurrentContext(const core::Tab& tab) const {
+    if (!IsTabInActiveWorkspace(tab)) {
+        return false;
+    }
+
+    if (privacy_orchestrator_ != nullptr) {
+        return privacy_orchestrator_->IsTabVisible(tab);
+    }
+
+    if (profile_manager_ != nullptr) {
+        const auto active = profile_manager_->GetActiveProfile();
+        const bool is_profile_ephemeral = active != nullptr && active->IsEphemeral();
+        if (is_profile_ephemeral != tab.is_ephemeral) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void TabStrip::SyncWorkspaceToActiveTab() {
+    if (workspace_manager_ == nullptr || !session_.ActiveTabId().has_value()) {
+        return;
+    }
+
+    const auto* active_tab = session_.FindTab(*session_.ActiveTabId());
+    if (active_tab == nullptr) {
+        return;
+    }
+
+    // Never allow a persistent tab activation to redefine workspace state while
+    // Private Mode is active. SessionPrivacyOrchestrator is still the authority.
+    if (privacy_orchestrator_ != nullptr && !privacy_orchestrator_->IsTabVisible(*active_tab)) {
+        static_cast<void>(ActivateOrCreateTabForActiveWorkspace());
+        return;
+    }
+
+    const std::string tab_workspace =
+        (active_tab->workspace_id.has_value() && !active_tab->workspace_id->empty())
+            ? *active_tab->workspace_id
+            : "default";
+
+    if (tab_workspace != workspace_manager_->ActiveWorkspaceId() &&
+        workspace_manager_->HasWorkspace(tab_workspace)) {
+        static_cast<void>(workspace_manager_->SetActiveWorkspace(tab_workspace));
+    }
+}
+
+bool TabStrip::OpenNewTabForActiveWorkspace() {
+    std::string new_id = "tab-" + std::to_string(++next_tab_index_);
+    while (session_.FindTab(new_id) != nullptr) {
+        new_id = "tab-" + std::to_string(++next_tab_index_);
+    }
+
+    std::optional<core::WorkspaceId> ws_id = std::nullopt;
+    if (workspace_manager_ != nullptr) {
+        ws_id = workspace_manager_->ActiveWorkspaceId();
+    }
+
+    const bool is_ephemeral = (privacy_orchestrator_ != nullptr)
+        ? privacy_orchestrator_->IsPrivateModeActive()
+        : (profile_manager_ != nullptr &&
+           profile_manager_->GetActiveProfile() != nullptr &&
+           profile_manager_->GetActiveProfile()->IsEphemeral());
+
+    core::Tab new_tab;
+    new_tab.id = new_id;
+    new_tab.url = "https://example.com/";
+    new_tab.title = is_ephemeral ? "Private Tab" : "New Tab";
+    new_tab.lifecycle = core::TabLifecycle::Active;
+    new_tab.workspace_id = ws_id;
+    new_tab.is_ephemeral = is_ephemeral;
+    return session_.OpenTab(std::move(new_tab), true);
+}
+
+bool TabStrip::ActivateOrCreateTabForActiveWorkspace() {
+    for (const auto& tab : session_.Tabs()) {
+        if (!IsTabVisibleInCurrentContext(tab)) {
+            continue;
+        }
+
+        if (privacy_orchestrator_ != nullptr) {
+            return privacy_orchestrator_->ActivateTab(tab.id);
+        }
+        return session_.ActivateTab(tab.id);
+    }
+
+    return OpenNewTabForActiveWorkspace();
 }
 
 void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id) {
@@ -79,6 +191,10 @@ void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id
     switch (action) {
         case TabAction::Activate:
             if (!tab_id.empty()) {
+                const auto* tab = session_.FindTab(tab_id);
+                if (tab == nullptr || !IsTabVisibleInCurrentContext(*tab)) {
+                    break;
+                }
                 if (privacy_orchestrator_ != nullptr) {
                     static_cast<void>(privacy_orchestrator_->ActivateTab(tab_id));
                 } else {
@@ -97,34 +213,14 @@ void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id
             break;
         case TabAction::CycleWorkspace:
             if (workspace_manager_ != nullptr) {
-                workspace_manager_->CycleNextWorkspace();
+                static_cast<void>(workspace_manager_->CycleNextWorkspace());
+                static_cast<void>(ActivateOrCreateTabForActiveWorkspace());
                 RebuildTabs();
             }
             break;
-        case TabAction::NewTab: {
-            std::string new_id = "tab-" + std::to_string(++next_tab_index_);
-            while (session_.FindTab(new_id) != nullptr) {
-                new_id = "tab-" + std::to_string(++next_tab_index_);
-            }
-            std::optional<core::WorkspaceId> ws_id = std::nullopt;
-            if (workspace_manager_ != nullptr) {
-                ws_id = workspace_manager_->ActiveWorkspaceId();
-            }
-            const bool is_ephemeral = (privacy_orchestrator_ != nullptr)
-                ? privacy_orchestrator_->IsPrivateModeActive()
-                : (profile_manager_ != nullptr &&
-                   profile_manager_->GetActiveProfile() != nullptr &&
-                   profile_manager_->GetActiveProfile()->IsEphemeral());
-            core::Tab new_tab;
-            new_tab.id = new_id;
-            new_tab.url = "https://example.com/";
-            new_tab.title = is_ephemeral ? "Private Tab" : "New Tab";
-            new_tab.lifecycle = core::TabLifecycle::Active;
-            new_tab.workspace_id = ws_id;
-            new_tab.is_ephemeral = is_ephemeral;
-            static_cast<void>(session_.OpenTab(std::move(new_tab), true));
+        case TabAction::NewTab:
+            static_cast<void>(OpenNewTabForActiveWorkspace());
             break;
-        }
     }
 }
 
@@ -138,18 +234,12 @@ void TabStrip::RebuildTabs() {
     const auto& active_id = session_.ActiveTabId();
 
     for (const auto& tab : tabs) {
-        if (privacy_orchestrator_ != nullptr && !privacy_orchestrator_->IsTabVisible(tab)) {
+        if (!IsTabVisibleInCurrentContext(tab)) {
             continue;
-        } else if (privacy_orchestrator_ == nullptr && profile_manager_ != nullptr) {
-            const auto active = profile_manager_->GetActiveProfile();
-            const bool is_profile_ephemeral = (active != nullptr && active->IsEphemeral());
-            if (is_profile_ephemeral && !tab.is_ephemeral) {
-                continue;
-            }
         }
 
-        const bool is_active = (active_id.has_value() && *active_id == tab.id);
-        const bool is_discarded = (tab.lifecycle == core::TabLifecycle::Discarded);
+        const bool is_active = active_id.has_value() && *active_id == tab.id;
+        const bool is_discarded = tab.lifecycle == core::TabLifecycle::Discarded;
         const std::string title_text = tab.title.empty() ? tab.url : tab.title;
 
         std::string prefix;
@@ -160,9 +250,6 @@ void TabStrip::RebuildTabs() {
             prefix += "⏳ ";
         } else if (tab.navigation_state == core::NavigationState::Failed) {
             prefix += "⚠ ";
-        }
-        if (tab.workspace_id.has_value() && !tab.workspace_id->empty() && *tab.workspace_id != "default") {
-            prefix += "[" + *tab.workspace_id + "] ";
         }
 
         std::string label;

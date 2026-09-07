@@ -15,7 +15,7 @@ bool FocusSessionController::EnqueueActiveTab(
     }
 
     const auto* tab = session.FindTab(*active_tab_id);
-    if (tab == nullptr || tab->url.empty()) {
+    if (tab == nullptr || tab->url.empty() || tab->is_ephemeral) {
         return false;
     }
 
@@ -45,14 +45,23 @@ bool FocusSessionController::ActivateFocusItem(
         return false;
     }
 
+    // Focus Queue is persistent product state. Never use it as a path from an
+    // ephemeral/private session back into a persistent tab or URL.
+    if (session.ActiveTabId().has_value()) {
+        const auto* active_tab = session.FindTab(*session.ActiveTabId());
+        if (active_tab != nullptr && active_tab->is_ephemeral) {
+            return false;
+        }
+    }
+
     if (item->tab_id.has_value()) {
         const auto* tab = session.FindTab(*item->tab_id);
-        if (tab != nullptr && tab->lifecycle != TabLifecycle::Discarded) {
+        if (tab != nullptr && !tab->is_ephemeral && tab->lifecycle != TabLifecycle::Discarded) {
             return session.ActivateTab(*item->tab_id);
         }
     }
 
-    // Tab was closed or not yet opened; open new tab and bind tab_id
+    // Tab was closed or not yet opened; open new persistent tab and bind tab_id.
     std::string new_tab_id = "focus-tab-" + item_id;
     std::size_t suffix = 1;
     while (session.FindTab(new_tab_id) != nullptr) {
@@ -65,10 +74,11 @@ bool FocusSessionController::ActivateFocusItem(
         .title = "Focus Tab",
         .lifecycle = TabLifecycle::Active,
         .workspace_id = item->workspace_id,
+        .is_ephemeral = false,
     }, true);
 
     if (opened) {
-        queue.SetTabId(item_id, new_tab_id);
+        static_cast<void>(queue.SetTabId(item_id, new_tab_id));
         return true;
     }
 
@@ -81,7 +91,7 @@ void FocusSessionController::SynchronizeTabClosures(
     for (const auto& item : queue.Items()) {
         if (item.tab_id.has_value()) {
             if (session.FindTab(*item.tab_id) == nullptr) {
-                queue.SetTabId(item.id, std::nullopt);
+                static_cast<void>(queue.SetTabId(item.id, std::nullopt));
             }
         }
     }
@@ -96,6 +106,10 @@ bool FocusSessionController::IsActiveTabInFocusQueue(
     }
 
     const auto* tab = session.FindTab(*active_id);
+    if (tab != nullptr && tab->is_ephemeral) {
+        return false;
+    }
+
     for (const auto& item : queue.Items()) {
         if (item.tab_id.has_value() && *item.tab_id == *active_id) {
             return true;

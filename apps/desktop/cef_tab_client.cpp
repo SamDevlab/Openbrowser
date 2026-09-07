@@ -5,6 +5,7 @@
 #include "core/compatibility/user_agent_policy.h"
 #include "core/filters/content_filter.h"
 #include "core/network/filter_decision_log.h"
+#include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
 #include "devtools/network/connection_diagnostics.h"
 #include "devtools/network/network_trace.h"
@@ -13,8 +14,10 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -261,29 +264,65 @@ bool CefTabClient::OnBeforeDownload(
     CefRefPtr<CefDownloadItem> download_item,
     const CefString& suggested_name,
     CefRefPtr<CefBeforeDownloadCallback> callback) {
-    if (download_item && engine_) {
-        auto* broker = engine_->TransferBroker();
-        if (broker) {
-            core::TransferItem item;
-            item.id = std::to_string(download_item->GetId());
-            item.url = download_item->GetURL().ToString();
-            item.suggested_filename = suggested_name.empty() ? download_item->GetSuggestedFileName().ToString() : suggested_name.ToString();
-            item.target_path = download_item->GetFullPath().ToString();
-            item.total_bytes = static_cast<std::size_t>(std::max<int64_t>(0, download_item->GetTotalBytes()));
-            item.state = core::TransferState::InProgress;
-            broker->RegisterTransfer(item);
+    CEF_REQUIRE_UI_THREAD();
+    if (!download_item || !engine_ || !callback) {
+        return false;
+    }
+
+    auto* broker = engine_->TransferBroker();
+    if (broker == nullptr) {
+        callback->Continue("", true);
+        return true;
+    }
+
+    const std::string id = std::to_string(download_item->GetId());
+    const std::string raw_name = suggested_name.empty()
+        ? download_item->GetSuggestedFileName().ToString()
+        : suggested_name.ToString();
+    std::string safe_name = core::FileBroker::SanitizeFilename(raw_name);
+    std::string target_path;
+
+    if (auto* file_broker = broker->GetFileBroker(); file_broker != nullptr) {
+        const auto& allowed_dir = file_broker->AllowedDirectory();
+        if (!allowed_dir.empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(allowed_dir, ec);
+            if (!ec) {
+                const auto target = file_broker->ResolveCollision(safe_name);
+                if (file_broker->IsPathContained(target)) {
+                    target_path = target.string();
+                }
+            }
         }
     }
-    if (callback) {
-        callback->Continue("", true);
+
+    core::TransferItem item;
+    item.id = id;
+    item.url = download_item->GetURL().ToString();
+    item.suggested_filename = safe_name;
+    item.target_path = target_path;
+    item.mime_type = download_item->GetMimeType().ToString();
+    item.total_bytes = std::max<int64_t>(0, download_item->GetTotalBytes());
+    item.state = core::TransferState::InProgress;
+
+    if (!broker->RegisterTransfer(item)) {
+        static_cast<void>(broker->UpdateMetadata(
+            id,
+            item.url,
+            item.suggested_filename,
+            item.target_path,
+            item.mime_type));
     }
+
+    callback->Continue(target_path, target_path.empty());
     return true;
 }
 
 void CefTabClient::OnDownloadUpdated(
     CefRefPtr<CefBrowser> /*browser*/,
     CefRefPtr<CefDownloadItem> download_item,
-    CefRefPtr<CefDownloadItemCallback> /*callback*/) {
+    CefRefPtr<CefDownloadItemCallback> callback) {
+    CEF_REQUIRE_UI_THREAD();
     if (!download_item || !engine_) {
         return;
     }
@@ -291,16 +330,54 @@ void CefTabClient::OnDownloadUpdated(
     if (!broker) {
         return;
     }
+
     const std::string id = std::to_string(download_item->GetId());
+    if (broker->FindTransfer(id) == nullptr) {
+        core::TransferItem item;
+        item.id = id;
+        item.url = download_item->GetURL().ToString();
+        item.suggested_filename = core::FileBroker::SanitizeFilename(
+            download_item->GetSuggestedFileName().ToString());
+        item.target_path = download_item->GetFullPath().ToString();
+        item.mime_type = download_item->GetMimeType().ToString();
+        item.received_bytes = std::max<int64_t>(0, download_item->GetReceivedBytes());
+        item.total_bytes = std::max<int64_t>(0, download_item->GetTotalBytes());
+        item.speed_bytes_per_sec = std::max<int64_t>(0, download_item->GetCurrentSpeed());
+        static_cast<void>(broker->RegisterTransfer(std::move(item)));
+    } else {
+        static_cast<void>(broker->UpdateMetadata(
+            id,
+            download_item->GetURL().ToString(),
+            core::FileBroker::SanitizeFilename(download_item->GetSuggestedFileName().ToString()),
+            download_item->GetFullPath().ToString(),
+            download_item->GetMimeType().ToString()));
+    }
+
+    if (callback && !download_item->IsComplete() && !download_item->IsCanceled() && !download_item->IsInterrupted()) {
+        broker->SetControl(id, {
+            .pause = [callback]() { callback->Pause(); },
+            .resume = [callback]() { callback->Resume(); },
+            .cancel = [callback]() { callback->Cancel(); },
+        });
+    }
+
     if (download_item->IsComplete()) {
-        broker->CompleteTransfer(id);
+        static_cast<void>(broker->CompleteTransfer(id));
     } else if (download_item->IsCanceled()) {
-        broker->CancelTransfer(id);
+        broker->ClearControl(id);
+        static_cast<void>(broker->CancelTransfer(id));
+    } else if (download_item->IsInterrupted()) {
+        broker->ClearControl(id);
+        static_cast<void>(broker->FailTransfer(
+            id,
+            "CEF download interrupted (reason=" +
+                std::to_string(static_cast<int>(download_item->GetInterruptReason())) + ")"));
     } else if (download_item->IsInProgress()) {
-        const auto received = static_cast<std::size_t>(std::max<int64_t>(0, download_item->GetReceivedBytes()));
-        const auto total = static_cast<std::size_t>(std::max<int64_t>(0, download_item->GetTotalBytes()));
-        const auto speed = static_cast<std::size_t>(std::max<int64_t>(0, download_item->GetCurrentSpeed()));
-        broker->UpdateProgress(id, received, total, speed);
+        static_cast<void>(broker->UpdateProgress(
+            id,
+            download_item->GetReceivedBytes(),
+            download_item->GetTotalBytes(),
+            download_item->GetCurrentSpeed()));
     }
 }
 
@@ -766,9 +843,6 @@ bool CefTabClient::OnResourceResponse(
     const std::string url = request ? request->GetURL().ToString() : "";
     const EndpointInfo ep = ParseEndpoint(url);
 
-    // Record only verified observations. Standard CEF callbacks do not supply
-    // TLS version, cipher suite, cert subject, or protocol negotiation without CDP/NetLog.
-    // We leave tls_info nullopt and protocol "unknown" rather than fabricating telemetry.
     if (auto* conn_reg = engine_->ConnectionRegistry()) {
         const bool already_known = conn_reg->Find(ep.connection_id).has_value();
         devtools::network::ConnectionDiagnostics diag;

@@ -20,13 +20,14 @@ void Require(const bool condition, const std::string& message) {
     }
 }
 
-openbrowser::core::Tab MakeTab(std::string id, std::string url) {
+openbrowser::core::Tab MakeTab(std::string id, std::string url, const bool ephemeral = false) {
     return openbrowser::core::Tab{
         .id = std::move(id),
         .url = std::move(url),
         .title = "Focus Controller Test",
         .lifecycle = openbrowser::core::TabLifecycle::Background,
         .workspace_id = std::nullopt,
+        .is_ephemeral = ephemeral,
     };
 }
 
@@ -46,6 +47,29 @@ void TestEnqueueActiveTab() {
     Require(item != nullptr && item->tab_id == std::optional<openbrowser::core::TabId>{"t1"}, "item1 has tab_id t1");
 
     Require(!openbrowser::core::FocusSessionController::EnqueueActiveTab(session, queue, "item1"), "cannot enqueue duplicate item id");
+}
+
+void TestPrivateTabCannotEnterPersistentFocusQueue() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+    openbrowser::core::FocusQueue queue;
+
+    Require(session.OpenTab(MakeTab("private", "https://secret.test", true)), "open private tab");
+    Require(!openbrowser::core::FocusSessionController::EnqueueActiveTab(session, queue, "secret"),
+        "private tab cannot enter persistent focus queue");
+    Require(queue.Items().empty(), "private URL is not retained by focus queue");
+
+    static_cast<void>(queue.Enqueue({
+        .id = "persistent-item",
+        .url = "https://public.test",
+        .tab_id = std::nullopt,
+        .workspace_id = std::nullopt,
+        .state = openbrowser::core::FocusState::Next,
+    }));
+    Require(!openbrowser::core::FocusSessionController::ActivateFocusItem(session, queue, "persistent-item"),
+        "persistent focus item cannot activate while private tab is active");
+    Require(session.Tabs().size() == 1 && session.Tabs().front().is_ephemeral,
+        "private session remains isolated after blocked focus activation");
 }
 
 void TestActivateFocusItemWithLiveTab() {
@@ -89,6 +113,7 @@ void TestActivateFocusItemReopensClosedTab() {
 
 int main() {
     TestEnqueueActiveTab();
+    TestPrivateTabCannotEnterPersistentFocusQueue();
     TestActivateFocusItemWithLiveTab();
     TestActivateFocusItemReopensClosedTab();
 

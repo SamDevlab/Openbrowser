@@ -4,8 +4,15 @@
 #include "include/views/cef_label_button.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <algorithm>
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
+
+#if defined(_WIN32)
+#include <shellapi.h>
+#include <windows.h>
+#endif
 
 namespace openbrowser::desktop {
 
@@ -28,7 +35,8 @@ private:
 };
 
 namespace {
-std::string FormatTransferState(core::TransferState state) {
+
+std::string FormatTransferState(const core::TransferState state) {
     switch (state) {
     case core::TransferState::Queued:
         return "Queued";
@@ -45,13 +53,46 @@ std::string FormatTransferState(core::TransferState state) {
     }
     return "Unknown";
 }
-} // namespace
+
+std::string RiskLabel(const core::FileRiskLevel risk) {
+    switch (risk) {
+    case core::FileRiskLevel::Safe:
+        return {};
+    case core::FileRiskLevel::CautionExecutable:
+        return " [Warning: executable]";
+    case core::FileRiskLevel::DangerousScript:
+        return " [Warning: script]";
+    }
+    return {};
+}
+
+bool LaunchPath(const std::filesystem::path& path) {
+#if defined(_WIN32)
+    if (path.empty()) {
+        return false;
+    }
+    const auto result = reinterpret_cast<INT_PTR>(ShellExecuteW(
+        nullptr,
+        L"open",
+        path.wstring().c_str(),
+        nullptr,
+        nullptr,
+        SW_SHOWNORMAL));
+    return result > 32;
+#else
+    (void)path;
+    return false;
+#endif
+}
+
+}  // namespace
 
 DownloadsPanel::DownloadsPanel(
     core::TransferBroker& transfer_broker,
     core::FileBroker& file_broker)
     : transfer_broker_(transfer_broker), file_broker_(file_broker) {
 
+    transfer_broker_.SetFileBroker(&file_broker_);
     transfer_broker_.AddObserver(this);
 
     panel_ = CefPanel::CreatePanel(nullptr);
@@ -77,13 +118,14 @@ DownloadsPanel::DownloadsPanel(
 
 DownloadsPanel::~DownloadsPanel() {
     transfer_broker_.RemoveObserver(this);
+    transfer_broker_.SetFileBroker(nullptr);
 }
 
 CefRefPtr<CefPanel> DownloadsPanel::View() const noexcept {
     return panel_;
 }
 
-void DownloadsPanel::SetVisible(bool visible) {
+void DownloadsPanel::SetVisible(const bool visible) {
     panel_->SetVisible(visible);
     if (visible) {
         RebuildView();
@@ -98,7 +140,7 @@ void DownloadsPanel::ToggleVisibility() {
     SetVisible(!IsVisible());
 }
 
-void DownloadsPanel::HandleAction(TransferAction action, const std::string& transfer_id) {
+void DownloadsPanel::HandleAction(const TransferAction action, const std::string& transfer_id) {
     switch (action) {
     case TransferAction::Pause:
         static_cast<void>(transfer_broker_.PauseTransfer(transfer_id));
@@ -109,6 +151,30 @@ void DownloadsPanel::HandleAction(TransferAction action, const std::string& tran
     case TransferAction::Cancel:
         static_cast<void>(transfer_broker_.CancelTransfer(transfer_id));
         break;
+    case TransferAction::Open:
+    case TransferAction::ShowInFolder: {
+        const auto items = transfer_broker_.ListTransfers();
+        const auto it = std::find_if(items.begin(), items.end(), [&](const core::TransferItem& item) {
+            return item.id == transfer_id;
+        });
+        if (it == items.end() || it->state != core::TransferState::Completed || it->target_path.empty()) {
+            break;
+        }
+
+        const std::filesystem::path target(it->target_path);
+        if (!file_broker_.IsPathContained(target)) {
+            break;
+        }
+
+        if (action == TransferAction::Open) {
+            if (core::FileBroker::AssessRisk(target) == core::FileRiskLevel::Safe) {
+                static_cast<void>(LaunchPath(target));
+            }
+        } else {
+            static_cast<void>(LaunchPath(target.parent_path()));
+        }
+        break;
+    }
     case TransferAction::Close:
         SetVisible(false);
         break;
@@ -120,7 +186,6 @@ void DownloadsPanel::RebuildView() {
     panel_->RemoveAllChildViews();
     button_delegates_.clear();
 
-    // Header bar
     auto header = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings header_settings{};
     header_settings.horizontal = 1;
@@ -128,16 +193,15 @@ void DownloadsPanel::RebuildView() {
     header_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     header->SetToBoxLayout(header_settings);
 
-    auto title_btn = CefLabelButton::CreateLabelButton(nullptr, "📥 Downloads & Transfers");
+    auto title_btn = CefLabelButton::CreateLabelButton(nullptr, "Downloads & Transfers");
     header->AddChildView(title_btn);
 
     auto close_delegate = new ActionDelegate(*this, TransferAction::Close);
     button_delegates_.push_back(close_delegate);
-    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "[✕ Close]");
+    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "[Close]");
     header->AddChildView(close_btn);
     panel_->AddChildView(header);
 
-    // List of items
     const auto items = transfer_broker_.ListTransfers();
     if (items.empty()) {
         auto empty_label = CefLabelButton::CreateLabelButton(nullptr, "No active or recent downloads.");
@@ -152,14 +216,23 @@ void DownloadsPanel::RebuildView() {
             row->SetToBoxLayout(row_settings);
 
             const std::string safe_name = core::FileBroker::SanitizeFilename(item.suggested_filename);
+            const std::filesystem::path risk_path = item.target_path.empty()
+                ? std::filesystem::path(safe_name)
+                : std::filesystem::path(item.target_path);
+            const auto risk = core::FileBroker::AssessRisk(risk_path);
             const double pct = (item.total_bytes > 0)
                 ? (static_cast<double>(item.received_bytes) * 100.0 / static_cast<double>(item.total_bytes))
                 : 0.0;
+
             std::ostringstream oss;
             oss << safe_name << " - "
                 << std::fixed << std::setprecision(1) << pct << "% ("
                 << (item.speed_bytes_per_sec / 1024) << " KB/s) ["
-                << FormatTransferState(item.state) << "]";
+                << FormatTransferState(item.state) << "]"
+                << RiskLabel(risk);
+            if (item.state == core::TransferState::Failed && !item.error_message.empty()) {
+                oss << " Error: " << item.error_message;
+            }
 
             auto item_label = CefLabelButton::CreateLabelButton(nullptr, oss.str());
             row->AddChildView(item_label);
@@ -184,6 +257,20 @@ void DownloadsPanel::RebuildView() {
                 button_delegates_.push_back(cancel_delegate);
                 auto cancel_btn = CefLabelButton::CreateLabelButton(cancel_delegate, "[Cancel]");
                 row->AddChildView(cancel_btn);
+            } else if (item.state == core::TransferState::Completed && !item.target_path.empty()) {
+#if defined(_WIN32)
+                if (risk == core::FileRiskLevel::Safe) {
+                    auto open_delegate = new ActionDelegate(*this, TransferAction::Open, item.id);
+                    button_delegates_.push_back(open_delegate);
+                    auto open_btn = CefLabelButton::CreateLabelButton(open_delegate, "[Open]");
+                    row->AddChildView(open_btn);
+                }
+
+                auto folder_delegate = new ActionDelegate(*this, TransferAction::ShowInFolder, item.id);
+                button_delegates_.push_back(folder_delegate);
+                auto folder_btn = CefLabelButton::CreateLabelButton(folder_delegate, "[Show Folder]");
+                row->AddChildView(folder_btn);
+#endif
             }
 
             panel_->AddChildView(row);

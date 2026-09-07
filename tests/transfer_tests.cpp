@@ -33,6 +33,28 @@ public:
     std::vector<std::string> finished;
 };
 
+class ReentrantObserver final : public openbrowser::core::TransferObserver {
+public:
+    explicit ReentrantObserver(openbrowser::core::TransferBroker& broker) : broker_(broker) {}
+
+    void OnTransferStarted(const openbrowser::core::TransferItem&) override {
+        snapshots.push_back(broker_.ListTransfers().size());
+    }
+
+    void OnTransferUpdated(const openbrowser::core::TransferItem&) override {
+        snapshots.push_back(broker_.ListTransfers().size());
+    }
+
+    void OnTransferFinished(const openbrowser::core::TransferItem&) override {
+        snapshots.push_back(broker_.ListTransfers().size());
+    }
+
+    std::vector<std::size_t> snapshots;
+
+private:
+    openbrowser::core::TransferBroker& broker_;
+};
+
 void TestTransferBrokerRegistration() {
     using namespace openbrowser::core;
 
@@ -51,10 +73,33 @@ void TestTransferBrokerRegistration() {
 
     const auto* found = broker.FindTransfer("dl-1");
     Require(found != nullptr, "FindTransfer should locate dl-1");
-    Require(found->state == TransferState::InProgress, "State should be InProgress");
+    Require(found != nullptr && found->state == TransferState::InProgress, "State should be InProgress");
 
-    // Duplicate registration should fail
     Require(!broker.RegisterTransfer(item), "Duplicate registration should fail");
+}
+
+void TestTransferMetadataUpdates() {
+    using namespace openbrowser::core;
+
+    TransferBroker broker;
+    TransferItem item;
+    item.id = "metadata";
+    static_cast<void>(broker.RegisterTransfer(item));
+
+    Require(
+        broker.UpdateMetadata(
+            "metadata",
+            "https://example.com/archive.zip",
+            "archive.zip",
+            "/downloads/archive.zip",
+            "application/zip"),
+        "UpdateMetadata should succeed");
+
+    const auto* found = broker.FindTransfer("metadata");
+    Require(found != nullptr && found->url == "https://example.com/archive.zip", "Metadata URL updated");
+    Require(found != nullptr && found->suggested_filename == "archive.zip", "Metadata filename updated");
+    Require(found != nullptr && found->target_path == "/downloads/archive.zip", "Metadata target updated");
+    Require(found != nullptr && found->mime_type == "application/zip", "Metadata MIME updated");
 }
 
 void TestTransferProgressAndSpeed() {
@@ -65,20 +110,50 @@ void TestTransferProgressAndSpeed() {
     item.id = "dl-2";
     item.url = "https://example.com/archive.tar.gz";
     item.total_bytes = 50000;
-    broker.RegisterTransfer(item);
+    static_cast<void>(broker.RegisterTransfer(item));
 
     Require(broker.UpdateProgress("dl-2", 15000, 50000, 10240), "UpdateProgress should succeed");
 
     const auto* found = broker.FindTransfer("dl-2");
     Require(found != nullptr && found->received_bytes == 15000, "Received bytes should match");
-    Require(found->speed_bytes_per_sec == 10240, "Speed should match");
+    Require(found != nullptr && found->speed_bytes_per_sec == 10240, "Speed should match");
 
     Require(broker.PauseTransfer("dl-2"), "PauseTransfer should succeed");
     Require(broker.FindTransfer("dl-2")->state == TransferState::Paused, "State should be Paused");
     Require(broker.FindTransfer("dl-2")->speed_bytes_per_sec == 0, "Speed should be 0 when paused");
 
+    Require(broker.UpdateProgress("dl-2", 16000, 50000, 2048), "Progress should update while paused");
+    Require(broker.FindTransfer("dl-2")->state == TransferState::Paused, "Progress callback must not unpause state");
+
     Require(broker.ResumeTransfer("dl-2"), "ResumeTransfer should succeed");
     Require(broker.FindTransfer("dl-2")->state == TransferState::InProgress, "State should be InProgress");
+}
+
+void TestAdapterBackedControls() {
+    using namespace openbrowser::core;
+
+    TransferBroker broker;
+    TransferItem item;
+    item.id = "controlled";
+    static_cast<void>(broker.RegisterTransfer(item));
+
+    int pause_calls = 0;
+    int resume_calls = 0;
+    int cancel_calls = 0;
+    broker.SetControl("controlled", {
+        .pause = [&pause_calls]() { ++pause_calls; },
+        .resume = [&resume_calls]() { ++resume_calls; },
+        .cancel = [&cancel_calls]() { ++cancel_calls; },
+    });
+
+    Require(broker.PauseTransfer("controlled"), "Controlled transfer pauses");
+    Require(pause_calls == 1, "Pause is propagated to adapter exactly once");
+    Require(broker.ResumeTransfer("controlled"), "Controlled transfer resumes");
+    Require(resume_calls == 1, "Resume is propagated to adapter exactly once");
+    Require(broker.CancelTransfer("controlled"), "Controlled transfer cancels");
+    Require(cancel_calls == 1, "Cancel is propagated to adapter exactly once");
+    Require(!broker.CancelTransfer("controlled"), "Terminal cancel is rejected");
+    Require(cancel_calls == 1, "Terminal state never re-invokes adapter cancel");
 }
 
 void TestTransferCompletionAndCancellation() {
@@ -89,25 +164,28 @@ void TestTransferCompletionAndCancellation() {
     TransferItem item1;
     item1.id = "dl-complete";
     item1.total_bytes = 1000;
-    broker.RegisterTransfer(item1);
+    static_cast<void>(broker.RegisterTransfer(item1));
 
     Require(broker.CompleteTransfer("dl-complete"), "CompleteTransfer should succeed");
     Require(broker.FindTransfer("dl-complete")->state == TransferState::Completed, "State should be Completed");
     Require(broker.FindTransfer("dl-complete")->received_bytes == 1000, "Received bytes should equal total on complete");
+    Require(!broker.CancelTransfer("dl-complete"), "Completed transfer cannot be cancelled");
+    Require(!broker.FailTransfer("dl-complete", "late error"), "Completed transfer cannot fail later");
 
     TransferItem item2;
     item2.id = "dl-cancel";
-    broker.RegisterTransfer(item2);
+    static_cast<void>(broker.RegisterTransfer(item2));
     Require(broker.CancelTransfer("dl-cancel"), "CancelTransfer should succeed");
     Require(broker.FindTransfer("dl-cancel")->state == TransferState::Cancelled, "State should be Cancelled");
+    Require(!broker.ResumeTransfer("dl-cancel"), "Cancelled transfer cannot resume");
 
     TransferItem item3;
     item3.id = "dl-fail";
-    broker.RegisterTransfer(item3);
+    static_cast<void>(broker.RegisterTransfer(item3));
     Require(broker.FailTransfer("dl-fail", "Disk full"), "FailTransfer should succeed");
     const auto* failed = broker.FindTransfer("dl-fail");
-    Require(failed->state == TransferState::Failed, "State should be Failed");
-    Require(failed->error_message == "Disk full", "Error message should match");
+    Require(failed != nullptr && failed->state == TransferState::Failed, "State should be Failed");
+    Require(failed != nullptr && failed->error_message == "Disk full", "Error message should match");
 
     Require(broker.ActiveTransfersCount() == 0, "All transfers finished; active count should be 0");
 }
@@ -121,9 +199,9 @@ void TestTransferObserverEvents() {
 
     TransferItem item;
     item.id = "obs-1";
-    broker.RegisterTransfer(item);
-    broker.UpdateProgress("obs-1", 100, 200, 50);
-    broker.CompleteTransfer("obs-1");
+    static_cast<void>(broker.RegisterTransfer(item));
+    static_cast<void>(broker.UpdateProgress("obs-1", 100, 200, 50));
+    static_cast<void>(broker.CompleteTransfer("obs-1"));
 
     Require(observer.started.size() == 1 && observer.started[0] == "obs-1", "Observer should receive started");
     Require(observer.updated.size() == 1 && observer.updated[0] == "obs-1", "Observer should receive updated");
@@ -132,17 +210,38 @@ void TestTransferObserverEvents() {
     broker.RemoveObserver(&observer);
     TransferItem item2;
     item2.id = "obs-2";
-    broker.RegisterTransfer(item2);
+    static_cast<void>(broker.RegisterTransfer(item2));
     Require(observer.started.size() == 1, "Unsubscribed observer should not receive events");
+}
+
+void TestObserverCanReenterBroker() {
+    using namespace openbrowser::core;
+
+    TransferBroker broker;
+    ReentrantObserver observer(broker);
+    broker.AddObserver(&observer);
+
+    TransferItem item;
+    item.id = "reentrant";
+    static_cast<void>(broker.RegisterTransfer(item));
+    static_cast<void>(broker.UpdateProgress("reentrant", 5, 10, 1));
+    static_cast<void>(broker.CompleteTransfer("reentrant"));
+
+    Require(observer.snapshots.size() == 3, "Reentrant observer should receive all callbacks without deadlock");
+    Require(observer.snapshots[0] == 1 && observer.snapshots[1] == 1 && observer.snapshots[2] == 1,
+        "Reentrant observer can safely call ListTransfers");
 }
 
 }  // namespace
 
 int main() {
     TestTransferBrokerRegistration();
+    TestTransferMetadataUpdates();
     TestTransferProgressAndSpeed();
+    TestAdapterBackedControls();
     TestTransferCompletionAndCancellation();
     TestTransferObserverEvents();
+    TestObserverCanReenterBroker();
 
     if (failures != 0) {
         std::cerr << "transfer_tests failed with " << failures << " failures.\n";
