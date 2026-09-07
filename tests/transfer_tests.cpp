@@ -73,9 +73,33 @@ void TestTransferBrokerRegistration() {
 
     const auto* found = broker.FindTransfer("dl-1");
     Require(found != nullptr, "FindTransfer should locate dl-1");
-    Require(found->state == TransferState::InProgress, "State should be InProgress");
+    Require(found != nullptr && found->state == TransferState::InProgress, "State should be InProgress");
 
     Require(!broker.RegisterTransfer(item), "Duplicate registration should fail");
+}
+
+void TestTransferMetadataUpdates() {
+    using namespace openbrowser::core;
+
+    TransferBroker broker;
+    TransferItem item;
+    item.id = "metadata";
+    static_cast<void>(broker.RegisterTransfer(item));
+
+    Require(
+        broker.UpdateMetadata(
+            "metadata",
+            "https://example.com/archive.zip",
+            "archive.zip",
+            "/downloads/archive.zip",
+            "application/zip"),
+        "UpdateMetadata should succeed");
+
+    const auto* found = broker.FindTransfer("metadata");
+    Require(found != nullptr && found->url == "https://example.com/archive.zip", "Metadata URL updated");
+    Require(found != nullptr && found->suggested_filename == "archive.zip", "Metadata filename updated");
+    Require(found != nullptr && found->target_path == "/downloads/archive.zip", "Metadata target updated");
+    Require(found != nullptr && found->mime_type == "application/zip", "Metadata MIME updated");
 }
 
 void TestTransferProgressAndSpeed() {
@@ -103,6 +127,33 @@ void TestTransferProgressAndSpeed() {
 
     Require(broker.ResumeTransfer("dl-2"), "ResumeTransfer should succeed");
     Require(broker.FindTransfer("dl-2")->state == TransferState::InProgress, "State should be InProgress");
+}
+
+void TestAdapterBackedControls() {
+    using namespace openbrowser::core;
+
+    TransferBroker broker;
+    TransferItem item;
+    item.id = "controlled";
+    static_cast<void>(broker.RegisterTransfer(item));
+
+    int pause_calls = 0;
+    int resume_calls = 0;
+    int cancel_calls = 0;
+    broker.SetControl("controlled", {
+        .pause = [&pause_calls]() { ++pause_calls; },
+        .resume = [&resume_calls]() { ++resume_calls; },
+        .cancel = [&cancel_calls]() { ++cancel_calls; },
+    });
+
+    Require(broker.PauseTransfer("controlled"), "Controlled transfer pauses");
+    Require(pause_calls == 1, "Pause is propagated to adapter exactly once");
+    Require(broker.ResumeTransfer("controlled"), "Controlled transfer resumes");
+    Require(resume_calls == 1, "Resume is propagated to adapter exactly once");
+    Require(broker.CancelTransfer("controlled"), "Controlled transfer cancels");
+    Require(cancel_calls == 1, "Cancel is propagated to adapter exactly once");
+    Require(!broker.CancelTransfer("controlled"), "Terminal cancel is rejected");
+    Require(cancel_calls == 1, "Terminal state never re-invokes adapter cancel");
 }
 
 void TestTransferCompletionAndCancellation() {
@@ -185,7 +236,9 @@ void TestObserverCanReenterBroker() {
 
 int main() {
     TestTransferBrokerRegistration();
+    TestTransferMetadataUpdates();
     TestTransferProgressAndSpeed();
+    TestAdapterBackedControls();
     TestTransferCompletionAndCancellation();
     TestTransferObserverEvents();
     TestObserverCanReenterBroker();
