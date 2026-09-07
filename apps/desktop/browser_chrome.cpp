@@ -458,7 +458,7 @@ void BrowserChrome::FocusAddressBar() {
     CEF_REQUIRE_UI_THREAD();
     if (address_bar_) {
         address_bar_->RequestFocus();
-        address_bar_->SelectAll();
+        address_bar_->SelectAll(false);
     }
 }
 
