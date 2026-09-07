@@ -1,0 +1,34 @@
+name: CEF Windows SHA Probe
+
+on:
+  push:
+    branches: [feat/mvp-8-windows-packaging]
+    paths:
+      - ".github/workflows/cef-windows-sha-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CEF_VERSION: 151.3.17+gf059e67+chromium-151.0.7922.138
+  CEF_PLATFORM: windows64
+  CEF_BASE_URL: https://cef-builds.spotifycdn.com
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read official Windows CEF SHA-1 metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="cef_binary_${CEF_VERSION}_${CEF_PLATFORM}.tar.bz2"
+          encoded_archive="${archive//+/%2B}"
+          sha1="$(curl --fail --show-error --silent --location --retry 3 --retry-all-errors "${CEF_BASE_URL}/${encoded_archive}.sha1" | tr -d '[:space:]')"
+          if [[ ! "${sha1}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "Invalid SHA-1 metadata: ${sha1}" >&2
+            exit 1
+          fi
+          echo "CEF_WINDOWS64_ARCHIVE=${archive}"
+          echo "CEF_WINDOWS64_SHA1=${sha1}"
