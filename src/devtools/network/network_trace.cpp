@@ -186,7 +186,7 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
                 .method = event.method.empty() ? "GET" : event.method,
                 .url = event.url,
                 .status = event.status,
-                .protocol = event.protocol,
+                .protocol = event.type == NetworkEventType::ResponseReceived ? event.protocol : std::string{},
                 .transferred_bytes = event.transferred_bytes,
                 .state = RequestState::Active,
                 .error = event.error,
@@ -228,7 +228,10 @@ std::vector<NetworkRequestSummary> NetworkTraceBuffer::AggregateRequests(
             if (event.status.has_value()) {
                 summary.status = event.status;
             }
-            if (!event.protocol.empty()) {
+            // CEF request/redirect/failure callbacks do not expose negotiated
+            // transport protocol. Only a response event is allowed to publish
+            // protocol data into the aggregate summary.
+            if (event.type == NetworkEventType::ResponseReceived && !event.protocol.empty()) {
                 summary.protocol = event.protocol;
             }
             if (!event.tab_id.has_value() && summary.tab_id.has_value()) {
@@ -603,45 +606,50 @@ std::string NetworkTraceBuffer::RedactSensitiveUrl(std::string url) {
     }
 
     const auto fragment_pos = url.find('#', query_pos + 1);
+    const std::string fragment = fragment_pos == std::string::npos ? std::string{} : url.substr(fragment_pos);
     const auto query_end = fragment_pos == std::string::npos ? url.size() : fragment_pos;
-    std::size_t cursor = query_pos + 1;
-    while (cursor < query_end) {
-        const auto pair_end = std::min(url.find('&', cursor), query_end);
-        const auto normalized_pair_end = pair_end == std::string::npos ? query_end : pair_end;
-        const auto equals = url.find('=', cursor);
-        if (equals != std::string::npos && equals < normalized_pair_end) {
-            const std::string_view key(url.data() + cursor, equals - cursor);
-            if (IsSensitiveQueryKey(key)) {
-                const std::string replacement = "<redacted>";
-                const auto old_length = normalized_pair_end - (equals + 1);
-                url.replace(equals + 1, old_length, replacement);
-                const auto delta = static_cast<std::ptrdiff_t>(replacement.size()) - static_cast<std::ptrdiff_t>(old_length);
-                if (fragment_pos != std::string::npos) {
-                    // query_end is recomputed below; no stored fragment offset is used.
-                }
-                const auto updated_pair_end = static_cast<std::size_t>(
-                    static_cast<std::ptrdiff_t>(normalized_pair_end) + delta);
-                cursor = updated_pair_end;
-            } else {
-                cursor = normalized_pair_end;
-            }
+    const std::string prefix = url.substr(0, query_pos + 1);
+    const std::string query = url.substr(query_pos + 1, query_end - (query_pos + 1));
+
+    std::string rebuilt;
+    rebuilt.reserve(url.size() + 16);
+    rebuilt += prefix;
+
+    std::size_t cursor = 0;
+    bool first = true;
+    while (cursor <= query.size()) {
+        const auto amp = query.find('&', cursor);
+        const auto pair_end = amp == std::string::npos ? query.size() : amp;
+        const std::string_view pair(query.data() + cursor, pair_end - cursor);
+
+        if (!first) {
+            rebuilt += '&';
+        }
+        first = false;
+
+        const auto equals = pair.find('=');
+        if (equals == std::string_view::npos) {
+            rebuilt.append(pair.data(), pair.size());
         } else {
-            cursor = normalized_pair_end;
+            const auto key = pair.substr(0, equals);
+            rebuilt.append(key.data(), key.size());
+            rebuilt += '=';
+            if (IsSensitiveQueryKey(key)) {
+                rebuilt += "<redacted>";
+            } else {
+                const auto value = pair.substr(equals + 1);
+                rebuilt.append(value.data(), value.size());
+            }
         }
-        if (cursor < url.size() && url[cursor] == '&') {
-            ++cursor;
-        } else if (cursor == query_end) {
+
+        if (amp == std::string::npos) {
             break;
         }
-        // Query length may change after a replacement; recompute the effective
-        // end on the next pass by stopping at a fragment if present.
-        const auto dynamic_fragment = url.find('#', cursor);
-        if (dynamic_fragment != std::string::npos && cursor >= dynamic_fragment) {
-            break;
-        }
+        cursor = amp + 1;
     }
 
-    return url;
+    rebuilt += fragment;
+    return rebuilt;
 }
 
 void NetworkTraceBuffer::NotifyEventAppended(const NetworkEvent& event) {
