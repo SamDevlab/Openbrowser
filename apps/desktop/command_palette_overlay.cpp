@@ -132,7 +132,7 @@ void CommandPaletteOverlay::ExecuteTopResult() {
 
 void CommandPaletteOverlay::ExecuteAction(const std::string& action_id) {
     SetVisible(false);
-    action_registry_.Dispatch(action_id);
+    action_registry_.ExecuteAction(action_id);
     if (on_action_executed_) {
         on_action_executed_(action_id);
     }
@@ -142,12 +142,14 @@ void CommandPaletteOverlay::RebuildResultsView() {
     results_panel_->RemoveAllChildViews();
     result_delegates_.clear();
 
-    current_results_ = palette_.Search(current_query_, 6);
-    for (const auto& res : current_results_) {
-        std::string label = "[" + std::string(core::ActionCategoryToString(res.action.category)) + "] " +
+    current_results_ = palette_.Search(current_query_);
+    const std::size_t max_items = std::min<std::size_t>(current_results_.size(), 6);
+    for (std::size_t i = 0; i < max_items; ++i) {
+        const auto& res = current_results_[i];
+        std::string label = "[" + core::ActionCategoryToString(res.action.category) + "] " +
                             res.action.title + " - " + res.action.description;
-        if (!res.action.default_shortcut.empty()) {
-            label += " (" + res.action.default_shortcut + ")";
+        if (!res.action.shortcut_hint.empty()) {
+            label += " (" + res.action.shortcut_hint + ")";
         }
 
         auto delegate = new ActionItemDelegate(*this, res.action.id);

@@ -2,7 +2,6 @@
 
 #include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
-#include "core/transfers/transfer_observer.h"
 
 #include "include/cef_base.h"
 #include "include/views/cef_button_delegate.h"

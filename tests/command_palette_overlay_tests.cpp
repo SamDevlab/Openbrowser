@@ -46,20 +46,20 @@ void TestCommandPaletteOverlayExecution() {
     CommandPalette palette(registry);
 
     // Search query "reload"
-    auto results = palette.Search("reload", 5);
+    auto results = palette.Search("reload");
     Require(!results.empty(), "Found reload action");
     Require(results[0].action.id == "nav.reload", "Top result is nav.reload");
 
     // Execute top result
-    Require(registry.Dispatch(results[0].action.id), "Dispatched nav.reload");
+    Require(registry.ExecuteAction(results[0].action.id), "Dispatched nav.reload");
     Require(navigated, "Navigated flag set");
     Require(!lab_toggled, "Lab not toggled");
 
     // Search query "network"
-    auto lab_results = palette.Search("network", 5);
+    auto lab_results = palette.Search("network");
     Require(!lab_results.empty(), "Found network action");
     Require(lab_results[0].action.id == "network_lab.toggle", "Top result is network_lab.toggle");
-    Require(registry.Dispatch(lab_results[0].action.id), "Dispatched network_lab.toggle");
+    Require(registry.ExecuteAction(lab_results[0].action.id), "Dispatched network_lab.toggle");
     Require(lab_toggled, "Lab toggled flag set");
 }
 
@@ -77,9 +77,9 @@ void TestCategoryFilteringAndFormatting() {
     });
 
     CommandPalette palette(registry);
-    auto results = palette.Search("", 10);
+    auto results = palette.Search("");
     Require(!results.empty(), "Found all actions with empty query");
-    Require(std::string(ActionCategoryToString(results[0].action.category)) == "Focus", "Category is Focus");
+    Require(ActionCategoryToString(results[0].action.category) == "Focus", "Category is Focus");
 }
 
 } // namespace

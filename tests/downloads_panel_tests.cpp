@@ -1,6 +1,5 @@
 #include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
-#include "core/transfers/transfer_observer.h"
 
 #include <iostream>
 #include <string>

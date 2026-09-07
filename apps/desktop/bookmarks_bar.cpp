@@ -98,7 +98,11 @@ void BookmarksBar::BookmarkCurrentPage() {
     const std::string title = active_tab->Title().empty() ? url : active_tab->Title();
     const std::string workspace = active_tab->WorkspaceId().empty() ? "default" : active_tab->WorkspaceId();
 
-    bookmark_manager_.AddBookmark(url, title, workspace);
+    core::BookmarkItem item;
+    item.url = url;
+    item.title = title;
+    item.workspace_id = workspace;
+    bookmark_manager_.AddBookmark(std::move(item));
     RebuildBar();
 }
 

@@ -50,7 +50,7 @@ private:
     std::function<void(const std::string&)> on_action_executed_;
 
     std::string current_query_;
-    std::vector<core::CommandPaletteResult> current_results_;
+    std::vector<core::CommandPaletteMatch> current_results_;
 
     CefRefPtr<CefPanel> container_;
     CefRefPtr<CefBoxLayout> container_layout_;

@@ -17,11 +17,24 @@ void TestBookmarksBarPopulationAndWorkspaceIsolation() {
     BookmarkManager manager;
 
     // Default workspace bookmarks
-    Require(manager.AddBookmark("https://github.com", "GitHub", "default"), "Added GitHub");
-    Require(manager.AddBookmark("https://news.ycombinator.com", "Hacker News", "default"), "Added HN");
+    BookmarkItem b1;
+    b1.url = "https://github.com";
+    b1.title = "GitHub";
+    b1.workspace_id = "default";
+    Require(manager.AddBookmark(std::move(b1)), "Added GitHub");
+
+    BookmarkItem b2;
+    b2.url = "https://news.ycombinator.com";
+    b2.title = "Hacker News";
+    b2.workspace_id = "default";
+    Require(manager.AddBookmark(std::move(b2)), "Added HN");
 
     // Work workspace bookmarks
-    Require(manager.AddBookmark("https://jira.corp.internal", "Jira", "work"), "Added Jira to work");
+    BookmarkItem b3;
+    b3.url = "https://jira.corp.internal";
+    b3.title = "Jira";
+    b3.workspace_id = "work";
+    Require(manager.AddBookmark(std::move(b3)), "Added Jira to work");
 
     // Query default workspace
     auto default_bms = manager.ListBookmarks("default");
