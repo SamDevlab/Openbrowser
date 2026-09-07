@@ -116,13 +116,19 @@ void TestBrowserSessionWithWorkspaces() {
     Require(session.OpenTab(std::move(tab2), false), "Opening personal tab should succeed");
     Require(session.OpenTab(std::move(tab3), false), "Opening default tab should succeed");
 
-    const auto& commands = engine.commands;
-    Require(commands.size() == 3, "Engine should receive 3 create commands");
-    Require(commands[0].workspace_id.has_value() && *commands[0].workspace_id == "work",
+    std::vector<openbrowser::tests::EngineCommand> create_commands;
+    for (const auto& cmd : engine.commands) {
+        if (cmd.type == openbrowser::tests::EngineCommandType::Create) {
+            create_commands.push_back(cmd);
+        }
+    }
+
+    Require(create_commands.size() == 3, "Engine should receive 3 create commands");
+    Require(create_commands[0].workspace_id.has_value() && *create_commands[0].workspace_id == "work",
             "Command 0 should have work workspace");
-    Require(commands[1].workspace_id.has_value() && *commands[1].workspace_id == "personal",
+    Require(create_commands[1].workspace_id.has_value() && *create_commands[1].workspace_id == "personal",
             "Command 1 should have personal workspace");
-    Require(!commands[2].workspace_id.has_value(),
+    Require(!create_commands[2].workspace_id.has_value(),
             "Command 2 should have nullopt workspace");
 
     const auto* found_work = session.FindTab("tab-work");
