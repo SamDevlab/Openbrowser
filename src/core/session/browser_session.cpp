@@ -36,6 +36,7 @@ bool BrowserSession::OpenTab(Tab tab, const bool activate) {
     if (should_activate) {
         DemoteActiveTab();
         tab.lifecycle = TabLifecycle::Active;
+        tab.last_activated_sequence = ++last_activated_counter_;
         active_tab_id_ = tab.id;
     } else {
         tab.lifecycle = TabLifecycle::Background;
@@ -80,11 +81,22 @@ bool BrowserSession::CloseTab(const TabId& tab_id) {
 
 bool BrowserSession::ActivateTab(const TabId& tab_id) {
     const auto it = FindMutable(tab_id);
-    if (it == tabs_.end() || it->lifecycle == TabLifecycle::Discarded) {
+    if (it == tabs_.end()) {
         return false;
     }
 
     if (active_tab_id_.has_value() && *active_tab_id_ == tab_id) {
+        return true;
+    }
+
+    if (it->lifecycle == TabLifecycle::Discarded) {
+        engine_.CreateTab(*it);
+        it->lifecycle = TabLifecycle::Active;
+        it->last_activated_sequence = ++last_activated_counter_;
+        DemoteActiveTab();
+        active_tab_id_ = tab_id;
+        engine_.ActivateTab(tab_id);
+        NotifyObservers();
         return true;
     }
 
@@ -94,6 +106,7 @@ bool BrowserSession::ActivateTab(const TabId& tab_id) {
 
     DemoteActiveTab();
     it->lifecycle = TabLifecycle::Active;
+    it->last_activated_sequence = ++last_activated_counter_;
     active_tab_id_ = tab_id;
     engine_.ActivateTab(tab_id);
     NotifyObservers();
@@ -286,10 +299,17 @@ void BrowserSession::ActivateAfterClose(const std::size_t preferred_index) {
         if (candidate.lifecycle == TabLifecycle::Discarded) continue;
         if (candidate.lifecycle == TabLifecycle::Suspended) engine_.Resume(candidate.id);
         candidate.lifecycle = TabLifecycle::Active;
+        candidate.last_activated_sequence = ++last_activated_counter_;
         active_tab_id_ = candidate.id;
         engine_.ActivateTab(candidate.id);
         return;
     }
+    auto& fallback = tabs_[start_index];
+    engine_.CreateTab(fallback);
+    fallback.lifecycle = TabLifecycle::Active;
+    fallback.last_activated_sequence = ++last_activated_counter_;
+    active_tab_id_ = fallback.id;
+    engine_.ActivateTab(fallback.id);
 }
 
 }  // namespace openbrowser::core

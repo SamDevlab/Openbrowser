@@ -6,6 +6,7 @@
 #include "core/focus_queue/focus_queue.h"
 #include "core/session/browser_session.h"
 #include "core/session/browser_session_observer.h"
+#include "core/workspaces/workspace_manager.h"
 #include "devtools/network/network_trace.h"
 #include "focus_sidebar.h"
 #include "network_lab_panel.h"
@@ -39,11 +40,13 @@ public:
 private:
     [[nodiscard]] std::string StartupUrl() const;
     [[nodiscard]] std::filesystem::path SessionFilePath() const;
+    [[nodiscard]] std::filesystem::path StorageDirectory() const;
     void SaveCurrentSession(bool clean_shutdown);
     void ToggleNetworkLab();
 
     CefRefPtr<CefPanel> browser_host_;
     CefRefPtr<CefBrowserEngine> engine_;
+    std::unique_ptr<core::WorkspaceManager> workspace_manager_;
     std::unique_ptr<core::FocusQueue> focus_queue_;
     std::unique_ptr<core::BrowserSession> session_;
     std::unique_ptr<TabStrip> tab_strip_;

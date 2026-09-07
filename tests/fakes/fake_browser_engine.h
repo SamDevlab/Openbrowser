@@ -25,6 +25,7 @@ struct EngineCommand {
     EngineCommandType type;
     core::TabId tab_id;
     std::string url;
+    std::optional<core::WorkspaceId> workspace_id{std::nullopt};
 };
 
 class FakeBrowserEngine final : public engine::BrowserEngine {
@@ -34,7 +35,12 @@ public:
     }
 
     void CreateTab(const core::Tab& tab) override {
-        commands.push_back({.type = EngineCommandType::Create, .tab_id = tab.id, .url = tab.url});
+        commands.push_back({
+            .type = EngineCommandType::Create,
+            .tab_id = tab.id,
+            .url = tab.url,
+            .workspace_id = tab.workspace_id,
+        });
 
         if (emit_initial_navigation_during_create && event_sink != nullptr) {
             event_sink->OnNavigationStarted({.tab_id = tab.id, .url = tab.url});
@@ -43,35 +49,35 @@ public:
     }
 
     void CloseTab(const core::TabId& tab_id) override {
-        commands.push_back({.type = EngineCommandType::Close, .tab_id = tab_id, .url = {}});
+        commands.push_back({.type = EngineCommandType::Close, .tab_id = tab_id, .url = {}, .workspace_id = std::nullopt});
     }
 
     void ActivateTab(const core::TabId& tab_id) override {
-        commands.push_back({.type = EngineCommandType::Activate, .tab_id = tab_id, .url = {}});
+        commands.push_back({.type = EngineCommandType::Activate, .tab_id = tab_id, .url = {}, .workspace_id = std::nullopt});
     }
 
     void Navigate(const engine::NavigationRequest& request) override {
-        commands.push_back({.type = EngineCommandType::Navigate, .tab_id = request.tab_id, .url = request.url});
+        commands.push_back({.type = EngineCommandType::Navigate, .tab_id = request.tab_id, .url = request.url, .workspace_id = std::nullopt});
     }
 
     void GoBack(const core::TabId& tab_id) override {
-        commands.push_back({.type = EngineCommandType::GoBack, .tab_id = tab_id, .url = {}});
+        commands.push_back({.type = EngineCommandType::GoBack, .tab_id = tab_id, .url = {}, .workspace_id = std::nullopt});
     }
 
     void GoForward(const core::TabId& tab_id) override {
-        commands.push_back({.type = EngineCommandType::GoForward, .tab_id = tab_id, .url = {}});
+        commands.push_back({.type = EngineCommandType::GoForward, .tab_id = tab_id, .url = {}, .workspace_id = std::nullopt});
     }
 
     void Reload(const core::TabId& tab_id) override {
-        commands.push_back({.type = EngineCommandType::Reload, .tab_id = tab_id, .url = {}});
+        commands.push_back({.type = EngineCommandType::Reload, .tab_id = tab_id, .url = {}, .workspace_id = std::nullopt});
     }
 
     void Suspend(const core::TabId& tab_id) override {
-        commands.push_back({.type = EngineCommandType::Suspend, .tab_id = tab_id, .url = {}});
+        commands.push_back({.type = EngineCommandType::Suspend, .tab_id = tab_id, .url = {}, .workspace_id = std::nullopt});
     }
 
     void Resume(const core::TabId& tab_id) override {
-        commands.push_back({.type = EngineCommandType::Resume, .tab_id = tab_id, .url = {}});
+        commands.push_back({.type = EngineCommandType::Resume, .tab_id = tab_id, .url = {}, .workspace_id = std::nullopt});
     }
 
     void EmitNavigationStarted(const core::TabId& tab_id, std::string url) const {

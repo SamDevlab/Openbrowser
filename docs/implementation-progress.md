@@ -34,10 +34,18 @@ The current M1 shell is not yet a usable daily browser:
 
 - **M2.1 Delivered**: Interactive capability permission prompts (`CefPermissionHandler`, `OnRequestMediaAccessPermission`, `OnShowPermissionPrompt`) with responsive `[Allow] [Block] [Dismiss]` banners, and Security Badge UI (`[ 🔒 Secure ]`, `[ ⚠ Insecure ]`) with origin permission inspection and reset.
 - **M2.2 Delivered**: Focus session timer (Pomodoro/Sprint state machine) and attention dwell metrics (`FocusSprint`, `AttentionMetrics`, `FocusSessionController::RecordSprintTick`), integrated into `FocusSidebar` with responsive UI timer controls (`[Start]` / `[Pause]` / `[Resume]`, `[Reset]`, dwell percentage tracking).
+- **M2.3 Delivered**: Advanced Network Lab inspection, method and status filtering (`[Method: ALL/GET/POST]`, `[Status: ALL/2XX/ERR]`), request & response header separation, body preview extraction from `CefPostData`, and in-drawer request inspector with back navigation.
+- **M2.4 Delivered**: Renderer discard and memory pressure lifecycle policies (`TabDiscardPolicy`, `MemoryPressureLevel`), deterministic LRU activation sequence tracking, seamless on-demand tab revival upon activation, and `💤` power-saving indicators in `TabStrip`.
+- **M2.5 Delivered**: Workspace isolation for cookies and storage partitions (`Workspace`, `WorkspaceManager`, `CefRequestContext::CreateContext`, partition cache path resolution, workspace capability rule resolution, `[Work]` tab strip badges, and interactive `📁 <workspace>` switcher).
 
-## Remaining M2 roadmap
+## Milestone M2 Completion
 
-1. Advanced Network Lab inspection (body preview, header filtering);
-2. Renderer discard and memory pressure lifecycle policies;
-3. Workspace isolation for cookies and storage partitions.
+All five M2 milestones have been delivered, tested across unit test suites and the CEF desktop adapter smoke workflow:
+1. M2.1: Capability Consent UI & Security Badge
+2. M2.2: Focus Session Timer & Attention Metrics
+3. M2.3: Advanced Network Lab Inspection & Body Previews
+4. M2.4: Renderer Discard & Memory Pressure Lifecycle
+5. M2.5: Workspace Isolation & Partitioned Request Contexts
+
+
 

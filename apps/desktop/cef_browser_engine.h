@@ -2,6 +2,7 @@
 
 #include "core/capabilities/capability_policy.h"
 #include "core/capabilities/permission_request.h"
+#include "core/workspaces/workspace.h"
 #include "devtools/network/network_observation_sink.h"
 #include "engine/browser_engine.h"
 
@@ -9,11 +10,13 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_permission_handler.h"
+#include "include/cef_request_context.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_panel.h"
 
 #include <atomic>
 #include <cstddef>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -37,6 +40,11 @@ public:
     void Reload(const core::TabId& tab_id) override;
     void Suspend(const core::TabId& tab_id) override;
     void Resume(const core::TabId& tab_id) override;
+
+    void SetStorageRoot(std::filesystem::path root);
+    [[nodiscard]] const std::filesystem::path& StorageRoot() const noexcept;
+    [[nodiscard]] CefRefPtr<CefRequestContext> GetOrCreateRequestContext(
+        const std::optional<core::WorkspaceId>& workspace_id);
 
     void SetNetworkObservationSink(devtools::network::NetworkObservationSink* sink) noexcept;
     [[nodiscard]] bool NetworkObservationEnabled() const noexcept;
@@ -129,6 +137,9 @@ private:
     bool window_close_requested_{false};
     bool window_destroyed_{false};
     bool message_loop_quit_requested_{false};
+
+    std::filesystem::path storage_root_;
+    std::unordered_map<core::WorkspaceId, CefRefPtr<CefRequestContext>> workspace_contexts_;
 
     IMPLEMENT_REFCOUNTING(CefBrowserEngine);
 };
