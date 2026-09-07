@@ -22,6 +22,12 @@ struct PermissionPrompt {
     std::vector<Capability> capabilities;
 };
 
+[[nodiscard]] inline bool ShouldRememberPermissionForOrigin(
+    const bool requested_remember,
+    const bool is_private_mode) noexcept {
+    return requested_remember && !is_private_mode;
+}
+
 [[nodiscard]] inline std::string_view ToString(const Capability capability) noexcept {
     switch (capability) {
         case Capability::PageNetwork:
