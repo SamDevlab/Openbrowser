@@ -5,7 +5,6 @@
 #include <windows.h>
 
 #include <filesystem>
-#include <fstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -40,39 +39,6 @@ std::wstring RuntimeDirectory() {
     }
     path.resize(separator);
     return path;
-}
-
-void AppendStartupTrace(const char* phase) {
-    std::filesystem::path trace_path;
-
-    std::vector<wchar_t> configured_path(32768);
-    const DWORD configured_length = GetEnvironmentVariableW(
-        L"OPENBROWSER_STARTUP_TRACE",
-        configured_path.data(),
-        static_cast<DWORD>(configured_path.size()));
-    if (configured_length > 0 && configured_length < configured_path.size()) {
-        trace_path = std::wstring(configured_path.data(), configured_length);
-    } else {
-        wchar_t noninteractive[2]{};
-        const DWORD noninteractive_length = GetEnvironmentVariableW(
-            L"OPENBROWSER_NONINTERACTIVE",
-            noninteractive,
-            static_cast<DWORD>(std::size(noninteractive)));
-        if (noninteractive_length == 0) {
-            return;
-        }
-        const std::wstring runtime_directory = RuntimeDirectory();
-        if (runtime_directory.empty()) {
-            return;
-        }
-        trace_path = std::filesystem::path(runtime_directory) / L"debug.log";
-    }
-
-    std::ofstream stream(trace_path, std::ios::app);
-    if (stream.is_open()) {
-        stream << "[openbrowser-startup] " << phase << '\n';
-        stream.flush();
-    }
 }
 
 bool HasCommandLineToken(const wchar_t* token) {
@@ -238,14 +204,16 @@ bool IsPrimaryBrowserProcess() {
     return !HasCommandLineToken(L"--type=");
 }
 
+bool NonInteractiveMode() {
+    wchar_t value[2]{};
+    return GetEnvironmentVariableW(
+               L"OPENBROWSER_NONINTERACTIVE",
+               value,
+               static_cast<DWORD>(std::size(value))) > 0;
+}
+
 int FailSandboxInitialization() {
-    AppendStartupTrace("fail:sandbox-initialization");
-    wchar_t noninteractive[2]{};
-    const bool suppress_dialog = GetEnvironmentVariableW(
-                                     L"OPENBROWSER_NONINTERACTIVE",
-                                     noninteractive,
-                                     static_cast<DWORD>(std::size(noninteractive))) > 0;
-    if (!suppress_dialog) {
+    if (!NonInteractiveMode()) {
         MessageBoxW(
             nullptr,
             L"Openbrowser could not establish the Windows permissions required "
@@ -258,13 +226,7 @@ int FailSandboxInitialization() {
 }
 
 int FailStorageInitialization() {
-    AppendStartupTrace("fail:storage-initialization");
-    wchar_t noninteractive[2]{};
-    const bool suppress_dialog = GetEnvironmentVariableW(
-                                     L"OPENBROWSER_NONINTERACTIVE",
-                                     noninteractive,
-                                     static_cast<DWORD>(std::size(noninteractive))) > 0;
-    if (!suppress_dialog) {
+    if (!NonInteractiveMode()) {
         MessageBoxW(
             nullptr,
             L"Openbrowser could not initialize its local browser storage. "
@@ -277,9 +239,6 @@ int FailStorageInitialization() {
 
 int RunMain(HINSTANCE instance, void* sandbox_info) {
     const bool primary_process = IsPrimaryBrowserProcess();
-    if (primary_process) {
-        AppendStartupTrace("primary:run-main-enter");
-    }
 
 #if defined(OPENBROWSER_WINDOWS_SANDBOX)
     if (primary_process) {
@@ -291,26 +250,17 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
         if (runtime_directory.empty() || !ApplyLpacRuntimeAcl(runtime_directory)) {
             return FailSandboxInitialization();
         }
-        AppendStartupTrace("primary:sandbox-prerequisites-ok");
 
         if (HasCommandLineToken(kSandboxPrerequisiteCheck)) {
-            AppendStartupTrace("primary:prerequisite-probe-ok");
             return 0;
         }
     }
 #endif
 
     CefMainArgs main_args(instance);
-    if (primary_process) {
-        AppendStartupTrace("primary:before-execute-process");
-    }
-
     const int subprocess_exit_code = CefExecuteProcess(main_args, nullptr, sandbox_info);
     if (subprocess_exit_code >= 0) {
         return subprocess_exit_code;
-    }
-    if (primary_process) {
-        AppendStartupTrace("primary:after-execute-process");
     }
 
     CefSettings settings;
@@ -327,28 +277,14 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
     if (!ConfigureCefStorage(settings)) {
         return FailStorageInitialization();
     }
-    if (primary_process) {
-        AppendStartupTrace("primary:storage-configured");
-    }
 
     CefRefPtr<openbrowser::desktop::DesktopApp> app(
         new openbrowser::desktop::DesktopApp());
-    if (primary_process) {
-        AppendStartupTrace("primary:before-cef-initialize");
-    }
     if (!CefInitialize(main_args, settings, app.get(), sandbox_info)) {
-        AppendStartupTrace("primary:cef-initialize-false");
         return CefGetExitCode();
-    }
-    if (primary_process) {
-        AppendStartupTrace("primary:cef-initialize-ok");
-        AppendStartupTrace("primary:before-message-loop");
     }
 
     CefRunMessageLoop();
-    if (primary_process) {
-        AppendStartupTrace("primary:message-loop-returned");
-    }
     app->ShutdownRuntime();
     CefShutdown();
     app = nullptr;
