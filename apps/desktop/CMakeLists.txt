@@ -155,6 +155,13 @@ if(OS_WINDOWS)
             ${OPENBROWSER_DESKTOP_TARGET}
             PRIVATE "/MAP:${CMAKE_BINARY_DIR}/openbrowser-$<CONFIG>.map"
         )
+        add_custom_command(
+            TARGET ${OPENBROWSER_DESKTOP_TARGET}
+            POST_BUILD
+            COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -Command
+                "$map='${CMAKE_BINARY_DIR}/openbrowser-$<CONFIG>.map'; if (Test-Path -LiteralPath $map) { Write-Host 'Openbrowser startup-related linker symbols:'; Select-String -LiteralPath $map -Pattern 'DesktopApp|OnContextInitialized|TracingDesktopApp' | ForEach-Object { Write-Host $_.Line } }"
+            VERBATIM
+        )
     endif()
 
     COPY_FILES(
