@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/network/network_attribution.h"
 #include "core/tabs/tab.h"
 #include "devtools/network/network_observation_sink.h"
 
@@ -42,6 +43,7 @@ struct NetworkEvent {
     std::size_t transferred_bytes{0};
     std::string error;
     std::string body_preview;
+    core::NetworkAttribution attribution{core::NetworkAttribution::Page};
 };
 
 struct CapturePolicy {
@@ -68,6 +70,7 @@ struct NetworkRequestSummary {
     std::vector<Header> request_headers;
     std::vector<Header> response_headers;
     std::string body_preview;
+    core::NetworkAttribution attribution{core::NetworkAttribution::Page};
 };
 
 struct NetworkTraceFilter {
@@ -109,6 +112,9 @@ public:
 
     [[nodiscard]] std::optional<NetworkRequestSummary> FindRequest(
         const std::string& request_id) const;
+
+    [[nodiscard]] static std::string ExportToHar(
+        const std::vector<NetworkRequestSummary>& requests);
 
     [[nodiscard]] static bool IsSensitiveHeaderName(const std::string& name);
     static void RedactSensitiveHeaders(std::vector<Header>& headers);
