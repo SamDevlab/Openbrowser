@@ -45,6 +45,18 @@ endif()
 ADD_LOGICAL_TARGET("libcef_lib" "${CEF_LIB_DEBUG}" "${CEF_LIB_RELEASE}")
 SET_CEF_TARGET_OUT_DIR()
 
+if(OS_WINDOWS AND MSVC)
+    # CEF's sandboxed Windows client uses the static MSVC runtime. The two
+    # Openbrowser static libraries linked into that client must use the same
+    # runtime or MSVC rejects the final DLL with LNK2038/LNK2005 conflicts.
+    # This is intentionally scoped to the desktop Windows build so the ordinary
+    # engine-independent Core CI keeps its default MSVC runtime configuration.
+    set_property(
+        TARGET openbrowser_core openbrowser_network_trace
+        PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+endif()
+
 if(OS_LINUX)
     add_executable(${OPENBROWSER_DESKTOP_TARGET} ${OPENBROWSER_DESKTOP_SOURCES})
     SET_EXECUTABLE_TARGET_PROPERTIES(${OPENBROWSER_DESKTOP_TARGET})
