@@ -43,6 +43,30 @@ FocusState StringToFocusState(const std::string_view str) {
     return FocusState::Next;
 }
 
+bool IsValidSessionDocument(const std::string_view content) {
+    const auto root = storage::ParseJson(content);
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+        return false;
+    }
+    if (root->GetSizeT("schema_version", 0) != 1) {
+        return false;
+    }
+
+    const auto* clean_shutdown = root->Find("clean_shutdown");
+    const auto* active_tab = root->Find("active_tab_id");
+    const auto* tabs = root->Find("tabs");
+    const auto* focus_items = root->Find("focus_items");
+
+    const bool active_tab_valid = active_tab != nullptr &&
+        (active_tab->type == storage::JsonValue::Type::Null ||
+         active_tab->type == storage::JsonValue::Type::String);
+
+    return clean_shutdown != nullptr && clean_shutdown->type == storage::JsonValue::Type::Bool &&
+           active_tab_valid &&
+           tabs != nullptr && tabs->type == storage::JsonValue::Type::Array &&
+           focus_items != nullptr && focus_items->type == storage::JsonValue::Type::Array;
+}
+
 }  // namespace
 
 SessionSnapshot SessionPersistence::CaptureSnapshot(
@@ -100,7 +124,6 @@ bool SessionPersistence::RestoreSession(
     BrowserSession& session,
     FocusQueue& queue,
     const SessionSnapshot& snapshot) {
-    // 1. Restore focus items
     for (const auto& item : snapshot.focus_items) {
         if (!queue.Contains(item.id)) {
             static_cast<void>(queue.Enqueue({
@@ -113,7 +136,6 @@ bool SessionPersistence::RestoreSession(
         }
     }
 
-    // 2. Restore tabs
     if (snapshot.tabs.empty()) {
         return true;
     }
@@ -151,7 +173,6 @@ bool SessionPersistence::RestoreSession(
         static_cast<void>(session.ActivateTab(*target_active_id));
     }
 
-    // 3. Synchronize tab closures with focus queue to ensure tab_id consistency
     FocusSessionController::SynchronizeTabClosures(session, queue);
 
     return true;
@@ -173,7 +194,6 @@ std::string SessionPersistence::Serialize(const SessionSnapshot& snapshot) {
     }
     out += ",\n";
 
-    // Tabs
     out += "  \"tabs\": [\n";
     for (std::size_t i = 0; i < snapshot.tabs.size(); ++i) {
         const auto& tab = snapshot.tabs[i];
@@ -197,7 +217,6 @@ std::string SessionPersistence::Serialize(const SessionSnapshot& snapshot) {
     }
     out += "  ],\n";
 
-    // Focus items
     out += "  \"focus_items\": [\n";
     for (std::size_t i = 0; i < snapshot.focus_items.size(); ++i) {
         const auto& item = snapshot.focus_items[i];
@@ -232,8 +251,12 @@ std::string SessionPersistence::Serialize(const SessionSnapshot& snapshot) {
 }
 
 std::optional<SessionSnapshot> SessionPersistence::Deserialize(const std::string_view json) {
+    if (!IsValidSessionDocument(json)) {
+        return std::nullopt;
+    }
+
     const auto root = storage::ParseJson(json);
-    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+    if (!root.has_value()) {
         return std::nullopt;
     }
 
@@ -287,10 +310,7 @@ bool SessionPersistence::SaveToFile(
 std::optional<SessionSnapshot> SessionPersistence::LoadFromFile(
     const std::filesystem::path& file_path) {
     if (file_path.empty()) return std::nullopt;
-    const auto result = storage::ReadFileWithBackupRecovery(file_path, [](std::string_view content) {
-        const auto root = storage::ParseJson(content);
-        return root.has_value() && root->type == storage::JsonValue::Type::Object;
-    });
+    const auto result = storage::ReadFileWithBackupRecovery(file_path, IsValidSessionDocument);
 
     if (!result.success) {
         return std::nullopt;
