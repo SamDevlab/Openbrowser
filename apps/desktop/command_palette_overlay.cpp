@@ -134,7 +134,7 @@ void CommandPaletteOverlay::ExecuteTopResult() {
 
 void CommandPaletteOverlay::ExecuteAction(const std::string& action_id) {
     SetVisible(false);
-    action_registry_.ExecuteAction(action_id);
+    static_cast<void>(action_registry_.ExecuteAction(action_id));
     if (on_action_executed_) {
         on_action_executed_(action_id);
     }

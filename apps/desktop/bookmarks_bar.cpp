@@ -101,14 +101,14 @@ void BookmarksBar::BookmarkCurrentPage() {
     item.url = active_tab->url;
     item.title = title;
     item.workspace_id = workspace;
-    bookmark_manager_.AddBookmark(std::move(item));
+    static_cast<void>(bookmark_manager_.AddBookmark(std::move(item)));
     RebuildBar();
 }
 
 void BookmarksBar::NavigateTo(const std::string& url) {
     const auto& active_id = session_.ActiveTabId();
     if (active_id && !url.empty()) {
-        session_.Navigate(*active_id, url);
+        static_cast<void>(session_.Navigate(*active_id, url));
     }
 }
 

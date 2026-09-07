@@ -101,13 +101,13 @@ void DownloadsPanel::ToggleVisibility() {
 void DownloadsPanel::HandleAction(TransferAction action, const std::string& transfer_id) {
     switch (action) {
     case TransferAction::Pause:
-        transfer_broker_.PauseTransfer(transfer_id);
+        static_cast<void>(transfer_broker_.PauseTransfer(transfer_id));
         break;
     case TransferAction::Resume:
-        transfer_broker_.ResumeTransfer(transfer_id);
+        static_cast<void>(transfer_broker_.ResumeTransfer(transfer_id));
         break;
     case TransferAction::Cancel:
-        transfer_broker_.CancelTransfer(transfer_id);
+        static_cast<void>(transfer_broker_.CancelTransfer(transfer_id));
         break;
     case TransferAction::Close:
         SetVisible(false);
