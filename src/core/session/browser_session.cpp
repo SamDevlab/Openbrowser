@@ -58,7 +58,9 @@ bool BrowserSession::OpenTab(Tab tab, const bool activate) {
     return true;
 }
 
-bool BrowserSession::CloseTab(const TabId& tab_id) {
+bool BrowserSession::CloseTab(
+    const TabId& tab_id,
+    const CloseActivationPolicy activation_policy) {
     const auto it = FindMutable(tab_id);
     if (it == tabs_.end()) {
         return false;
@@ -72,7 +74,9 @@ bool BrowserSession::CloseTab(const TabId& tab_id) {
 
     if (was_active) {
         active_tab_id_.reset();
-        ActivateAfterClose(closed_index);
+        if (activation_policy == CloseActivationPolicy::ActivateFallback) {
+            ActivateAfterClose(closed_index);
+        }
     }
 
     NotifyObservers();

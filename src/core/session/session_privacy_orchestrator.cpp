@@ -77,7 +77,8 @@ bool SessionPrivacyOrchestrator::EnterPrivateMode() {
 }
 
 void SessionPrivacyOrchestrator::ExitPrivateMode() {
-    // 1. Close all ephemeral tabs first
+    // 1. Close all ephemeral tabs with DoNotActivateFallback so no persistent
+    //    tab is activated during the private mode transition.
     std::vector<TabId> ephemeral_ids;
     for (const auto& t : session_.Tabs()) {
         if (t.is_ephemeral) {
@@ -85,7 +86,7 @@ void SessionPrivacyOrchestrator::ExitPrivateMode() {
         }
     }
     for (const auto& tid : ephemeral_ids) {
-        static_cast<void>(session_.CloseTab(tid));
+        static_cast<void>(session_.CloseTab(tid, CloseActivationPolicy::DoNotActivateFallback));
     }
 
     // 2. Disable ephemeral engine mode
@@ -107,7 +108,7 @@ void SessionPrivacyOrchestrator::ExitPrivateMode() {
         on_private_mode_changed_(false);
     }
 
-    // 6. Restore persistent tabs
+    // 6. Only now restore or activate a persistent tab
     if (session_.Tabs().empty()) {
         // All persistent tabs were closed; create a new persistent tab
         Tab def_tab;
@@ -118,12 +119,10 @@ void SessionPrivacyOrchestrator::ExitPrivateMode() {
         def_tab.is_ephemeral = false;
         static_cast<void>(session_.OpenTab(std::move(def_tab), true));
     } else {
-        if (!session_.ActiveTabId().has_value() || session_.FindTab(*session_.ActiveTabId()) == nullptr) {
-            for (const auto& t : session_.Tabs()) {
-                if (!t.is_ephemeral) {
-                    static_cast<void>(session_.ActivateTab(t.id));
-                    break;
-                }
+        for (const auto& t : session_.Tabs()) {
+            if (!t.is_ephemeral) {
+                static_cast<void>(session_.ActivateTab(t.id));
+                break;
             }
         }
     }

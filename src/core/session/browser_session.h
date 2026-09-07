@@ -12,6 +12,11 @@
 
 namespace openbrowser::core {
 
+enum class CloseActivationPolicy {
+    ActivateFallback,
+    DoNotActivateFallback,
+};
+
 class BrowserSession final : public engine::BrowserEngineEventSink {
 public:
     explicit BrowserSession(engine::BrowserEngine& engine) noexcept;
@@ -26,7 +31,9 @@ public:
     void RemoveObserver(BrowserSessionObserver* observer) noexcept;
 
     [[nodiscard]] bool OpenTab(Tab tab, bool activate = true);
-    [[nodiscard]] bool CloseTab(const TabId& tab_id);
+    [[nodiscard]] bool CloseTab(
+        const TabId& tab_id,
+        CloseActivationPolicy activation_policy = CloseActivationPolicy::ActivateFallback);
     [[nodiscard]] bool ActivateTab(const TabId& tab_id);
     [[nodiscard]] bool Navigate(const TabId& tab_id, std::string url);
     [[nodiscard]] bool GoBack(const TabId& tab_id);

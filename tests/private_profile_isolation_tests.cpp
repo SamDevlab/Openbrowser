@@ -356,6 +356,9 @@ void TestPrivateTabVisibilityAndActivationGuard() {
 }
 
 // 7. Behavioral Scenario: Exit Private Mode with existing normal tabs restores persistent tab
+// Proves strict event ordering on MockBrowserEngine:
+// CloseTab(B) & CloseTab(C) -> SetEphemeralMode(false) -> PurgeEphemeralContext() -> ActivateTab(A)
+// and explicitly rejects any premature activation of persistent tab before engine reset.
 void TestPrivateExitWithNormalTabsRestoresPersistentTab() {
     using namespace openbrowser::core;
     MockBrowserEngine engine;
@@ -363,18 +366,32 @@ void TestPrivateExitWithNormalTabsRestoresPersistentTab() {
     ProfileManager profile_mgr;
     SessionPrivacyOrchestrator orchestrator(session, profile_mgr, &engine);
 
+    // Persistent Tab A
     Tab normal_tab;
-    normal_tab.id = "tab-persistent-main";
+    normal_tab.id = "tab-persistent-A";
     normal_tab.url = "https://work.example.com";
     normal_tab.title = "Work Tab";
     normal_tab.lifecycle = TabLifecycle::Active;
     normal_tab.is_ephemeral = false;
-    Require(session.OpenTab(std::move(normal_tab), true), "Opened normal tab");
+    Require(session.OpenTab(std::move(normal_tab), true), "Opened persistent tab A");
 
-    // Enter Private Mode and navigate
+    // Enter Private Mode -> creates Private Tab B
     Require(orchestrator.EnterPrivateMode(), "Entered Private Mode");
-    const auto priv_tab_id = *session.ActiveTabId();
-    Require(session.Navigate(priv_tab_id, "https://secret.org"), "Navigated private tab");
+    const auto priv_b_id = *session.ActiveTabId();
+
+    // Open a second Private Tab C (active)
+    Tab priv_c;
+    priv_c.id = "private-tab-C";
+    priv_c.url = "https://confidential.example.org";
+    priv_c.title = "Confidential C";
+    priv_c.lifecycle = TabLifecycle::Active;
+    priv_c.is_ephemeral = true;
+    Require(session.OpenTab(std::move(priv_c), true), "Opened second private tab C (active)");
+    Require(session.Tabs().size() == 3, "Session has 3 tabs: A, B, C");
+    Require(*session.ActiveTabId() == "private-tab-C", "Tab C is currently active");
+
+    // Clear event log so we observe only the ExitPrivateMode sequence
+    engine.event_log.clear();
 
     // Exit Private Mode
     orchestrator.ExitPrivateMode();
@@ -391,11 +408,57 @@ void TestPrivateExitWithNormalTabsRestoresPersistentTab() {
     }
 
     // Original persistent tab is restored and active
-    Require(session.Tabs().size() == 1, "Only normal tab remains");
-    Require(session.ActiveTabId().has_value() && *session.ActiveTabId() == "tab-persistent-main",
-            "Persistent tab restored as active tab");
-    Require(orchestrator.IsTabVisible(*session.FindTab("tab-persistent-main")),
-            "Restored persistent tab is visible in tab strip");
+    Require(session.Tabs().size() == 1, "Only normal tab A remains");
+    Require(session.ActiveTabId().has_value() && *session.ActiveTabId() == "tab-persistent-A",
+            "Persistent tab A restored as active tab");
+    Require(orchestrator.IsTabVisible(*session.FindTab("tab-persistent-A")),
+            "Restored persistent tab A is visible in tab strip");
+
+    // Verify strict event ordering in engine event log:
+    // 1. CloseTab:private-tab-1 (or B) and CloseTab:private-tab-C must happen FIRST.
+    // 2. SetEphemeralMode(false) must happen AFTER all private tabs are closed.
+    // 3. PurgeEphemeralContext() must happen AFTER SetEphemeralMode(false).
+    // 4. ActivateTab:tab-persistent-A must happen ONLY AFTER SetEphemeralMode(false) & PurgeEphemeralContext().
+    // 5. NO ActivateTab on persistent tab may EVER occur before SetEphemeralMode(false)!
+    std::size_t close_b_idx = std::string::npos;
+    std::size_t close_c_idx = std::string::npos;
+    std::size_t set_ephemeral_false_idx = std::string::npos;
+    std::size_t purge_idx = std::string::npos;
+    std::size_t activate_persistent_idx = std::string::npos;
+
+    for (std::size_t i = 0; i < engine.event_log.size(); ++i) {
+        const auto& ev = engine.event_log[i];
+        if (ev == "CloseTab:" + priv_b_id) {
+            close_b_idx = i;
+        } else if (ev == "CloseTab:private-tab-C") {
+            close_c_idx = i;
+        } else if (ev == "SetEphemeralMode(false)") {
+            set_ephemeral_false_idx = i;
+        } else if (ev == "PurgeEphemeralContext()") {
+            purge_idx = i;
+        } else if (ev == "ActivateTab:tab-persistent-A") {
+            activate_persistent_idx = i;
+        }
+    }
+
+    Require(close_b_idx != std::string::npos, "CloseTab(B) logged");
+    Require(close_c_idx != std::string::npos, "CloseTab(C) logged");
+    Require(set_ephemeral_false_idx != std::string::npos, "SetEphemeralMode(false) logged");
+    Require(purge_idx != std::string::npos, "PurgeEphemeralContext() logged");
+    Require(activate_persistent_idx != std::string::npos, "ActivateTab(A) logged");
+
+    Require(close_b_idx < set_ephemeral_false_idx, "CloseTab(B) must precede SetEphemeralMode(false)");
+    Require(close_c_idx < set_ephemeral_false_idx, "CloseTab(C) must precede SetEphemeralMode(false)");
+    Require(set_ephemeral_false_idx < activate_persistent_idx,
+            "SetEphemeralMode(false) MUST precede ActivateTab(persistent A)");
+    Require(purge_idx < activate_persistent_idx,
+            "PurgeEphemeralContext() MUST precede ActivateTab(persistent A)");
+
+    // Explicit negative assertion: Persistent tab A must NEVER be activated before SetEphemeralMode(false)
+    for (std::size_t i = 0; i < set_ephemeral_false_idx; ++i) {
+        Require(engine.event_log[i] != "ActivateTab:tab-persistent-A",
+                "REJECTION ASSERTION: Persistent tab A was activated prematurely before engine reset!");
+    }
 }
 
 // 8. Behavioral Scenario: Exit Private Mode without normal tabs creates new persistent tab AFTER engine reset
