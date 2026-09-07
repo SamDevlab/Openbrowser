@@ -21,13 +21,14 @@ class BrowserSession;
 class CefBoxLayout;
 class CefButtonDelegate;
 class CefPanelDelegate;
+class CefTextfield;
+class CefTextfieldDelegate;
 
 namespace openbrowser::desktop {
 
 class NetworkLabPanel final : public devtools::network::NetworkTraceObserver,
                               public core::BrowserSessionObserver {
 public:
-    // M7.4: enhanced constructor accepts M7 subsystems (non-owning refs/ptrs).
     NetworkLabPanel(
         devtools::network::NetworkTraceBuffer& trace_buffer,
         core::BrowserSession& session,
@@ -45,19 +46,15 @@ public:
     [[nodiscard]] bool IsVisible() const;
     void ToggleVisibility();
 
-    // NetworkTraceObserver
     void OnTraceEventAppended(const devtools::network::NetworkEvent& event) override;
     void OnTraceCleared() override;
-
-    // BrowserSessionObserver
     void OnBrowserSessionChanged(const core::BrowserSession& session) override;
 
 private:
-    // M7.4: active sub-view tab.
     enum class ActiveTab {
         Requests,
-        Connections, // M7.1
-        Decisions,   // M7.2
+        Connections,
+        Decisions,
     };
 
     enum class PanelAction {
@@ -68,7 +65,6 @@ private:
         DeselectRequest,
         Clear,
         Close,
-        // M7.4
         SwitchToRequests,
         SwitchToConnections,
         SwitchToDecisions,
@@ -77,25 +73,28 @@ private:
 
     class PanelActionDelegate;
     class PanelDelegate;
+    class QueryFieldDelegate;
 
     void HandleAction(PanelAction action, const std::string& request_id = {});
+    void SetPendingStructuredQuery(std::string query);
+    void ApplyStructuredQuery();
     void RebuildView();
     void BuildTableView(const std::vector<devtools::network::NetworkRequestSummary>& requests);
     void BuildDetailsView(const devtools::network::NetworkRequestSummary& request);
-    void BuildConnectionsView();  // M7.1
-    void BuildDecisionsView();    // M7.2
-    void BuildTabBar();           // M7.4: shared tab strip
+    void BuildConnectionsView();
+    void BuildDecisionsView();
+    void BuildTabBar();
 
     devtools::network::NetworkTraceBuffer& trace_buffer_;
     core::BrowserSession& session_;
     bool filter_active_tab_{false};
     std::string method_filter_{"ALL"};
     std::string status_filter_{"ALL"};
-    std::string search_query_{};
+    std::string structured_query_{};
+    std::string pending_structured_query_{};
     std::optional<std::string> selected_request_id_{std::nullopt};
-    ActiveTab active_tab_{ActiveTab::Requests}; // M7.4
+    ActiveTab active_tab_{ActiveTab::Requests};
 
-    // M7 subsystems (non-owning)
     devtools::network::ConnectionRegistry* connection_registry_{nullptr};
     core::FilterDecisionLog* decision_log_{nullptr};
     devtools::network::ObtraceRecorder* obtrace_recorder_{nullptr};
@@ -103,6 +102,8 @@ private:
     CefRefPtr<CefPanelDelegate> panel_delegate_;
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
+    CefRefPtr<CefTextfieldDelegate> query_delegate_;
+    CefRefPtr<CefTextfield> query_field_;
     std::vector<CefRefPtr<CefButtonDelegate>> delegates_;
 };
 
