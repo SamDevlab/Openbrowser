@@ -145,11 +145,38 @@ static void TestObservedCallbackDurationIsAggregated() {
     std::cout << "PASS: TestObservedCallbackDurationIsAggregated\n";
 }
 
+static void TestProtocolRequiresObservedResponse() {
+    NetworkTraceBuffer buffer;
+
+    NetworkEvent start;
+    start.request_id = "req-proto";
+    start.type = NetworkEventType::RequestStarted;
+    start.url = "https://protocol.example/";
+    start.protocol = "h2";  // adapter-side scheme guess must not escape aggregation
+    buffer.Add(start);
+
+    auto requests = buffer.AggregateRequests();
+    assert(requests.size() == 1);
+    assert(requests.front().protocol.empty());
+
+    NetworkEvent response;
+    response.request_id = "req-proto";
+    response.type = NetworkEventType::ResponseReceived;
+    response.url = "https://protocol.example/";
+    response.status = 200;
+    response.protocol = "unknown";
+    buffer.Add(response);
+
+    requests = buffer.AggregateRequests();
+    assert(requests.front().protocol == "unknown");
+    std::cout << "PASS: TestProtocolRequiresObservedResponse\n";
+}
+
 static void TestSafeExportsRedactSensitiveData() {
     NetworkRequestSummary req;
     req.request_id = "req-safe";
     req.method = "POST";
-    req.url = "https://user:pass@example.test/login?token=super-secret&safe=visible";
+    req.url = "https://user:pass@example.test/login?token=super-secret&safe=visible&api_key=second-secret#section";
     req.status = 401;
     req.protocol = {};
     req.request_headers = {
@@ -168,10 +195,14 @@ static void TestSafeExportsRedactSensitiveData() {
     const auto har = NetworkTraceBuffer::ExportToHar({req});
     const auto obtrace = NetworkTraceBuffer::ExportToObtrace({req});
 
+    assert(har.find("user:pass") == std::string::npos);
     assert(har.find("super-secret") == std::string::npos);
+    assert(har.find("second-secret") == std::string::npos);
     assert(har.find("top-secret") == std::string::npos);
     assert(har.find("secret-cookie") == std::string::npos);
     assert(har.find("do-not-export") == std::string::npos);
+    assert(har.find("safe=visible") != std::string::npos);
+    assert(har.find("#section") != std::string::npos);
     assert(har.find("<redacted>") != std::string::npos);
     assert(har.find("\"send\": -1") != std::string::npos);
     assert(har.find("\"wait\": -1") != std::string::npos);
@@ -179,8 +210,12 @@ static void TestSafeExportsRedactSensitiveData() {
     assert(har.find("observed callback span") != std::string::npos);
     assert(har.find("\"httpVersion\": \"unknown\"") != std::string::npos);
 
+    assert(obtrace.find("user:pass") == std::string::npos);
     assert(obtrace.find("super-secret") == std::string::npos);
+    assert(obtrace.find("second-secret") == std::string::npos);
     assert(obtrace.find("do-not-export") == std::string::npos);
+    assert(obtrace.find("safe=visible") != std::string::npos);
+    assert(obtrace.find("#section") != std::string::npos);
     assert(obtrace.find("<redacted>") != std::string::npos);
     assert(obtrace.find("\"protocol\":\"unknown\"") != std::string::npos);
     assert(obtrace.find("\"observed_duration_ms\":100") != std::string::npos);
@@ -220,6 +255,7 @@ int main() {
     TestNewNetworkEventTypes();
     TestNetworkRequestSummaryFilterFields();
     TestObservedCallbackDurationIsAggregated();
+    TestProtocolRequiresObservedResponse();
     TestSafeExportsRedactSensitiveData();
     TestStructuredQueryCombinesFields();
     std::cout << "All network_lab_enhanced_tests PASSED.\n";
