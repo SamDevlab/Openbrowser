@@ -9,6 +9,7 @@
 #include "include/cef_base.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
+#include "include/cef_download_handler.h"
 #include "include/cef_permission_handler.h"
 #include "include/cef_request_context.h"
 #include "include/views/cef_browser_view.h"
@@ -24,6 +25,7 @@
 
 namespace openbrowser::core {
 class ContentFilter;
+class FileBroker;
 class TransferBroker;
 class CompatibilityMitigationRegistry;
 class UserAgentPolicyEngine;
@@ -73,6 +75,17 @@ public:
 
     void SetTransferBroker(core::TransferBroker* broker) noexcept;
     [[nodiscard]] core::TransferBroker* TransferBroker() const noexcept;
+
+    void SetFileBroker(core::FileBroker* broker) noexcept;
+    [[nodiscard]] core::FileBroker* FileBroker() const noexcept;
+
+    void RegisterDownloadCallback(
+        const std::string& transfer_id,
+        CefRefPtr<CefDownloadItemCallback> callback);
+    void ClearDownloadCallback(const std::string& transfer_id);
+    [[nodiscard]] bool PauseDownload(const std::string& transfer_id);
+    [[nodiscard]] bool ResumeDownload(const std::string& transfer_id);
+    [[nodiscard]] bool CancelDownload(const std::string& transfer_id);
 
     void SetContentFilter(core::ContentFilter* filter) noexcept;
     [[nodiscard]] core::ContentFilter* ContentFilter() const noexcept;
@@ -127,8 +140,6 @@ public:
     void NotifyTitleChanged(const core::TabId& tab_id, std::string title);
     void NotifyRendererCrashed(const core::TabId& tab_id, std::string reason);
 
-    // May be called from CEF's IO thread. Delivery to the Network Lab sink is
-    // always serialized onto the CEF UI thread.
     void PostNetworkEvent(devtools::network::NetworkEvent event);
     void DeliverNetworkEventOnUi(devtools::network::NetworkEvent event);
 
@@ -170,7 +181,9 @@ private:
     std::atomic<devtools::network::NetworkObservationSink*> network_sink_{nullptr};
     std::atomic<core::CapabilityPolicy*> capability_policy_{nullptr};
     std::atomic<core::TransferBroker*> transfer_broker_{nullptr};
+    std::atomic<core::FileBroker*> file_broker_{nullptr};
     std::atomic<core::ContentFilter*> content_filter_{nullptr};
+    std::unordered_map<std::string, CefRefPtr<CefDownloadItemCallback>> download_callbacks_;
     std::unordered_map<uint64_t, PendingPrompt> pending_prompts_;
     std::vector<core::PermissionPromptObserver*> prompt_observers_;
     uint64_t next_media_prompt_id_{0x8000000000000000ULL};
