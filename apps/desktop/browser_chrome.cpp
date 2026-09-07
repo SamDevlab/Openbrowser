@@ -66,10 +66,18 @@ private:
 BrowserChrome::BrowserChrome(
     core::BrowserSession& session,
     CefRefPtr<CefBrowserEngine> engine,
-    std::function<void()> on_toggle_network_lab)
+    std::function<void()> on_toggle_network_lab,
+    std::function<void()> on_toggle_command_palette,
+    std::function<void()> on_toggle_bookmarks_bar,
+    std::function<void()> on_toggle_downloads_panel,
+    std::function<void()> on_toggle_profile)
     : session_(session),
       engine_(std::move(engine)),
-      on_toggle_network_lab_(std::move(on_toggle_network_lab)) {
+      on_toggle_network_lab_(std::move(on_toggle_network_lab)),
+      on_toggle_command_palette_(std::move(on_toggle_command_palette)),
+      on_toggle_bookmarks_bar_(std::move(on_toggle_bookmarks_bar)),
+      on_toggle_downloads_panel_(std::move(on_toggle_downloads_panel)),
+      on_toggle_profile_(std::move(on_toggle_profile)) {
     session_.AddObserver(this);
     if (engine_) {
         engine_->AddPermissionPromptObserver(this);
@@ -106,6 +114,10 @@ BrowserChrome::BrowserChrome(
     security_badge_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleSecurityDetails), "[ 🔒 Secure ]");
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter address");
+    palette_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleCommandPalette), "⌘");
+    bookmarks_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleBookmarksBar), "★");
+    downloads_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleDownloadsPanel), "📥");
+    profile_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleProfile), "[👤 Default]");
     lab_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::ToggleNetworkLab), "Lab");
 
     toolbar_->AddChildView(back_button_);
@@ -122,6 +134,18 @@ BrowserChrome::BrowserChrome(
 
     toolbar_->AddChildView(address_bar_);
     toolbar_layout_->SetFlexForView(address_bar_, 1);
+
+    toolbar_->AddChildView(palette_button_);
+    toolbar_layout_->SetFlexForView(palette_button_, 0);
+
+    toolbar_->AddChildView(bookmarks_button_);
+    toolbar_layout_->SetFlexForView(bookmarks_button_, 0);
+
+    toolbar_->AddChildView(downloads_button_);
+    toolbar_layout_->SetFlexForView(downloads_button_, 0);
+
+    toolbar_->AddChildView(profile_button_);
+    toolbar_layout_->SetFlexForView(profile_button_, 0);
 
     toolbar_->AddChildView(lab_button_);
     toolbar_layout_->SetFlexForView(lab_button_, 0);
@@ -317,6 +341,34 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
         return;
     }
 
+    if (action == ChromeAction::ToggleCommandPalette) {
+        if (on_toggle_command_palette_) {
+            on_toggle_command_palette_();
+        }
+        return;
+    }
+
+    if (action == ChromeAction::ToggleBookmarksBar) {
+        if (on_toggle_bookmarks_bar_) {
+            on_toggle_bookmarks_bar_();
+        }
+        return;
+    }
+
+    if (action == ChromeAction::ToggleDownloadsPanel) {
+        if (on_toggle_downloads_panel_) {
+            on_toggle_downloads_panel_();
+        }
+        return;
+    }
+
+    if (action == ChromeAction::ToggleProfile) {
+        if (on_toggle_profile_) {
+            on_toggle_profile_();
+        }
+        return;
+    }
+
     const auto& active_id = session_.ActiveTabId();
     if (!active_id.has_value()) {
         return;
@@ -334,6 +386,15 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
             break;
         default:
             break;
+    }
+}
+
+void BrowserChrome::SetProfileLabel(const std::string& label) {
+    if (profile_button_) {
+        profile_button_->SetText(label);
+        if (toolbar_) {
+            toolbar_->InvalidateLayout();
+        }
     }
 }
 

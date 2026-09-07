@@ -31,7 +31,11 @@ public:
     explicit BrowserChrome(
         core::BrowserSession& session,
         CefRefPtr<CefBrowserEngine> engine,
-        std::function<void()> on_toggle_network_lab = nullptr);
+        std::function<void()> on_toggle_network_lab = nullptr,
+        std::function<void()> on_toggle_command_palette = nullptr,
+        std::function<void()> on_toggle_bookmarks_bar = nullptr,
+        std::function<void()> on_toggle_downloads_panel = nullptr,
+        std::function<void()> on_toggle_profile = nullptr);
     ~BrowserChrome() override;
 
     BrowserChrome(const BrowserChrome&) = delete;
@@ -44,6 +48,8 @@ public:
     void OnPermissionPromptRequested(const core::PermissionPrompt& prompt) override;
     void OnPermissionPromptDismissed(uint64_t prompt_id) override;
 
+    void SetProfileLabel(const std::string& label);
+
 private:
     enum class ChromeAction {
         Back,
@@ -55,6 +61,10 @@ private:
         BlockPermission,
         DismissPermission,
         ResetOriginPermissions,
+        ToggleCommandPalette,
+        ToggleBookmarksBar,
+        ToggleDownloadsPanel,
+        ToggleProfile,
     };
 
     class ChromeButtonDelegate;
@@ -71,6 +81,10 @@ private:
     core::BrowserSession& session_;
     CefRefPtr<CefBrowserEngine> engine_;
     std::function<void()> on_toggle_network_lab_;
+    std::function<void()> on_toggle_command_palette_;
+    std::function<void()> on_toggle_bookmarks_bar_;
+    std::function<void()> on_toggle_downloads_panel_;
+    std::function<void()> on_toggle_profile_;
 
     CefRefPtr<CefPanel> container_;
     CefRefPtr<CefBoxLayout> container_layout_;
@@ -82,6 +96,10 @@ private:
     CefRefPtr<CefLabelButton> reload_button_;
     CefRefPtr<CefLabelButton> security_badge_;
     CefRefPtr<CefTextfield> address_bar_;
+    CefRefPtr<CefLabelButton> palette_button_;
+    CefRefPtr<CefLabelButton> bookmarks_button_;
+    CefRefPtr<CefLabelButton> downloads_button_;
+    CefRefPtr<CefLabelButton> profile_button_;
     CefRefPtr<CefLabelButton> lab_button_;
 
     // Permission Prompt Banner
