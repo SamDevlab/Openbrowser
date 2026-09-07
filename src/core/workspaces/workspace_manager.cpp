@@ -17,6 +17,20 @@ const Workspace kDefaultWorkspace{
     .is_ephemeral = false,
 };
 
+bool IsValidWorkspaceDocument(const std::string_view content) {
+    const auto root = storage::ParseJson(content);
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+        return false;
+    }
+    if (root->GetSizeT("schema_version", 0) != 1) {
+        return false;
+    }
+    const auto* active = root->Find("active_workspace_id");
+    const auto* workspaces = root->Find("workspaces");
+    return active != nullptr && active->type == storage::JsonValue::Type::String &&
+           workspaces != nullptr && workspaces->type == storage::JsonValue::Type::Array;
+}
+
 }  // namespace
 
 WorkspaceManager::WorkspaceManager() {
@@ -144,7 +158,6 @@ std::string WorkspaceManager::Serialize() const {
 
     std::vector<const Workspace*> to_serialize;
     for (const auto& [_, ws] : workspaces_) {
-        // Never persist ephemeral workspaces
         if (!ws.is_ephemeral) {
             to_serialize.push_back(&ws);
         }
@@ -173,7 +186,8 @@ bool WorkspaceManager::Deserialize(const std::string_view json) {
     }
 
     const auto root = storage::ParseJson(json);
-    if (!root.has_value() || root->type != storage::JsonValue::Type::Object) {
+    if (!root.has_value() || root->type != storage::JsonValue::Type::Object ||
+        root->GetSizeT("schema_version", 0) != 1) {
         return false;
     }
 
@@ -222,10 +236,7 @@ bool WorkspaceManager::SaveToFile(const std::filesystem::path& path) const {
 
 bool WorkspaceManager::LoadFromFile(const std::filesystem::path& path) {
     if (path.empty()) return false;
-    const auto result = storage::ReadFileWithBackupRecovery(path, [](std::string_view content) {
-        const auto root = storage::ParseJson(content);
-        return root.has_value() && root->type == storage::JsonValue::Type::Object;
-    });
+    const auto result = storage::ReadFileWithBackupRecovery(path, IsValidWorkspaceDocument);
 
     if (!result.success) {
         return false;
