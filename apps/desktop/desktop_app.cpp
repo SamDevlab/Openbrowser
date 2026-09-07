@@ -62,15 +62,15 @@ public:
         window->SetTitle("Openbrowser");
 
         // Register window keyboard accelerators
-        window->SetAccelerator(ID_NEW_TAB, 'T', false, true, false);
-        window->SetAccelerator(ID_CLOSE_TAB, 'W', false, true, false);
-        window->SetAccelerator(ID_REOPEN_CLOSED_TAB, 'T', true, true, false);
-        window->SetAccelerator(ID_NEXT_TAB, 0x09 /*VK_TAB*/, false, true, false);
-        window->SetAccelerator(ID_PREV_TAB, 0x09 /*VK_TAB*/, true, true, false);
-        window->SetAccelerator(ID_FOCUS_ADDRESS_BAR, 'L', false, true, false);
-        window->SetAccelerator(ID_RELOAD, 'R', false, true, false);
-        window->SetAccelerator(ID_BACK, 0x25 /*VK_LEFT*/, false, false, true);
-        window->SetAccelerator(ID_FORWARD, 0x27 /*VK_RIGHT*/, false, false, true);
+        window->SetAccelerator(ID_NEW_TAB, 'T', false, true, false, false);
+        window->SetAccelerator(ID_CLOSE_TAB, 'W', false, true, false, false);
+        window->SetAccelerator(ID_REOPEN_CLOSED_TAB, 'T', true, true, false, false);
+        window->SetAccelerator(ID_NEXT_TAB, 0x09 /*VK_TAB*/, false, true, false, false);
+        window->SetAccelerator(ID_PREV_TAB, 0x09 /*VK_TAB*/, true, true, false, false);
+        window->SetAccelerator(ID_FOCUS_ADDRESS_BAR, 'L', false, true, false, false);
+        window->SetAccelerator(ID_RELOAD, 'R', false, true, false, false);
+        window->SetAccelerator(ID_BACK, 0x25 /*VK_LEFT*/, false, false, true, false);
+        window->SetAccelerator(ID_FORWARD, 0x27 /*VK_RIGHT*/, false, false, true, false);
 
         CefRefPtr<CefPanel> root_panel = CefPanel::CreatePanel(nullptr);
         CefBoxLayoutSettings root_settings{};
@@ -509,7 +509,7 @@ void DesktopApp::OnContextInitialized() {
         .shortcut_hint = "Ctrl+R",
         .handler = [this]() {
             if (session_ && session_->ActiveTabId().has_value()) {
-                session_->Reload(*session_->ActiveTabId());
+                static_cast<void>(session_->Reload(*session_->ActiveTabId()));
             }
             return true;
         },
@@ -522,7 +522,7 @@ void DesktopApp::OnContextInitialized() {
         .shortcut_hint = "Alt+Left",
         .handler = [this]() {
             if (session_ && session_->ActiveTabId().has_value()) {
-                session_->GoBack(*session_->ActiveTabId());
+                static_cast<void>(session_->GoBack(*session_->ActiveTabId()));
             }
             return true;
         },
@@ -535,7 +535,7 @@ void DesktopApp::OnContextInitialized() {
         .shortcut_hint = "Alt+Right",
         .handler = [this]() {
             if (session_ && session_->ActiveTabId().has_value()) {
-                session_->GoForward(*session_->ActiveTabId());
+                static_cast<void>(session_->GoForward(*session_->ActiveTabId()));
             }
             return true;
         },
