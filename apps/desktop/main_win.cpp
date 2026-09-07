@@ -4,10 +4,13 @@
 #include <sddl.h>
 #include <windows.h>
 
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "include/cef_app.h"
+#include "include/cef_command_line.h"
 #include "include/cef_sandbox_win.h"
 #include "include/cef_version_info.h"
 
@@ -171,6 +174,41 @@ bool ApplyLpacRuntimeAcl(const std::wstring& runtime_directory) {
            VerifyLpacRuntime(runtime_directory);
 }
 
+bool ConfigureCefStorage(CefSettings& settings) {
+    CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
+    command_line->InitFromString(GetCommandLineW());
+
+    std::filesystem::path storage_directory = L"openbrowser_storage";
+    if (command_line->HasSwitch("storage-dir")) {
+        const auto configured = command_line->GetSwitchValue("storage-dir").ToWString();
+        if (!configured.empty()) {
+            storage_directory = configured;
+        }
+    }
+
+    std::error_code ec;
+    storage_directory = std::filesystem::absolute(storage_directory, ec);
+    if (ec) {
+        return false;
+    }
+    storage_directory = storage_directory.lexically_normal();
+
+    const std::filesystem::path default_cache = storage_directory / L"default";
+    std::filesystem::create_directories(default_cache, ec);
+    if (ec) {
+        return false;
+    }
+
+    // CEF 120+ uses root_cache_path for process-singleton identity and requires
+    // every persistent RequestContext cache path to share this parent. The
+    // Openbrowser workspace contexts already live below --storage-dir, so use
+    // that same absolute local-first root and keep the global profile in its
+    // default child directory.
+    CefString(&settings.root_cache_path).FromWString(storage_directory.wstring());
+    CefString(&settings.cache_path).FromWString(default_cache.wstring());
+    return true;
+}
+
 bool IsPrimaryBrowserProcess() {
     return !HasCommandLineToken(L"--type=");
 }
@@ -191,6 +229,23 @@ int FailSandboxInitialization() {
             MB_OK | MB_ICONERROR);
     }
     return static_cast<int>(ERROR_ACCESS_DENIED);
+}
+
+int FailStorageInitialization() {
+    wchar_t noninteractive[2]{};
+    const bool suppress_dialog = GetEnvironmentVariableW(
+                                     L"OPENBROWSER_NONINTERACTIVE",
+                                     noninteractive,
+                                     static_cast<DWORD>(std::size(noninteractive))) > 0;
+    if (!suppress_dialog) {
+        MessageBoxW(
+            nullptr,
+            L"Openbrowser could not initialize its local browser storage. "
+            L"Choose a writable local storage directory and try again.",
+            L"Openbrowser storage initialization failed",
+            MB_OK | MB_ICONERROR);
+    }
+    return static_cast<int>(ERROR_CANNOT_MAKE);
 }
 
 int RunMain(HINSTANCE instance, void* sandbox_info) {
@@ -235,6 +290,10 @@ int RunMain(HINSTANCE instance, void* sandbox_info) {
         settings.no_sandbox = true;
     }
 #endif
+
+    if (!ConfigureCefStorage(settings)) {
+        return FailStorageInitialization();
+    }
 
     CefRefPtr<openbrowser::desktop::DesktopApp> app(new openbrowser::desktop::DesktopApp());
     if (!CefInitialize(main_args, settings, app.get(), sandbox_info)) {
