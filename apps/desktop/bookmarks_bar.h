@@ -4,6 +4,7 @@
 #include "core/session/browser_session_observer.h"
 
 #include "include/cef_base.h"
+#include "include/views/cef_button.h"
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_panel.h"
 
@@ -58,4 +59,4 @@ private:
     std::vector<CefRefPtr<CefButtonDelegate>> item_delegates_;
 };
 
-} // namespace openbrowser::desktop
+}  // namespace openbrowser::desktop
