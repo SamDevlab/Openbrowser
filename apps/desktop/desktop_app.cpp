@@ -336,7 +336,7 @@ void DesktopApp::OnContextInitialized() {
         }
     }
 
-    tab_strip_ = std::make_unique<TabStrip>(*session_, workspace_manager_.get());
+    tab_strip_ = std::make_unique<TabStrip>(*session_, workspace_manager_.get(), profile_manager_.get());
     bookmarks_bar_ = std::make_unique<BookmarksBar>(*bookmark_manager_, *session_);
     downloads_panel_ = std::make_unique<DownloadsPanel>(*transfer_broker_, *file_broker_);
     command_palette_overlay_ = std::make_unique<CommandPaletteOverlay>(*action_registry_);
@@ -438,18 +438,23 @@ void DesktopApp::ShutdownRuntime() {
 
 void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& session) {
     CEF_REQUIRE_UI_THREAD();
-    const bool is_private = (engine_ && engine_->IsEphemeralMode()) ||
-        (profile_manager_ && profile_manager_->GetActiveProfile() &&
-         profile_manager_->GetActiveProfile()->IsEphemeral());
+    const bool is_profile_private = (profile_manager_ && profile_manager_->GetActiveProfile() &&
+                                     profile_manager_->GetActiveProfile()->IsEphemeral());
+    const bool is_engine_private = (engine_ && engine_->IsEphemeralMode());
 
-    if (!is_private && history_manager_ && session.ActiveTabId().has_value()) {
+    if (session.ActiveTabId().has_value()) {
         const auto* active_tab = session.FindTab(*session.ActiveTabId());
-        if (active_tab && !active_tab->is_ephemeral && !active_tab->url.empty() && active_tab->url != "about:blank") {
-            history_manager_->RecordVisit(active_tab->url, active_tab->title);
+        if (active_tab) {
+            const bool is_tab_private = active_tab->is_ephemeral;
+            const bool is_private = is_profile_private || is_engine_private || is_tab_private;
+
+            if (!is_private && history_manager_ && !active_tab->url.empty() && active_tab->url != "about:blank") {
+                history_manager_->RecordVisit(active_tab->url, active_tab->title);
+            }
+            if (!is_private) {
+                SaveCurrentSession(false);
+            }
         }
-    }
-    if (!is_private) {
-        SaveCurrentSession(false);
     }
 }
 
@@ -488,21 +493,63 @@ void DesktopApp::ToggleProfile() {
     }
     auto active = profile_manager_->GetActiveProfile();
     if (active && active->IsEphemeral()) {
+        // Exiting Private Mode: close all private tabs first
+        if (session_) {
+            std::vector<core::TabId> ephemeral_tab_ids;
+            for (const auto& t : session_->Tabs()) {
+                if (t.is_ephemeral) {
+                    ephemeral_tab_ids.push_back(t.id);
+                }
+            }
+            for (const auto& tid : ephemeral_tab_ids) {
+                session_->CloseTab(tid);
+            }
+            if (session_->Tabs().empty()) {
+                static std::size_t s_def_counter = 0;
+                core::Tab def_tab;
+                def_tab.id = "tab-" + std::to_string(++s_def_counter);
+                def_tab.url = "https://example.com/";
+                def_tab.title = "New Tab";
+                def_tab.lifecycle = core::TabLifecycle::Active;
+                def_tab.is_ephemeral = false;
+                session_->OpenTab(std::move(def_tab), true);
+            } else if (!session_->ActiveTabId().has_value() || session_->FindTab(*session_->ActiveTabId()) == nullptr) {
+                session_->ActivateTab(session_->Tabs().front().id);
+            }
+        }
+
         profile_manager_->SetActiveProfile("default");
         profile_manager_->PurgeEphemeralProfiles();
         if (engine_) {
             engine_->SetEphemeralMode(false);
             engine_->PurgeEphemeralContext();
         }
+        if (obtrace_recorder_) {
+            obtrace_recorder_->SetPrivateMode(false);
+        }
         if (chrome_) {
             chrome_->SetProfileLabel("[👤 Default]");
         }
     } else {
+        // Entering Private Mode: create ephemeral profile, switch engine, and open a private tab
         auto eph = profile_manager_->CreateEphemeralProfile("Private Session");
         if (eph) {
             profile_manager_->SetActiveProfile(eph->GetId());
             if (engine_) {
                 engine_->SetEphemeralMode(true);
+            }
+            if (obtrace_recorder_) {
+                obtrace_recorder_->SetPrivateMode(true);
+            }
+            if (session_) {
+                static std::size_t s_priv_counter = 0;
+                core::Tab priv_tab;
+                priv_tab.id = "private-tab-" + std::to_string(++s_priv_counter);
+                priv_tab.url = "https://example.com/";
+                priv_tab.title = "Private Tab";
+                priv_tab.lifecycle = core::TabLifecycle::Active;
+                priv_tab.is_ephemeral = true;
+                session_->OpenTab(std::move(priv_tab), true);
             }
             if (chrome_) {
                 chrome_->SetProfileLabel("[🕶 Private]");

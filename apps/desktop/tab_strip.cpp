@@ -1,5 +1,6 @@
 #include "tab_strip.h"
 
+#include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
 #include "core/workspaces/workspace_manager.h"
 
@@ -36,8 +37,11 @@ private:
 
 TabStrip::TabStrip(
     core::BrowserSession& session,
-    core::WorkspaceManager* workspace_manager)
-    : session_(session), workspace_manager_(workspace_manager) {
+    core::WorkspaceManager* workspace_manager,
+    core::ProfileManager* profile_manager)
+    : session_(session),
+      workspace_manager_(workspace_manager),
+      profile_manager_(profile_manager) {
     session_.AddObserver(this);
 
     panel_ = CefPanel::CreatePanel(nullptr);
@@ -95,12 +99,16 @@ void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id
             if (workspace_manager_ != nullptr) {
                 ws_id = workspace_manager_->ActiveWorkspaceId();
             }
+            const bool is_ephemeral = (profile_manager_ != nullptr &&
+                                       profile_manager_->GetActiveProfile() != nullptr &&
+                                       profile_manager_->GetActiveProfile()->IsEphemeral());
             core::Tab new_tab;
             new_tab.id = new_id;
             new_tab.url = "https://example.com/";
-            new_tab.title = "New Tab";
+            new_tab.title = is_ephemeral ? "Private Tab" : "New Tab";
             new_tab.lifecycle = core::TabLifecycle::Active;
             new_tab.workspace_id = ws_id;
+            new_tab.is_ephemeral = is_ephemeral;
             static_cast<void>(session_.OpenTab(std::move(new_tab), true));
             break;
         }

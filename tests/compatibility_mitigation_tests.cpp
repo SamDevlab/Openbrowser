@@ -86,6 +86,18 @@ void TestUserAgentPolicyEngine() {
 
     std::string ua_fallback = engine.BuildUserAgent("https://normal.com", "Linux", &registry);
     Require(ua_fallback.find("Chrome/122.0.6261.94") != std::string::npos, "Site-scoped mode falls back to standard");
+
+    // Explicit Linux and Windows platform token verification
+    engine.SetMode(UserAgentMode::StandardChromium);
+    std::string ua_linux = engine.BuildUserAgent("https://example.org", "Linux");
+    Require(ua_linux.find("X11; Linux x86_64") != std::string::npos, "Linux UA contains X11; Linux x86_64");
+    auto hints_linux = engine.BuildClientHints("https://example.org", "Linux");
+    Require(hints_linux.sec_ch_ua_platform == "\"Linux\"", "Linux ClientHints platform is \"Linux\"");
+
+    std::string ua_win = engine.BuildUserAgent("https://example.org", "Windows");
+    Require(ua_win.find("Windows NT 10.0; Win64; x64") != std::string::npos, "Windows UA contains Windows NT 10.0; Win64; x64");
+    auto hints_win = engine.BuildClientHints("https://example.org", "Windows");
+    Require(hints_win.sec_ch_ua_platform == "\"Windows\"", "Windows ClientHints platform is \"Windows\"");
 }
 
 } // namespace

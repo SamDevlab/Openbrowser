@@ -60,7 +60,7 @@ ObtraceRecorder::~ObtraceRecorder() {
 }
 
 bool ObtraceRecorder::StartRecording(const std::string& path) {
-    if (recording_) {
+    if (recording_ || is_private_) {
         return false;
     }
     file_.open(path, std::ios::out | std::ios::trunc);
@@ -101,8 +101,19 @@ const std::string& ObtraceRecorder::GetFilePath() const noexcept {
     return path_;
 }
 
+void ObtraceRecorder::SetPrivateMode(bool is_private) noexcept {
+    is_private_ = is_private;
+    if (is_private_ && recording_) {
+        StopRecording();
+    }
+}
+
+bool ObtraceRecorder::IsPrivateMode() const noexcept {
+    return is_private_;
+}
+
 void ObtraceRecorder::OnTraceEventAppended(const NetworkEvent& event) {
-    if (!recording_) {
+    if (!recording_ || is_private_) {
         return;
     }
     WriteEvent(event);

@@ -3,8 +3,10 @@
 #include "core/history/history_manager.h"
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
+#include "core/session/session_history_bridge.h"
 #include "core/session/session_persistence.h"
 #include "core/tabs/tab.h"
+#include "devtools/network/obtrace_recorder.h"
 #include "engine/browser_engine.h"
 
 #include <cassert>
@@ -116,37 +118,113 @@ void TestSessionPersistenceExcludesEphemeralTabs() {
     std::filesystem::remove(temp_file);
 }
 
-// 2. Negative Test: Private browsing visits must NEVER be recorded in HistoryManager.
-void TestHistoryManagerExcludesPrivateVisits() {
+// 2. Behavioral Negative Test: SessionHistoryBridge suppresses history and persistence for private tabs & profiles.
+void TestSessionHistoryBridgeSuppressesPrivateVisits() {
     using namespace openbrowser::core;
+    DummyEngine engine;
+    BrowserSession session(engine);
     HistoryManager history;
+    ProfileManager profile_mgr;
 
-    // Normal visit
-    history.RecordVisit("https://example.com", "Example Home");
-    Require(history.TotalEntries() == 1, "Regular visit recorded");
+    bool session_save_called = false;
+    SessionHistoryBridge bridge(&history, &profile_mgr, [&](bool) {
+        session_save_called = true;
+    });
+    session.AddObserver(&bridge);
 
-    // Ephemeral visits simulation: when session/tab is ephemeral, visit recording is suppressed
-    const bool is_ephemeral_session = true;
-    const std::string private_url = "https://incognito.private/login";
-    const std::string private_title = "Incognito Bank";
+    // Step A: Normal persistent tab navigation -> history records visit and session save is triggered.
+    Tab tab1;
+    tab1.id = "tab-persistent";
+    tab1.url = "https://public.example.org";
+    tab1.title = "Public Site";
+    tab1.lifecycle = TabLifecycle::Active;
+    tab1.is_ephemeral = false;
 
-    if (!is_ephemeral_session) {
-        history.RecordVisit(private_url, private_title);
-    }
+    session_save_called = false;
+    Require(session.OpenTab(std::move(tab1), true), "Opened persistent tab");
+    Require(history.TotalEntries() == 1, "Normal tab visit recorded in history");
+    Require(session_save_called, "Session persistence callback fired for normal tab");
+    Require(!history.Search("public").empty(), "Found public site in history");
 
-    // Negative verification: history does not contain private visit
-    Require(history.TotalEntries() == 1, "History count remains exactly 1");
-    const auto search_results = history.Search("incognito");
-    Require(search_results.empty(), "Zero history matches for private browsing search");
+    // Step B: Ephemeral tab navigation -> must NOT enter history and must NOT trigger session save.
+    Tab tab_priv;
+    tab_priv.id = "tab-private";
+    tab_priv.url = "https://confidential.bank/account";
+    tab_priv.title = "Confidential Bank";
+    tab_priv.lifecycle = TabLifecycle::Active;
+    tab_priv.is_ephemeral = true;
 
-    const auto all = history.ListHistory();
-    for (const auto& entry : all) {
-        Require(entry.url != private_url, "Private URL must not exist in history");
-        Require(entry.title != private_title, "Private title must not exist in history");
-    }
+    session_save_called = false;
+    Require(session.OpenTab(std::move(tab_priv), true), "Opened ephemeral tab");
+    Require(history.TotalEntries() == 1, "History count unchanged after private tab open");
+    Require(!session_save_called, "Session save NOT called for private tab");
+    Require(history.Search("confidential").empty(), "No confidential site in history");
+    Require(history.Search("bank").empty(), "No bank in history");
+
+    // Step C: When active profile is ephemeral, even non-ephemeral tab activity is suppressed.
+    auto eph_profile = profile_mgr.CreateEphemeralProfile("Temp Private");
+    Require(eph_profile != nullptr, "Created ephemeral profile");
+    profile_mgr.SetActiveProfile(eph_profile->GetId());
+
+    session_save_called = false;
+    Require(session.Navigate("tab-persistent", "https://another-secret.com"), "Navigated persistent tab while profile is private");
+    Require(session.ActivateTab("tab-persistent"), "Activated tab");
+    Require(history.TotalEntries() == 1, "History count still unchanged while in ephemeral profile");
+    Require(!session_save_called, "Session save NOT called while profile is ephemeral");
+    Require(history.Search("another-secret").empty(), "No visit recorded while profile is ephemeral");
+
+    // Step D: Return to default profile -> normal visits resume.
+    profile_mgr.SetActiveProfile("default");
+    profile_mgr.PurgeEphemeralProfiles();
+
+    session_save_called = false;
+    Require(session.Navigate("tab-persistent", "https://welcome-back.org"), "Navigated tab after restoring default profile");
+    Require(session.ActivateTab("tab-persistent"), "Activated tab");
+    Require(history.TotalEntries() == 2, "History resumes recording in persistent mode");
+    Require(session_save_called, "Session save resumed in persistent mode");
+    Require(!history.Search("welcome-back").empty(), "Found post-private visit in history");
+
+    session.RemoveObserver(&bridge);
 }
 
-// 3. Negative Test: Bookmarks are never altered implicitly by private browsing.
+// 3. Behavioral Negative Test: ObtraceRecorder rejects recording when in private mode.
+void TestObtraceRecorderRejectsPrivateRecording() {
+    using namespace openbrowser::devtools::network;
+    ObtraceRecorder recorder;
+
+    const auto temp_path = std::filesystem::temp_directory_path() / "test_private_obtrace.obtrace";
+    std::filesystem::remove(temp_path);
+
+    // Set private mode
+    recorder.SetPrivateMode(true);
+    Require(recorder.IsPrivateMode(), "Recorder is in private mode");
+
+    // StartRecording must fail
+    Require(!recorder.StartRecording(temp_path.string()), "StartRecording must return false in private mode");
+    Require(!recorder.IsRecording(), "Recorder must not be active");
+
+    // Event append must drop silently
+    NetworkEvent ev;
+    ev.request_id = "req-secret-1";
+    ev.url = "https://sensitive.local/data";
+    ev.type = NetworkEventType::RequestStarted;
+    recorder.OnTraceEventAppended(ev);
+
+    Require(recorder.GetRecordedEventCount() == 0, "Zero events recorded");
+    Require(!std::filesystem::exists(temp_path), "No file created on disk in private mode");
+
+    // Entering private mode during active recording must immediately terminate recording
+    recorder.SetPrivateMode(false);
+    Require(recorder.StartRecording(temp_path.string()), "Started recording in normal mode");
+    Require(recorder.IsRecording(), "Recorder is active");
+
+    recorder.SetPrivateMode(true);
+    Require(!recorder.IsRecording(), "Entering private mode must immediately stop recording");
+
+    std::filesystem::remove(temp_path);
+}
+
+// 4. Negative Test: Bookmarks are never altered implicitly by private browsing.
 void TestBookmarksUnchangedByPrivateBrowsing() {
     using namespace openbrowser::core;
     BookmarkManager bookmarks;
@@ -159,13 +237,12 @@ void TestBookmarksUnchangedByPrivateBrowsing() {
 
     // Private browsing activity must not add or mutate bookmarks
     const std::size_t initial_count = bookmarks.TotalBookmarks();
-    // Simulate private session visiting sites
     std::string private_visited_url = "https://secret.local";
     Require(!bookmarks.IsBookmarked(private_visited_url), "Private URL is not bookmarked");
     Require(bookmarks.TotalBookmarks() == initial_count, "Bookmark count unchanged");
 }
 
-// 4. Negative Test: Purging ephemeral profile clears all secrets and session data.
+// 5. Negative Test: Purging ephemeral profile clears all secrets and session data.
 void TestEphemeralProfilePurge() {
     using namespace openbrowser::core;
     ProfileManager profile_mgr;
@@ -196,7 +273,8 @@ int main() {
     std::cout << "Running Private Profile Isolation Negative Tests..." << std::endl;
 
     TestSessionPersistenceExcludesEphemeralTabs();
-    TestHistoryManagerExcludesPrivateVisits();
+    TestSessionHistoryBridgeSuppressesPrivateVisits();
+    TestObtraceRecorderRejectsPrivateRecording();
     TestBookmarksUnchangedByPrivateBrowsing();
     TestEphemeralProfilePurge();
 

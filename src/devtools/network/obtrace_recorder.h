@@ -34,6 +34,9 @@ public:
     [[nodiscard]] std::size_t GetRecordedEventCount() const noexcept;
     [[nodiscard]] const std::string& GetFilePath() const noexcept;
 
+    void SetPrivateMode(bool is_private) noexcept;
+    [[nodiscard]] bool IsPrivateMode() const noexcept;
+
     // NetworkTraceObserver
     void OnTraceEventAppended(const NetworkEvent& event) override;
     void OnTraceCleared() override;
@@ -46,6 +49,7 @@ private:
     bool recording_{false};
     std::size_t event_count_{0};
     bool redact_headers_{true};
+    bool is_private_{false};
 };
 
 } // namespace openbrowser::devtools::network
