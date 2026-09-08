@@ -12,6 +12,7 @@ Openbrowser follows semantic versioning for published releases.
 - Added the Aura design foundation for retractable browser surfaces with Expanded, Compact, Focus and Pinned/Collapsed/Auto-hide behavior models.
 - Added the first retractable Aura sidebar with compact and expanded states for Workspaces, Focus, History & Bookmarks, Downloads, Settings, Commands and Network Lab.
 - Added a browser-owned sidebar visibility action with `Ctrl+Shift+\\` so a fully hidden sidebar can be restored without sacrificing browsing space.
+- Added New Tab 2.0 with responsive quick-access cards, compact browser-context hints and CSS-only per-tab controls for wallpaper and optional modules.
 
 ### Changed
 
@@ -24,6 +25,7 @@ Openbrowser follows semantic versioning for published releases.
 - Focus is hidden by default and opens as a temporary side surface from the Aura rail instead of permanently consuming content width.
 - Focus, History & Bookmarks, Downloads, Settings and Network Lab now behave as mutually exclusive transient surfaces so opening one automatically returns space used by another.
 - Desktop-created tabs and startup fallbacks now use the first-party New Tab URL instead of the legacy synthetic placeholder.
+- New Tab 2.0 keeps search/navigation as the dominant action, lets secondary modules retract without JavaScript, provides three local-only wallpaper treatments, and adapts the composition for narrow or short viewports.
 
 ## [0.2.0] - 2026-09-08
 
