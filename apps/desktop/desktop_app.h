@@ -5,6 +5,7 @@
 #include "cef_browser_engine.h"
 #include "command_palette_overlay.h"
 #include "downloads_panel.h"
+#include "library_panel.h"
 #include "settings_panel.h"
 #include "core/bookmarks/bookmark_manager.h"
 #include "core/capabilities/capability_policy.h"
@@ -66,6 +67,7 @@ private:
     void ToggleCommandPalette();
     void ToggleBookmarksBar();
     void ToggleDownloadsPanel();
+    void ToggleLibraryPanel();
     void ToggleSettingsPanel();
     void ToggleProfile();
     void ApplySettings(const core::BrowserSettings& settings);
@@ -88,6 +90,7 @@ private:
     std::unique_ptr<BrowserChrome> chrome_;
     std::unique_ptr<BookmarksBar> bookmarks_bar_;
     std::unique_ptr<DownloadsPanel> downloads_panel_;
+    std::unique_ptr<LibraryPanel> library_panel_;
     std::unique_ptr<SettingsPanel> settings_panel_;
     std::unique_ptr<CommandPaletteOverlay> command_palette_overlay_;
     std::unique_ptr<FocusSidebar> focus_sidebar_;

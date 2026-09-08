@@ -10,9 +10,12 @@ Openbrowser follows semantic versioning for published releases.
 
 - Added a first-party Openbrowser new-tab page served locally by the desktop runtime with no remote assets or scripts.
 - Added a native Settings drawer for local startup, search-provider, and downloads preferences, accessible through the command palette.
+- Added a native History & Bookmarks library with recent-history controls and workspace-scoped bookmark browsing.
 
 ### Changed
 
+- History can now be opened, removed entry-by-entry, or cleared from browser-owned UI; Private mode keeps persistent history hidden and immutable.
+- Bookmarks can now be opened and removed from the library while Private mode exposes persistent bookmarks as read-only.
 - Settings changes now apply immediately to address-bar search behavior and the download destination broker while remaining persisted in `settings.json`.
 - Resetting preferences restores the first-party Openbrowser new-tab page as the startup default.
 - Fresh profiles now start on the Openbrowser new-tab surface instead of a generic blank/placeholder page.

@@ -316,6 +316,17 @@ void DesktopApp::OnContextInitialized() {
         },
     });
     action_registry_->RegisterAction({
+        .id = "library.toggle_panel",
+        .title = "Open History & Bookmarks",
+        .description = "Show or hide the local history and bookmarks library",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "",
+        .handler = [this]() {
+            ToggleLibraryPanel();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
         .id = "settings.toggle_panel",
         .title = "Open Settings",
         .description = "Show or hide local browser preferences",
@@ -478,6 +489,17 @@ void DesktopApp::OnContextInitialized() {
             ApplySettings(settings);
         });
     chrome_->View()->AddChildView(settings_panel_->View());
+
+    library_panel_ = std::make_unique<LibraryPanel>(
+        *history_manager_,
+        *bookmark_manager_,
+        *session_,
+        [this]() {
+            if (bookmarks_bar_) {
+                bookmarks_bar_->RebuildBar();
+            }
+        });
+    chrome_->View()->AddChildView(library_panel_->View());
     chrome_->View()->Layout();
 
     focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);
@@ -629,6 +651,7 @@ void DesktopApp::OnContextInitialized() {
                 command_palette_overlay_.reset();
                 bookmarks_bar_.reset();
                 downloads_panel_.reset();
+                library_panel_.reset();
                 settings_panel_.reset();
                 network_lab_panel_.reset();
                 focus_sidebar_.reset();
@@ -677,6 +700,7 @@ void DesktopApp::ShutdownRuntime() {
     command_palette_overlay_.reset();
     bookmarks_bar_.reset();
     downloads_panel_.reset();
+    library_panel_.reset();
     settings_panel_.reset();
     ua_engine_.reset();
     mitigation_registry_.reset();
@@ -736,6 +760,13 @@ void DesktopApp::ToggleDownloadsPanel() {
     CEF_REQUIRE_UI_THREAD();
     if (downloads_panel_) {
         downloads_panel_->ToggleVisibility();
+    }
+}
+
+void DesktopApp::ToggleLibraryPanel() {
+    CEF_REQUIRE_UI_THREAD();
+    if (library_panel_) {
+        library_panel_->ToggleVisibility();
     }
 }
 
