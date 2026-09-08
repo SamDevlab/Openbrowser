@@ -1,5 +1,7 @@
 #include "core/session/browser_session.h"
 
+#include "core/navigation/internal_urls.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <functional>
@@ -29,6 +31,14 @@ void BrowserSession::RemoveObserver(BrowserSessionObserver* observer) noexcept {
 }
 
 bool BrowserSession::OpenTab(Tab tab, const bool activate) {
+    // Older desktop call sites used example.com as a synthetic new-tab
+    // placeholder. Normalize only those known placeholder titles so a real
+    // user navigation to example.com is never rewritten.
+    if (navigation::IsLegacySyntheticNewTab(tab.url, tab.title)) {
+        tab.url = std::string(
+            tab.is_ephemeral ? navigation::kPrivateNewTabUrl : navigation::kNewTabUrl);
+    }
+
     if (tab.id.empty() || tab.url.empty() || FindTab(tab.id) != nullptr) {
         return false;
     }
@@ -68,7 +78,7 @@ bool BrowserSession::CloseTab(
         return false;
     }
 
-    if (!it->url.empty() && it->url != "about:blank") {
+    if (!navigation::IsBlankOrNewTabUrl(it->url)) {
         closed_tabs_.push_back(ClosedTabRecord{
             .url = it->url,
             .title = it->title,

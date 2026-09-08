@@ -6,8 +6,15 @@ Openbrowser follows semantic versioning for published releases.
 
 ## Unreleased
 
+### Added
+
+- Added a first-party Openbrowser new-tab page served locally by the desktop runtime with no remote assets or scripts.
+
 ### Changed
 
+- Fresh profiles now start on the Openbrowser new-tab surface instead of a generic blank/placeholder page.
+- Synthetic normal tabs are routed to the internal new-tab surface while private tabs remain `about:blank` and ephemeral.
+- Internal blank/new-tab surfaces are excluded from history and the closed-tab stack.
 - Reworked the desktop browser chrome into a compact browser-style toolbar with symbolic back, forward, reload, security, bookmark, downloads, profile, and overflow controls.
 - Removed the always-visible Network Lab control from the primary toolbar; developer tools remain available through the command palette and registered actions.
 - Simplified tab presentation, including active-tab state and close controls.

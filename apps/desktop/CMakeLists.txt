@@ -11,6 +11,8 @@ set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     desktop_app.h
     focus_sidebar.cpp
     focus_sidebar.h
+    internal_pages.cpp
+    internal_pages.h
     tab_strip.cpp
     tab_strip.h
     network_lab_panel.cpp
