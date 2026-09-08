@@ -6,6 +6,8 @@ Openbrowser follows semantic versioning for published releases.
 
 ## Unreleased
 
+## [0.3.0] - 2026-09-08
+
 ### Added
 
 - Started Project Aura, the v0.3.0 design campaign built around Personal, Focused, Elegant and content-first Progressive Chrome principles.
@@ -16,6 +18,7 @@ Openbrowser follows semantic versioning for published releases.
 - Added the Aura Personalization Center with locally persisted theme, accent, sidebar default, New Tab wallpaper and optional module preferences.
 - Added persistent visual workspace identity with browser-owned glyphs and colors for the Aura sidebar.
 - Added the Aura Focus Experience with an expanded Focus drawer and a compact active-session timer indicator.
+- Added shared native Aura interaction and accessibility primitives for consistent CEF button feedback, keyboard traversal and assistive-technology naming.
 
 ### Changed
 
@@ -34,6 +37,16 @@ Openbrowser follows semantic versioning for published releases.
 - Existing `workspaces.json` files remain readable and receive deterministic fallback glyphs when they predate visual workspace identity.
 - Starting a Focus sprint now retracts the Aura sidebar, tab strip, bookmarks bar and other transient drawers while keeping the browsing surface and omnibox available.
 - Pausing, resetting or completing a Focus sprint restores the browser chrome visibility state that was active before Focus, while the compact timer can expand the Focus drawer without ending the sprint.
+- Native Aura controls now use restrained CEF interaction feedback, consistent hover/pressed/selected states and short transient confirmations without introducing layout animation or JavaScript.
+- Aura sidebar and tab-strip controls now expose explicit keyboard/assistive-technology semantics, while active, loading, failed and selected states retain non-color cues.
+- New Tab keyboard focus is now visibly distinguishable in dark, light and forced-colors environments, and reduced-motion preferences suppress cosmetic translation as well as transitions.
+
+### Release readiness
+
+- Version metadata is advanced to `0.3.0`; the tag-driven release workflow requires an exact `v0.3.0` tag match.
+- Aura entered feature freeze after the MVP-28 UX and accessibility audit; this release-readiness increment contains no new product feature.
+- The Windows x64 ZIP and `.sha256` asset are built once, smoke-tested from the extracted package, reused by Product Smoke, and only then published.
+- The release remains experimental/pre-alpha and does not claim security hardening or formal accessibility certification.
 
 ## [0.2.0] - 2026-09-08
 
