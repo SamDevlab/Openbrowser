@@ -12,35 +12,40 @@ It uses Chromium through a pinned Chromium Embedded Framework (CEF) adapter, whi
 
 ## Download
 
-The current packaged release is **[Openbrowser v0.2.0](https://github.com/SamDevlab/Openbrowser/releases/tag/v0.2.0)** for Windows x64.
+The current packaged release is **[Openbrowser v0.3.0](https://github.com/SamDevlab/Openbrowser/releases/tag/v0.3.0)** for Windows x64.
 
 Release assets:
 
-- `Openbrowser-0.2.0-windows-x64.zip`
-- `Openbrowser-0.2.0-windows-x64.zip.sha256`
+- `Openbrowser-0.3.0-windows-x64.zip`
+- `Openbrowser-0.3.0-windows-x64.zip.sha256`
 
 Verify the downloaded ZIP against the published `.sha256` file before running it. In PowerShell:
 
 ```powershell
-Get-FileHash .\Openbrowser-0.2.0-windows-x64.zip -Algorithm SHA256
-Get-Content .\Openbrowser-0.2.0-windows-x64.zip.sha256
+Get-FileHash .\Openbrowser-0.3.0-windows-x64.zip -Algorithm SHA256
+Get-Content .\Openbrowser-0.3.0-windows-x64.zip.sha256
 ```
 
 The hashes must match. Then extract the ZIP and run `openbrowser.exe` from the extracted directory.
 
-> v0.2.0 is still an experimental pre-alpha release. It improves the browser's product surface and usability substantially over v0.1.0, but it is not a security-hardened daily driver.
+> v0.3.0 is the first **Project Aura** release, centered on retractable browser chrome, personalization, visual workspaces, Focus and a more recognizable Openbrowser identity. It remains experimental/pre-alpha and is not a security-hardened daily driver.
 
 ## What works today
 
 The current `main` branch includes a native CEF Views browser with:
 
 - tabbed browsing with Back, Forward, Reload, address-bar navigation, and session restore;
-- a first-party local New Tab page with no remote assets or scripts;
+- **Project Aura** browser chrome with a retractable compact/expanded sidebar designed to return space to web content;
+- **New Tab 2.0** with local-only Aura styling, responsive quick access, optional modules and wallpaper treatments;
+- a persistent **Personalization Center** for theme, accent, sidebar defaults, New Tab wallpaper and module visibility;
+- **visual Workspaces** with persistent glyph/color identity and direct switching from the Aura sidebar;
+- an **Aura Focus Experience** that retracts secondary chrome during a sprint and keeps a compact active-session timer;
+- keyboard-visible focus, reduced-motion handling and explicit accessibility names/states across key Aura controls;
 - browser-owned search/address resolution;
 - native Find in Page with live match highlighting, previous/next navigation, and match counts;
 - per-tab page zoom controls from 25% to 500%;
 - standard browser shortcuts including `Ctrl+F`, `Ctrl+H`, `Ctrl+-`, `Ctrl++`, `Ctrl+0`, and `F5`;
-- native Settings for startup behavior, search provider, home page, and downloads directory;
+- native Settings for startup behavior, search provider, home page, downloads directory and Aura appearance preferences;
 - persistent browsing history and bookmarks plus a native History & Bookmarks library;
 - workspace-aware browsing with isolated CEF request contexts;
 - private browsing backed by ephemeral request contexts with history/session persistence suppression;
