@@ -13,6 +13,8 @@ set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     focus_sidebar.h
     internal_pages.cpp
     internal_pages.h
+    library_panel.cpp
+    library_panel.h
     settings_panel.cpp
     settings_panel.h
     tab_strip.cpp
