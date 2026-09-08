@@ -6,14 +6,6 @@ Openbrowser follows semantic versioning for published releases.
 
 ## Unreleased
 
-### Added
-
-- Added the initial local-fixture Web Compatibility Differential Harness with a
-  versioned runner-result protocol, deterministic reports, and explicit
-  incompatibility versus crash/timeout classifications.
-- Added reproducible navigation, redirect and JavaScript/storage fixtures plus
-  a Windows Openbrowser lifecycle adapter that rejects abnormal shutdowns.
-
 ## [0.3.0] - 2026-09-08
 
 ### Added
@@ -27,6 +19,8 @@ Openbrowser follows semantic versioning for published releases.
 - Added persistent visual workspace identity with browser-owned glyphs and colors for the Aura sidebar.
 - Added the Aura Focus Experience with an expanded Focus drawer and a compact active-session timer indicator.
 - Added shared native Aura interaction and accessibility primitives for consistent CEF button feedback, keyboard traversal and assistive-technology naming.
+- Added the initial local-fixture Web Compatibility Differential Harness with a versioned runner-result protocol, deterministic reports, and explicit incompatibility versus crash/timeout classifications.
+- Added reproducible navigation, redirect and JavaScript/storage fixtures plus a Windows Openbrowser lifecycle adapter that rejects abnormal shutdowns.
 
 ### Changed
 

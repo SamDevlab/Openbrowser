@@ -14,6 +14,7 @@ The release remains experimental/pre-alpha and is not positioned as a security-h
 - **Focus Experience** that retracts secondary chrome during a sprint and keeps a compact active-session timer available without ending the session.
 - **Motion and microinteraction pass** using native CEF Views feedback, consistent hover/pressed/selected states and short transient confirmations.
 - **UX and accessibility hardening** with explicit focusable controls, accessible names/states, visible keyboard focus, forced-colors treatment and reduced-motion support.
+- **Web Compatibility Differential Harness** with deterministic local fixtures, a versioned runner-result protocol, and distinct incompatibility versus crash/timeout classifications.
 - Browser chrome remains intentionally compact: Find, Zoom, developer tools and secondary surfaces stay available without permanently consuming content width.
 
 ## Product behavior
@@ -45,6 +46,16 @@ The MVP-28 release-quality audit hardened key Aura surfaces without claiming for
 - high-contrast visible focus on New Tab controls;
 - forced-colors focus treatment;
 - reduced-motion handling that removes cosmetic translation and transitions where requested.
+
+## Web compatibility validation
+
+The release includes the initial M8 compatibility-testing slice:
+
+- reproducible local navigation, redirect and JavaScript/storage fixtures;
+- a Windows lifecycle adapter that drives the packaged browser and requires zero exit plus `clean_shutdown`;
+- deterministic JSON reports that keep incompatibility separate from runner crashes and timeouts.
+
+This is an execution and comparison boundary, not a claim of full Web Platform Tests coverage, rendering reftests or a bundled pinned reference-browser adapter.
 
 ## Distribution
 
