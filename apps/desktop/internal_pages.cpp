@@ -48,6 +48,7 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
       --aura-accent: #7567ff;
       --aura-accent-2: #b35cff;
       --aura-blue: #4ec7ff;
+      --aura-focus: #f5f5f7;
     }
 
     * { box-sizing: border-box; }
@@ -287,12 +288,18 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
       transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
     }
 
-    .shortcut:hover,
-    .shortcut:focus-visible {
+    .shortcut:hover {
       border-color: var(--aura-border);
       background: rgba(255,255,255,0.055);
-      outline: none;
       transform: translateY(-1px);
+    }
+
+    .shortcut:focus-visible {
+      border-color: var(--aura-focus);
+      background: rgba(255,255,255,0.075);
+      outline: 2px solid var(--aura-focus);
+      outline-offset: 2px;
+      transform: none;
     }
 
     .shortcut-badge {
@@ -357,6 +364,12 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
       font-size: 12px;
     }
 
+    .customize summary:focus-visible {
+      outline: 2px solid var(--aura-focus);
+      outline-offset: 2px;
+      border-radius: 12px;
+    }
+
     .customize summary::-webkit-details-marker { display: none; }
 
     .customize summary::after {
@@ -405,6 +418,15 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
     }
 
     .option:hover { background: rgba(255,255,255,0.065); }
+
+    #wallpaper-aura:focus-visible ~ main label[for="wallpaper-aura"],
+    #wallpaper-midnight:focus-visible ~ main label[for="wallpaper-midnight"],
+    #wallpaper-soft:focus-visible ~ main label[for="wallpaper-soft"],
+    #show-shortcuts:focus-visible ~ main label[for="show-shortcuts"],
+    #show-context:focus-visible ~ main label[for="show-context"] {
+      outline: 2px solid var(--aura-focus);
+      outline-offset: 2px;
+    }
 
     .swatch {
       width: 14px;
@@ -494,15 +516,32 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
       .shortcut {
         transition: none;
       }
+
+      .shortcut:hover,
+      .shortcut:focus-visible {
+        transform: none;
+      }
+    }
+
+    @media (forced-colors: active) {
+      .shortcut:focus-visible,
+      .customize summary:focus-visible,
+      #wallpaper-aura:focus-visible ~ main label[for="wallpaper-aura"],
+      #wallpaper-midnight:focus-visible ~ main label[for="wallpaper-midnight"],
+      #wallpaper-soft:focus-visible ~ main label[for="wallpaper-soft"],
+      #show-shortcuts:focus-visible ~ main label[for="show-shortcuts"],
+      #show-context:focus-visible ~ main label[for="show-context"] {
+        outline: 2px solid Highlight;
+      }
     }
   </style>
 </head>
 <body>
-  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-aura" {{WALLPAPER_AURA_CHECKED}}>
-  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-midnight" {{WALLPAPER_MIDNIGHT_CHECKED}}>
-  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-soft" {{WALLPAPER_SOFT_CHECKED}}>
-  <input class="preference-control" type="checkbox" id="show-shortcuts" {{SHOW_SHORTCUTS_CHECKED}}>
-  <input class="preference-control" type="checkbox" id="show-context" {{SHOW_CONTEXT_CHECKED}}>
+  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-aura" aria-label="Use Aura wallpaper" {{WALLPAPER_AURA_CHECKED}}>
+  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-midnight" aria-label="Use Midnight wallpaper" {{WALLPAPER_MIDNIGHT_CHECKED}}>
+  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-soft" aria-label="Use Soft wallpaper" {{WALLPAPER_SOFT_CHECKED}}>
+  <input class="preference-control" type="checkbox" id="show-shortcuts" aria-label="Show Quick access" {{SHOW_SHORTCUTS_CHECKED}}>
+  <input class="preference-control" type="checkbox" id="show-context" aria-label="Show browser hints" {{SHOW_CONTEXT_CHECKED}}>
 
   <div class="wallpaper wallpaper-aura" aria-hidden="true"></div>
   <div class="wallpaper wallpaper-midnight" aria-hidden="true"></div>
@@ -574,9 +613,9 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
         <div class="customize-group">
           <span class="customize-title">Wallpaper</span>
           <div class="options">
-            <label class="option" for="wallpaper-aura"><span class="swatch swatch-aura"></span>Aura</label>
-            <label class="option" for="wallpaper-midnight"><span class="swatch swatch-midnight"></span>Midnight</label>
-            <label class="option" for="wallpaper-soft"><span class="swatch swatch-soft"></span>Soft</label>
+            <label class="option" for="wallpaper-aura"><span class="swatch swatch-aura" aria-hidden="true"></span>Aura</label>
+            <label class="option" for="wallpaper-midnight"><span class="swatch swatch-midnight" aria-hidden="true"></span>Midnight</label>
+            <label class="option" for="wallpaper-soft"><span class="swatch swatch-soft" aria-hidden="true"></span>Soft</label>
           </div>
         </div>
 
@@ -622,6 +661,7 @@ std::string LightThemeCss() {
         --aura-text: #20212a;
         --aura-muted: #686b78;
         --aura-soft: #878a96;
+        --aura-focus: #20212a;
       }
       .wallpaper-aura {
         background:
@@ -644,7 +684,8 @@ std::string LightThemeCss() {
       .search-cue { background: rgba(255,255,255,0.74); box-shadow: 0 18px 48px rgba(50,50,70,0.09); }
       kbd { border-color: rgba(31,34,48,0.13); border-bottom-color: rgba(31,34,48,0.20); background: rgba(31,34,48,0.05); color: #454753; }
       .shortcut { color: #353743; }
-      .shortcut:hover, .shortcut:focus-visible { background: rgba(31,34,48,0.045); }
+      .shortcut:hover { background: rgba(31,34,48,0.045); }
+      .shortcut:focus-visible { background: rgba(31,34,48,0.075); }
       .shortcut-badge { background: rgba(31,34,48,0.055); box-shadow: inset 0 0 0 1px rgba(31,34,48,0.05); color: #2d2f3a; }
       .context-row { background: rgba(31,34,48,0.04); }
       .context-row strong { color: #343641; }
