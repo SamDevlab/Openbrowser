@@ -12,28 +12,23 @@ It uses Chromium through a pinned Chromium Embedded Framework (CEF) adapter, whi
 
 ## Download
 
-The first public packaged release is **[Openbrowser v0.1.0](https://github.com/SamDevlab/Openbrowser/releases/tag/v0.1.0)** for Windows x64.
+The current packaged release is **[Openbrowser v0.2.0](https://github.com/SamDevlab/Openbrowser/releases/tag/v0.2.0)** for Windows x64.
 
 Release assets:
 
-- `Openbrowser-0.1.0-windows-x64.zip`
-- `Openbrowser-0.1.0-windows-x64.zip.sha256`
+- `Openbrowser-0.2.0-windows-x64.zip`
+- `Openbrowser-0.2.0-windows-x64.zip.sha256`
 
-Published ZIP SHA-256:
-
-```text
-a08af717cffc1f3c9fc2096d4d3adeada15af2038108a2bbca1af5910c6310e6
-```
-
-Verify it in PowerShell with:
+Verify the downloaded ZIP against the published `.sha256` file before running it. In PowerShell:
 
 ```powershell
-Get-FileHash .\Openbrowser-0.1.0-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\Openbrowser-0.2.0-windows-x64.zip -Algorithm SHA256
+Get-Content .\Openbrowser-0.2.0-windows-x64.zip.sha256
 ```
 
-Then extract the ZIP and run `openbrowser.exe` from the extracted directory.
+The hashes must match. Then extract the ZIP and run `openbrowser.exe` from the extracted directory.
 
-> `main` already contains product improvements made after v0.1.0. Those changes are not retroactively present in the v0.1.0 ZIP and will ship in a future release.
+> v0.2.0 is still an experimental pre-alpha release. It improves the browser's product surface and usability substantially over v0.1.0, but it is not a security-hardened daily driver.
 
 ## What works today
 
@@ -44,6 +39,7 @@ The current `main` branch includes a native CEF Views browser with:
 - browser-owned search/address resolution;
 - native Find in Page with live match highlighting, previous/next navigation, and match counts;
 - per-tab page zoom controls from 25% to 500%;
+- standard browser shortcuts including `Ctrl+F`, `Ctrl+H`, `Ctrl+-`, `Ctrl++`, `Ctrl+0`, and `F5`;
 - native Settings for startup behavior, search provider, home page, and downloads directory;
 - persistent browsing history and bookmarks plus a native History & Bookmarks library;
 - workspace-aware browsing with isolated CEF request contexts;

@@ -6,6 +6,8 @@ Openbrowser follows semantic versioning for published releases.
 
 ## Unreleased
 
+## [0.2.0] - 2026-09-08
+
 ### Added
 
 - Added a first-party Openbrowser new-tab page served locally by the desktop runtime with no remote assets or scripts.
@@ -33,6 +35,12 @@ Openbrowser follows semantic versioning for published releases.
 - Simplified tab presentation, including active-tab state and close controls.
 - Hid the bookmarks bar by default while preserving one-click access from the toolbar.
 - Simplified permission and site-security banner copy to match the new product-facing chrome.
+
+### Release readiness
+
+- Version metadata is advanced to `0.2.0` and the tag-driven release workflow will require an exact `v0.2.0` tag match.
+- The Windows x64 ZIP and `.sha256` asset are built once, smoke-tested from the extracted package, reused by Product Smoke, and only then published.
+- The release remains experimental/pre-alpha; this version improves product usability but does not claim daily-driver security hardening.
 
 ## [0.1.0] - 2026-09-07
 
