@@ -5,7 +5,9 @@
 #include "include/cef_base.h"
 #include "include/views/cef_panel.h"
 
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -73,9 +75,12 @@ private:
     };
 
     class ActionDelegate;
+    class FeedbackDismissTask;
     class SidebarPanelDelegate;
 
     void HandleAction(Action action, const std::string& target_id);
+    void ShowTransientFeedback(std::string message);
+    void ClearTransientFeedback(std::uint64_t generation);
     void RelayoutWindow();
 
     core::BrowserSession& session_;
@@ -90,6 +95,9 @@ private:
     ActionCallback on_toggle_commands_;
 
     bool collapsed_{true};
+    std::string feedback_message_;
+    std::uint64_t feedback_generation_{0};
+    std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
 
     CefRefPtr<CefPanelDelegate> panel_delegate_;
     CefRefPtr<CefPanel> panel_;
