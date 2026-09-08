@@ -55,6 +55,7 @@ The current `main` branch includes a native CEF Views browser with:
 - content filtering with common EasyList / Adblock Plus rule forms;
 - a command palette and browser-owned actions;
 - a native Network Lab for request inspection, decision tracing, HAR export, and `.obtrace` recording.
+- a local-fixture Web Compatibility Differential Harness with deterministic JSON reports and explicit crash/timeout classification.
 
 CEF/Chromium types remain isolated to the desktop adapter under `apps/desktop/`; the core under `src/core/` stays engine-independent.
 
@@ -208,7 +209,7 @@ Openbrowser is still experimental. Current limitations include:
 - Windows x64 is the only published desktop package;
 - macOS desktop packaging is not enabled;
 - the browser is not security-hardened for sensitive daily use;
-- a full Web Platform Tests/reference-browser differential pipeline is not yet implemented;
+- the initial local-fixture differential harness is implemented, but the full Web Platform Tests/reference-browser matrix, rendering reftests and richer CEF DOM observation bridge are not yet implemented;
 - deep TLS/transport telemetry remains incomplete without a lower-level observation source;
 - hosted multi-device sync is not implemented;
 - BitTorrent / `magnet:` transfer support is not implemented.
@@ -223,6 +224,7 @@ devtools/network/    Network Lab models, tracing, diagnostics, exports
 tests/               Core and integration tests
 docs/                Architecture, milestones, release process
 .github/workflows/   Core, CEF smoke, packaging, and product-smoke CI
+scripts/             Packaging, product smoke, and compatibility harness tooling
 ```
 
 ## License
