@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Openbrowser compatibility navigation</title>
+</head>
+<body>
+  <main id="compatibility-navigation" data-compatibility-marker="navigation-basic">
+    Navigation fixture loaded.
+  </main>
+  <script>
+    fetch('/__compatibility__/ready?token=' + encodeURIComponent(
+      new URLSearchParams(location.search).get('__ob_token') || ''));
+  </script>
+</body>
+</html>

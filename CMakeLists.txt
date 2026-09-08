@@ -375,6 +375,18 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.browser_core_flow COMMAND openbrowser_browser_core_flow_tests)
     # MVP-2 tests
     add_test(NAME openbrowser.local_persistence COMMAND openbrowser_local_persistence_tests)
+
+    # M8 compatibility harness protocol and local-fixture integration test.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(
+            NAME openbrowser.compatibility_harness
+            COMMAND ${Python3_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/compatibility/test_compatibility_harness.py")
+        set_tests_properties(
+            openbrowser.compatibility_harness
+            PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
 endif()
 
 
