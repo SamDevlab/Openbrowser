@@ -9,9 +9,12 @@ Openbrowser follows semantic versioning for published releases.
 ### Added
 
 - Added a first-party Openbrowser new-tab page served locally by the desktop runtime with no remote assets or scripts.
+- Added a native Settings drawer for local startup, search-provider, and downloads preferences, accessible through the command palette.
 
 ### Changed
 
+- Settings changes now apply immediately to address-bar search behavior and the download destination broker while remaining persisted in `settings.json`.
+- Resetting preferences restores the first-party Openbrowser new-tab page as the startup default.
 - Fresh profiles now start on the Openbrowser new-tab surface instead of a generic blank/placeholder page.
 - Synthetic normal tabs are routed to the internal new-tab surface while private tabs remain `about:blank` and ephemeral.
 - Internal blank/new-tab surfaces are excluded from history and the closed-tab stack.
