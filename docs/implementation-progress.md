@@ -82,6 +82,24 @@ All five M2 milestones have been delivered, tested across unit test suites and t
 - **M7.3 Delivered**: Local `.obtrace` Trace Recorder & Versioned File Format (`ObtraceRecorder` subscribing to `NetworkTraceBuffer`, streaming versioned NDJSON events to disk with `trace_start` / `trace_end` sentinels; `NetworkTraceBuffer::ExportToObtrace` static batch export method; full sensitive header redaction preserved).
 - **M7.4 Delivered**: Desktop Network Lab Enhanced Views (`NetworkLabPanel` extended with three-tab design — `[▶ Requests]` / `[▶ Connections]` / `[▶ Decisions]` — surfacing `ConnectionRegistry` and `FilterDecisionLog` data; two new ActionRegistry entries: `devtools.export_har` (`Ctrl+Shift+H`) and `devtools.export_obtrace` (`Ctrl+Shift+O`); `DesktopApp` wired with all M7 subsystems).
 
+## Milestone M8: Web Compatibility Differential Test Harness
+
+- **M8 initial slice Delivered**: Local-fixture differential harness in
+  `scripts/compatibility_harness.py`, versioned JSON runner protocol,
+  deterministic request normalization, explicit incompatibility versus runner
+  crash/timeout classifications, process-tree cleanup, and CTest integration
+  through `tests/compatibility/test_compatibility_harness.py`.
+- **M8 fixtures Delivered**: Reproducible local navigation, redirect and
+  JavaScript/storage fixtures under `tests/compatibility/fixtures/`.
+- **M8 Windows lifecycle adapter Delivered**:
+  `scripts/compatibility-openbrowser-driver.ps1` drives a packaged
+  Openbrowser instance, waits for fixture readiness, requires zero exit and
+  `clean_shutdown`, and emits the common result schema.
+
+The initial slice deliberately does not claim full WPT coverage, rendering
+reftests, or a bundled pinned reference-browser adapter. Those remain follow-up
+work on top of this execution and comparison boundary.
+
 ## Runtime Consolidation & End-to-End Integration (M1–M7)
 
 - **Live CEF Ephemeral Profile Lifecycle & Orchestration**: When entering Private Mode, `SessionPrivacyOrchestrator` allocates an ephemeral profile, switches the engine to an in-memory `CefRequestContext`, silences disk trace writes, and creates an isolated `is_ephemeral = true` tab. Normal tabs are preserved in background and hidden from `TabStrip`. Programmatic activation guards reject activating persistent tabs during Private Mode. When exiting Private Mode, all ephemeral tabs are closed, engine ephemeral mode is disabled, the in-memory context is purged, the default profile is restored, and persistent tabs are reactivated (or a new persistent tab is created after engine reset if none remained). `DesktopApp` directly delegates history and session persistence to `SessionHistoryBridge`. Tested via `openbrowser_private_profile_isolation_tests`.

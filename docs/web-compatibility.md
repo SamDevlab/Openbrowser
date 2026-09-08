@@ -11,6 +11,66 @@ The future Web Compatibility System exists to answer two separate questions:
 
 Compatibility work is therefore treated as an engineering subsystem, not as a collection of ad-hoc user-agent hacks.
 
+## Current implementation: M8 initial differential harness
+
+The repository now contains a first usable differential harness for local,
+deterministic fixtures:
+
+- `scripts/compatibility_harness.py` owns fixture serving, per-run isolation,
+  runner process timeouts, child-process cleanup, result normalization and
+  comparison;
+- `tests/compatibility/fixtures/manifest.json` defines local navigation,
+  redirect and JavaScript/storage scenarios without depending on mutable
+  production sites;
+- `scripts/compatibility-openbrowser-driver.ps1` is a Windows adapter for a
+  packaged Openbrowser executable. It waits for fixture readiness, requires a
+  graceful zero exit, verifies `clean_shutdown`, and writes the common result
+  document;
+- the harness is registered with CTest when Python is available, so its
+  protocol and lifecycle classifications run in the existing Core CI matrix.
+
+The harness accepts one command for Openbrowser and one for the reference
+runner. Commands receive these environment variables:
+
+```text
+OPENBROWSER_COMPAT_SCENARIO
+OPENBROWSER_COMPAT_URL
+OPENBROWSER_COMPAT_RESULT_FILE
+OPENBROWSER_COMPAT_STORAGE_DIR
+OPENBROWSER_COMPAT_STATUS_URL
+```
+
+The `{url}`, `{result_file}`, `{storage_dir}`, `{scenario_id}` and
+`{status_url}` placeholders are also available in command arguments. Each
+runner must write a UTF-8 JSON object with `schema_version: 1` and the matching
+`scenario_id`. Stable observations such as `final_url`, `title`, `dom_markers`,
+`events` and `storage` are compared according to the scenario manifest. The
+harness additionally compares the normalized requests observed by the local
+fixture server.
+
+For example, an adapter pair can be run locally with:
+
+```text
+python scripts/compatibility_harness.py \
+  --manifest tests/compatibility/fixtures/manifest.json \
+  --openbrowser-command "pwsh -NoProfile -File scripts/compatibility-openbrowser-driver.ps1 -Executable C:/path/to/openbrowser.exe" \
+  --reference-command "<reference-browser-adapter-command>" \
+  --output compatibility-report.json
+```
+
+Reports use a stable machine-readable JSON schema. A result is classified as
+`passed`, `incompatible`, `runner-failure`, `timeout`, `runner-crash`,
+`observation-error` or `fixture-not-observed`; a browser crash is never
+converted into a compatibility pass. Temporary storage and process trees are
+cleaned after every scenario, including timeout paths.
+
+This is intentionally an initial slice, not a claim that the full WPT,
+reference-browser matrix, rendering reftests or a CEF DOM-inspection bridge
+already exist. The supplied Openbrowser adapter currently reports the
+observations available from persisted session state and lifecycle checks;
+adapters that expose richer DOM, storage or console observations can use the
+same protocol without changing the harness.
+
 ## Reference principle
 
 For every shipped engine milestone, Openbrowser should have a pinned upstream Chromium/CEF reference build from the same Chromium major whenever practical.

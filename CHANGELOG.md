@@ -6,6 +6,14 @@ Openbrowser follows semantic versioning for published releases.
 
 ## Unreleased
 
+### Added
+
+- Added the initial local-fixture Web Compatibility Differential Harness with a
+  versioned runner-result protocol, deterministic reports, and explicit
+  incompatibility versus crash/timeout classifications.
+- Added reproducible navigation, redirect and JavaScript/storage fixtures plus
+  a Windows Openbrowser lifecycle adapter that rejects abnormal shutdowns.
+
 ## [0.3.0] - 2026-09-08
 
 ### Added

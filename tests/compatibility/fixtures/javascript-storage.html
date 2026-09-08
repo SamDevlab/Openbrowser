@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Openbrowser compatibility JavaScript</title>
+</head>
+<body>
+  <main id="compatibility-script" data-compatibility-marker="javascript-storage">
+    Script fixture pending.
+  </main>
+  <script>
+    localStorage.setItem('openbrowser-compatibility', 'stable-value');
+    document.querySelector('#compatibility-script').textContent = 'Script fixture executed.';
+    fetch('/__compatibility__/ready?token=' + encodeURIComponent(
+      new URLSearchParams(location.search).get('__ob_token') || ''));
+  </script>
+</body>
+</html>

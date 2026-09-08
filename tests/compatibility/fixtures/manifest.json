@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "fixture_root": ".",
+  "scenarios": [
+    {
+      "id": "navigation-basic",
+      "description": "A local HTML document commits a navigation and exposes a stable DOM marker.",
+      "path": "navigation-basic.html",
+      "expected_request_paths": [
+        "/navigation-basic.html"
+      ],
+      "compare_fields": [
+        "final_url",
+        "title",
+        "dom_markers",
+        "events"
+      ]
+    },
+    {
+      "id": "redirect-chain",
+      "description": "A local redirect resolves to a final document without leaving the fixture origin.",
+      "path": "redirect.html",
+      "redirects": {
+        "/redirect.html": "/redirect-final.html"
+      },
+      "expected_request_paths": [
+        "/redirect.html",
+        "/redirect-final.html"
+      ],
+      "compare_fields": [
+        "final_url",
+        "title",
+        "dom_markers",
+        "events"
+      ]
+    },
+    {
+      "id": "javascript-storage",
+      "description": "A local script performs deterministic DOM and local-storage work.",
+      "path": "javascript-storage.html",
+      "expected_request_paths": [
+        "/javascript-storage.html"
+      ],
+      "compare_fields": [
+        "final_url",
+        "title",
+        "dom_markers",
+        "events",
+        "storage"
+      ]
+    }
+  ]
+}
