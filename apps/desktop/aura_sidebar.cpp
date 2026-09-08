@@ -1,5 +1,6 @@
 #include "aura_sidebar.h"
 
+#include "aura_accessibility.h"
 #include "aura_motion.h"
 #include "core/session/browser_session.h"
 #include "core/workspaces/workspace_manager.h"
@@ -333,6 +334,8 @@ void AuraSidebar::Refresh() {
         const Action action,
         const std::string& expanded,
         const std::string& compact,
+        const std::string& accessible_name,
+        const std::string& tooltip,
         std::string target_id = {}) {
         CefRefPtr<CefButtonDelegate> delegate(
             new ActionDelegate(*this, action, std::move(target_id)));
@@ -341,13 +344,22 @@ void AuraSidebar::Refresh() {
             delegate,
             collapsed_ ? compact : expanded);
         aura::EnableButtonMotion(button);
+        aura::ConfigureActionButton(
+            button,
+            accessible_name,
+            tooltip,
+            aura::kSidebarAccessibilityGroupId);
         panel_->AddChildView(button);
         layout_->SetFlexForView(button, 0);
         return button;
     };
 
-    auto brand_button = add_button(Action::ToggleCollapsed, "O  Openbrowser        ‹", "O");
-    brand_button->SetTooltipText(collapsed_ ? "Expand Aura sidebar" : "Compact Aura sidebar");
+    add_button(
+        Action::ToggleCollapsed,
+        "O  Openbrowser        ‹",
+        "O",
+        collapsed_ ? "Expand Aura sidebar" : "Compact Aura sidebar",
+        collapsed_ ? "Expand Aura sidebar" : "Compact Aura sidebar");
 
     const auto& active_workspace_id = workspace_manager_.ActiveWorkspaceId();
     for (const auto& workspace : workspace_manager_.ListWorkspaces()) {
@@ -357,10 +369,18 @@ void AuraSidebar::Refresh() {
             ? "●  " + icon + "  " + workspace.name
             : "   " + icon + "  " + workspace.name;
         const std::string compact = is_active ? "●" + icon : icon;
+        const std::string accessible_name = is_active
+            ? "Workspace " + workspace.name + ", active"
+            : "Switch to workspace " + workspace.name;
+        const std::string tooltip = is_active
+            ? workspace.name + " · Active workspace"
+            : "Switch to " + workspace.name;
         auto button = add_button(
             Action::SelectWorkspace,
             expanded,
             compact,
+            accessible_name,
+            tooltip,
             workspace.id);
         const auto workspace_color = WorkspaceColor(workspace.badge_color);
         if (is_active) {
@@ -368,30 +388,37 @@ void AuraSidebar::Refresh() {
         } else {
             aura::ApplyHoverAccent(button, workspace_color);
         }
-        button->SetTooltipText(
-            is_active ? workspace.name + " · Active workspace" : "Switch to " + workspace.name);
     }
 
-    auto focus_button = add_button(Action::ToggleFocus, "◎  Focus", "◎");
-    focus_button->SetTooltipText("Open Focus");
-    auto library_button = add_button(Action::ToggleLibrary, "★  History & Bookmarks", "★");
-    library_button->SetTooltipText("Open History & Bookmarks");
-    auto downloads_button = add_button(Action::ToggleDownloads, "↓  Downloads", "↓");
-    downloads_button->SetTooltipText("Open Downloads");
-    auto settings_button = add_button(Action::ToggleSettings, "⚙  Settings", "⚙");
-    settings_button->SetTooltipText("Open Settings");
-    auto commands_button = add_button(Action::ToggleCommands, "⌘  Commands", "⌘");
-    commands_button->SetTooltipText("Open Commands");
-    auto network_button = add_button(Action::ToggleNetworkLab, "<>  Network Lab", "<>");
-    network_button->SetTooltipText("Open Network Lab");
-    auto hide_button = add_button(Action::Hide, "—  Hide sidebar", "—");
-    hide_button->SetTooltipText("Hide Aura sidebar · Ctrl+Shift+\\ restores it");
+    add_button(Action::ToggleFocus, "◎  Focus", "◎", "Open Focus", "Open Focus");
+    add_button(
+        Action::ToggleLibrary,
+        "★  History & Bookmarks",
+        "★",
+        "Open History and Bookmarks",
+        "Open History & Bookmarks");
+    add_button(Action::ToggleDownloads, "↓  Downloads", "↓", "Open Downloads", "Open Downloads");
+    add_button(Action::ToggleSettings, "⚙  Settings", "⚙", "Open Settings", "Open Settings");
+    add_button(Action::ToggleCommands, "⌘  Commands", "⌘", "Open Commands", "Open Commands");
+    add_button(
+        Action::ToggleNetworkLab,
+        "<>  Network Lab",
+        "<>",
+        "Open Network Lab",
+        "Open Network Lab");
+    add_button(
+        Action::Hide,
+        "—  Hide sidebar",
+        "—",
+        "Hide Aura sidebar",
+        "Hide Aura sidebar · Ctrl+Shift+\\ restores it");
 
     if (!feedback_message_.empty() && !collapsed_) {
         CefRefPtr<CefButtonDelegate> feedback_delegate(new PassiveButtonDelegate());
         delegates_.push_back(feedback_delegate);
         auto feedback = CefLabelButton::CreateLabelButton(
             feedback_delegate, "✓  " + feedback_message_);
+        aura::ConfigurePassiveStatus(feedback, "Status: " + feedback_message_);
         feedback->SetEnabled(false);
         panel_->AddChildView(feedback);
         layout_->SetFlexForView(feedback, 0);
