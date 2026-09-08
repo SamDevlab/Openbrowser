@@ -5,6 +5,7 @@ set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     browser_chrome.h
     cef_browser_engine.cpp
     cef_browser_engine.h
+    cef_browser_engine_zoom.cpp
     cef_tab_client.cpp
     cef_tab_client.h
     cef_tab_client_find.cpp

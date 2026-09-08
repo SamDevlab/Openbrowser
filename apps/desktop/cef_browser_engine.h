@@ -70,6 +70,11 @@ public:
     void StopFinding(const core::TabId& tab_id, bool clear_selection = true);
     void SetFindResultCallback(FindResultCallback callback);
 
+    [[nodiscard]] int ZoomPercent(const core::TabId& tab_id);
+    int ZoomIn(const core::TabId& tab_id);
+    int ZoomOut(const core::TabId& tab_id);
+    int ResetZoom(const core::TabId& tab_id);
+
     void SetStorageRoot(std::filesystem::path root);
     [[nodiscard]] const std::filesystem::path& StorageRoot() const noexcept;
 
