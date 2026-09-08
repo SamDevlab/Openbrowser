@@ -30,13 +30,21 @@ void TestWorkspaceManagerDefaultsAndListing() {
     const auto* def = manager.FindWorkspace("default");
     Require(def != nullptr, "FindWorkspace(default) should return workspace");
     Require(def->name == "Default", "Default workspace name should match");
+    Require(def->icon == "⌂", "Default workspace should have Aura home glyph");
     Require(!def->is_ephemeral, "Default workspace should not be ephemeral");
+
+    const auto* work = manager.FindWorkspace("work");
+    Require(work != nullptr && work->icon == "◆", "Work workspace should have Aura work glyph");
+    const auto* personal = manager.FindWorkspace("personal");
+    Require(personal != nullptr && personal->icon == "○", "Personal workspace should have Aura personal glyph");
 
     const auto& default_ref = manager.DefaultWorkspace();
     Require(default_ref.id == "default", "DefaultWorkspace() id should be default");
 
     const auto list = manager.ListWorkspaces();
     Require(list.size() == 3, "Initial list should contain 3 workspaces");
+    Require(list.size() >= 3 && list[0].id == "default" && list[1].id == "work" && list[2].id == "personal",
+            "Aura workspace list should keep default, work, personal visual order");
 }
 
 void TestWorkspaceCreationAndRemoval() {
@@ -47,9 +55,12 @@ void TestWorkspaceCreationAndRemoval() {
         .name = "Finance & Banking",
         .badge_color = "#EAB308",
         .is_ephemeral = false,
+        .icon = "¤",
     });
     Require(created, "Creating new workspace finance should succeed");
     Require(manager.HasWorkspace("finance"), "HasWorkspace(finance) should be true");
+    const auto* finance = manager.FindWorkspace("finance");
+    Require(finance != nullptr && finance->icon == "¤", "Custom workspace glyph should be retained");
 
     const bool duplicate = manager.CreateWorkspace({
         .id = "finance",
@@ -67,13 +78,50 @@ void TestWorkspaceCreationAndRemoval() {
     Require(!manager.HasWorkspace("finance"), "HasWorkspace(finance) should now be false");
 }
 
+void TestVisualWorkspacePersistenceAndLegacyFallback() {
+    using namespace openbrowser::core;
+
+    WorkspaceManager manager;
+    Require(manager.CreateWorkspace({
+        .id = "research",
+        .name = "Research",
+        .badge_color = "#F97316",
+        .is_ephemeral = false,
+        .icon = "◇",
+    }), "Created visual research workspace");
+    Require(manager.SetActiveWorkspace("research"), "Activated visual research workspace");
+
+    const auto serialized = manager.Serialize();
+    WorkspaceManager round_trip;
+    Require(round_trip.Deserialize(serialized), "Visual workspace document round-tripped");
+    const auto* research = round_trip.FindWorkspace("research");
+    Require(research != nullptr, "Research workspace survived round-trip");
+    Require(research != nullptr && research->badge_color == "#F97316", "Workspace color survived round-trip");
+    Require(research != nullptr && research->icon == "◇", "Workspace glyph survived round-trip");
+    Require(round_trip.ActiveWorkspaceId() == "research", "Visual active workspace survived round-trip");
+
+    const std::string legacy_json =
+        "{\"schema_version\":1,\"active_workspace_id\":\"work\",\"workspaces\":["
+        "{\"id\":\"default\",\"name\":\"Default\",\"badge_color\":\"#3B82F6\",\"is_ephemeral\":false},"
+        "{\"id\":\"work\",\"name\":\"Work\",\"badge_color\":\"#10B981\",\"is_ephemeral\":false},"
+        "{\"id\":\"custom\",\"name\":\"Custom\",\"badge_color\":\"#64748B\",\"is_ephemeral\":false}]}";
+    WorkspaceManager legacy;
+    Require(legacy.Deserialize(legacy_json), "Pre-Aura workspace document remains readable");
+    const auto* legacy_default = legacy.FindWorkspace("default");
+    const auto* legacy_work = legacy.FindWorkspace("work");
+    const auto* legacy_custom = legacy.FindWorkspace("custom");
+    Require(legacy_default != nullptr && legacy_default->icon == "⌂", "Legacy default receives home glyph");
+    Require(legacy_work != nullptr && legacy_work->icon == "◆", "Legacy work receives work glyph");
+    Require(legacy_custom != nullptr && legacy_custom->icon == "◇", "Legacy custom workspace receives neutral glyph");
+}
+
 void TestActiveWorkspaceAndCycling() {
     openbrowser::core::WorkspaceManager manager;
 
     Require(manager.ActiveWorkspaceId() == "default", "Initial active workspace should be default");
 
     const auto next1 = manager.CycleNextWorkspace();
-    Require(next1 != "default", "CycleNextWorkspace should advance from default");
+    Require(next1 == "work", "CycleNextWorkspace should follow Aura visual order");
     Require(manager.ActiveWorkspaceId() == next1, "Active workspace should update on cycle");
 
     const bool set_personal = manager.SetActiveWorkspace("personal");
@@ -209,6 +257,7 @@ void TestSessionPersistenceWorkspaceRoundTrip() {
 int main() {
     TestWorkspaceManagerDefaultsAndListing();
     TestWorkspaceCreationAndRemoval();
+    TestVisualWorkspacePersistenceAndLegacyFallback();
     TestActiveWorkspaceAndCycling();
     TestBrowserSessionWithWorkspaces();
     TestCapabilityPolicyWorkspaceRules();

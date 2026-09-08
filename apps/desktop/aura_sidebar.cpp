@@ -11,6 +11,7 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,6 +27,30 @@ std::string NormalizeSidebarState(const std::string_view state) {
         return std::string(state);
     }
     return "compact";
+}
+
+int HexNibble(const char value) {
+    if (value >= '0' && value <= '9') return value - '0';
+    if (value >= 'a' && value <= 'f') return 10 + (value - 'a');
+    if (value >= 'A' && value <= 'F') return 10 + (value - 'A');
+    return -1;
+}
+
+cef_color_t WorkspaceColor(const std::string_view value) {
+    constexpr std::uint32_t kFallback = 0xFF7567FFu;
+    if (value.size() != 7 || value.front() != '#') {
+        return static_cast<cef_color_t>(kFallback);
+    }
+
+    std::uint32_t rgb = 0;
+    for (std::size_t i = 1; i < value.size(); ++i) {
+        const int nibble = HexNibble(value[i]);
+        if (nibble < 0) {
+            return static_cast<cef_color_t>(kFallback);
+        }
+        rgb = (rgb << 4u) | static_cast<std::uint32_t>(nibble);
+    }
+    return static_cast<cef_color_t>(0xFF000000u | rgb);
 }
 
 }  // namespace
@@ -52,11 +77,11 @@ public:
     explicit SidebarPanelDelegate(AuraSidebar& sidebar) : sidebar_(sidebar) {}
 
     CefSize GetPreferredSize(CefRefPtr<CefView> /*view*/) override {
-        return CefSize(sidebar_.IsCollapsed() ? 54 : 190, 640);
+        return CefSize(sidebar_.IsCollapsed() ? 54 : 202, 640);
     }
 
     CefSize GetMinimumSize(CefRefPtr<CefView> /*view*/) override {
-        return CefSize(sidebar_.IsCollapsed() ? 50 : 170, 240);
+        return CefSize(sidebar_.IsCollapsed() ? 50 : 180, 240);
     }
 
 private:
@@ -67,17 +92,18 @@ private:
 
 class AuraSidebar::ActionDelegate final : public CefButtonDelegate {
 public:
-    ActionDelegate(AuraSidebar& sidebar, const Action action)
-        : sidebar_(sidebar), action_(action) {}
+    ActionDelegate(AuraSidebar& sidebar, const Action action, std::string target_id = {})
+        : sidebar_(sidebar), action_(action), target_id_(std::move(target_id)) {}
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        sidebar_.HandleAction(action_);
+        sidebar_.HandleAction(action_, target_id_);
     }
 
 private:
     AuraSidebar& sidebar_;
     Action action_;
+    std::string target_id_;
 
     IMPLEMENT_REFCOUNTING(ActionDelegate);
 };
@@ -85,7 +111,7 @@ private:
 AuraSidebar::AuraSidebar(
     core::BrowserSession& session,
     core::WorkspaceManager& workspace_manager,
-    ActionCallback on_cycle_workspace,
+    WorkspaceSelectCallback on_select_workspace,
     ActionCallback on_toggle_focus,
     ActionCallback on_toggle_library,
     ActionCallback on_toggle_downloads,
@@ -94,7 +120,7 @@ AuraSidebar::AuraSidebar(
     ActionCallback on_toggle_commands)
     : session_(session),
       workspace_manager_(workspace_manager),
-      on_cycle_workspace_(std::move(on_cycle_workspace)),
+      on_select_workspace_(std::move(on_select_workspace)),
       on_toggle_focus_(std::move(on_toggle_focus)),
       on_toggle_library_(std::move(on_toggle_library)),
       on_toggle_downloads_(std::move(on_toggle_downloads)),
@@ -173,25 +199,16 @@ void AuraSidebar::OnBrowserSessionChanged(const core::BrowserSession& /*session*
     Refresh();
 }
 
-std::string AuraSidebar::ActiveWorkspaceLabel() const {
-    const auto& id = workspace_manager_.ActiveWorkspaceId();
-    const auto* workspace = workspace_manager_.FindWorkspace(id);
-    if (workspace != nullptr && !workspace->name.empty()) {
-        return workspace->name;
-    }
-    return id.empty() ? "Default" : id;
-}
-
-void AuraSidebar::HandleAction(const Action action) {
+void AuraSidebar::HandleAction(const Action action, const std::string& target_id) {
     CEF_REQUIRE_UI_THREAD();
 
     switch (action) {
         case Action::ToggleCollapsed:
             ToggleCollapsed();
             return;
-        case Action::CycleWorkspace:
-            if (on_cycle_workspace_) {
-                on_cycle_workspace_();
+        case Action::SelectWorkspace:
+            if (!target_id.empty() && on_select_workspace_) {
+                on_select_workspace_(target_id);
             }
             Refresh();
             return;
@@ -240,21 +257,42 @@ void AuraSidebar::Refresh() {
     panel_->RemoveAllChildViews();
     delegates_.clear();
 
-    auto add_button = [this](const Action action, const std::string& expanded, const std::string& compact) {
-        CefRefPtr<CefButtonDelegate> delegate(new ActionDelegate(*this, action));
+    auto add_button = [this](
+        const Action action,
+        const std::string& expanded,
+        const std::string& compact,
+        std::string target_id = {}) {
+        CefRefPtr<CefButtonDelegate> delegate(
+            new ActionDelegate(*this, action, std::move(target_id)));
         delegates_.push_back(delegate);
         auto button = CefLabelButton::CreateLabelButton(
             delegate,
             collapsed_ ? compact : expanded);
         panel_->AddChildView(button);
         layout_->SetFlexForView(button, 0);
+        return button;
     };
 
-    add_button(Action::ToggleCollapsed, "O  Openbrowser     ‹", "O");
-    add_button(
-        Action::CycleWorkspace,
-        "●  " + ActiveWorkspaceLabel(),
-        "●");
+    add_button(Action::ToggleCollapsed, "O  Openbrowser        ‹", "O");
+
+    const auto& active_workspace_id = workspace_manager_.ActiveWorkspaceId();
+    for (const auto& workspace : workspace_manager_.ListWorkspaces()) {
+        const bool is_active = workspace.id == active_workspace_id;
+        const std::string icon = workspace.icon.empty() ? "◇" : workspace.icon;
+        const std::string expanded = is_active
+            ? "●  " + icon + "  " + workspace.name
+            : "   " + icon + "  " + workspace.name;
+        const std::string compact = is_active ? "●" + icon : icon;
+        auto button = add_button(
+            Action::SelectWorkspace,
+            expanded,
+            compact,
+            workspace.id);
+        button->SetEnabledTextColors(WorkspaceColor(workspace.badge_color));
+        button->SetTooltipText(
+            is_active ? workspace.name + " · Active workspace" : "Switch to " + workspace.name);
+    }
+
     add_button(Action::ToggleFocus, "◎  Focus", "◎");
     add_button(Action::ToggleLibrary, "★  History & Bookmarks", "★");
     add_button(Action::ToggleDownloads, "↓  Downloads", "↓");

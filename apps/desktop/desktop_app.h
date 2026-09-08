@@ -67,6 +67,7 @@ private:
     void HideTransientPanels();
     void ToggleAuraSidebar();
     void CycleWorkspace();
+    void SelectWorkspace(const std::string& workspace_id);
     void ToggleFocusPanel();
     void ToggleNetworkLab();
     void ToggleCommandPalette();

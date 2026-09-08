@@ -14,6 +14,7 @@ Openbrowser follows semantic versioning for published releases.
 - Added a browser-owned sidebar visibility action with `Ctrl+Shift+\\` so a fully hidden sidebar can be restored without sacrificing browsing space.
 - Added New Tab 2.0 with responsive quick-access cards, compact browser-context hints and CSS-only per-tab controls for wallpaper and optional modules.
 - Added the Aura Personalization Center with locally persisted theme, accent, sidebar default, New Tab wallpaper and optional module preferences.
+- Added persistent visual workspace identity with browser-owned glyphs and colors for the Aura sidebar.
 
 ### Changed
 
@@ -28,6 +29,8 @@ Openbrowser follows semantic versioning for published releases.
 - Desktop-created tabs and startup fallbacks now use the first-party New Tab URL instead of the legacy synthetic placeholder.
 - New Tab 2.0 keeps search/navigation as the dominant action, lets secondary modules retract without JavaScript, provides three local-only wallpaper treatments, and adapts the composition for narrow or short viewports.
 - Aura appearance settings remain backward-compatible with existing v0.2 `settings.json` files, apply sidebar defaults live, and become the defaults for newly loaded or reloaded New Tab surfaces.
+- The Aura sidebar now lists workspaces as directly selectable compact or expanded entries instead of forcing repeated cycling; the active workspace is visually identified while existing tab and Private Mode isolation rules remain authoritative.
+- Existing `workspaces.json` files remain readable and receive deterministic fallback glyphs when they predate visual workspace identity.
 
 ## [0.2.0] - 2026-09-08
 
