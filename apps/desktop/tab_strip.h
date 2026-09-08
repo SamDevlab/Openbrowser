@@ -35,6 +35,7 @@ public:
     TabStrip& operator=(const TabStrip&) = delete;
 
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
+    [[nodiscard]] bool CycleWorkspace();
 
     void OnBrowserSessionChanged(const core::BrowserSession& session) override;
 
@@ -43,7 +44,6 @@ private:
         Activate,
         Close,
         NewTab,
-        CycleWorkspace,
     };
 
     class TabActionDelegate;

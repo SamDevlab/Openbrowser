@@ -1,5 +1,6 @@
 #include "desktop_app.h"
 
+#include "core/navigation/internal_urls.h"
 #include "core/session/session_persistence.h"
 
 #include "include/cef_command_line.h"
@@ -38,6 +39,7 @@ public:
         ID_ZOOM_IN_SHIFTED = 1014,
         ID_ZOOM_RESET = 1015,
         ID_RELOAD_F5 = 1016,
+        ID_AURA_SIDEBAR = 1017,
     };
 
     DesktopWindowDelegate(
@@ -45,6 +47,7 @@ public:
         CefRefPtr<CefPanel> chrome_panel,
         CefRefPtr<CefPanel> command_palette_panel,
         CefRefPtr<CefPanel> bookmarks_bar_panel,
+        CefRefPtr<CefPanel> aura_sidebar_panel,
         CefRefPtr<CefPanel> focus_sidebar_panel,
         CefRefPtr<CefPanel> browser_host,
         CefRefPtr<CefPanel> downloads_panel,
@@ -56,6 +59,7 @@ public:
           chrome_panel_(std::move(chrome_panel)),
           command_palette_panel_(std::move(command_palette_panel)),
           bookmarks_bar_panel_(std::move(bookmarks_bar_panel)),
+          aura_sidebar_panel_(std::move(aura_sidebar_panel)),
           focus_sidebar_panel_(std::move(focus_sidebar_panel)),
           browser_host_(std::move(browser_host)),
           downloads_panel_(std::move(downloads_panel)),
@@ -91,6 +95,7 @@ public:
         window->SetAccelerator(ID_ZOOM_IN_SHIFTED, 0xBB /*VK_OEM_PLUS*/, true, true, false, true);
         window->SetAccelerator(ID_ZOOM_RESET, '0', false, true, false, true);
         window->SetAccelerator(ID_RELOAD_F5, 0x74 /*VK_F5*/, false, false, false, true);
+        window->SetAccelerator(ID_AURA_SIDEBAR, 0xDC /*VK_OEM_5*/, true, true, false, true);
 
         CefRefPtr<CefPanel> root_panel = CefPanel::CreatePanel(nullptr);
         CefBoxLayoutSettings root_settings{};
@@ -123,6 +128,10 @@ public:
         body_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
         CefRefPtr<CefBoxLayout> body_layout = body_panel->SetToBoxLayout(body_settings);
 
+        if (aura_sidebar_panel_) {
+            body_panel->AddChildView(aura_sidebar_panel_);
+            body_layout->SetFlexForView(aura_sidebar_panel_, 0);
+        }
         if (focus_sidebar_panel_) {
             body_panel->AddChildView(focus_sidebar_panel_);
             body_layout->SetFlexForView(focus_sidebar_panel_, 0);
@@ -185,6 +194,8 @@ public:
                 return action_registry_->ExecuteAction("navigation.zoom_in");
             case ID_ZOOM_RESET:
                 return action_registry_->ExecuteAction("navigation.zoom_reset");
+            case ID_AURA_SIDEBAR:
+                return action_registry_->ExecuteAction("aura.sidebar.toggle");
             default:
                 return false;
         }
@@ -201,6 +212,7 @@ public:
         chrome_panel_ = nullptr;
         command_palette_panel_ = nullptr;
         bookmarks_bar_panel_ = nullptr;
+        aura_sidebar_panel_ = nullptr;
         focus_sidebar_panel_ = nullptr;
         browser_host_ = nullptr;
         downloads_panel_ = nullptr;
@@ -224,6 +236,7 @@ private:
     CefRefPtr<CefPanel> chrome_panel_;
     CefRefPtr<CefPanel> command_palette_panel_;
     CefRefPtr<CefPanel> bookmarks_bar_panel_;
+    CefRefPtr<CefPanel> aura_sidebar_panel_;
     CefRefPtr<CefPanel> focus_sidebar_panel_;
     CefRefPtr<CefPanel> browser_host_;
     CefRefPtr<CefPanel> downloads_panel_;
@@ -234,7 +247,6 @@ private:
 
     IMPLEMENT_REFCOUNTING(DesktopWindowDelegate);
 };
-
 
 }  // namespace
 
@@ -300,6 +312,39 @@ void DesktopApp::OnContextInitialized() {
     ua_engine_ = std::make_unique<core::UserAgentPolicyEngine>();
 
     action_registry_ = std::make_unique<core::ActionRegistry>();
+    action_registry_->RegisterAction({
+        .id = "aura.sidebar.toggle",
+        .title = "Toggle Aura Sidebar",
+        .description = "Show or hide the retractable Openbrowser sidebar",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+Shift+\\",
+        .handler = [this]() {
+            ToggleAuraSidebar();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "workspace.cycle",
+        .title = "Next Workspace",
+        .description = "Cycle to the next Openbrowser workspace",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "",
+        .handler = [this]() {
+            CycleWorkspace();
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "focus.toggle_panel",
+        .title = "Toggle Focus",
+        .description = "Show or hide the Focus surface",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "",
+        .handler = [this]() {
+            ToggleFocusPanel();
+            return true;
+        },
+    });
     action_registry_->RegisterAction({
         .id = "network_lab.toggle",
         .title = "Toggle Network Lab",
@@ -542,6 +587,17 @@ void DesktopApp::OnContextInitialized() {
     const bool show_network_lab = command_line && command_line->HasSwitch("network-lab");
     network_lab_panel_->SetVisible(show_network_lab);
 
+    aura_sidebar_ = std::make_unique<AuraSidebar>(
+        *session_,
+        *workspace_manager_,
+        [this]() { CycleWorkspace(); },
+        [this]() { ToggleFocusPanel(); },
+        [this]() { ToggleLibraryPanel(); },
+        [this]() { ToggleDownloadsPanel(); },
+        [this]() { ToggleSettingsPanel(); },
+        [this]() { ToggleNetworkLab(); },
+        [this]() { ToggleCommandPalette(); });
+
     action_registry_->RegisterAction({
         .id = "navigation.new_tab",
         .title = "New Tab",
@@ -728,6 +784,7 @@ void DesktopApp::OnContextInitialized() {
             chrome_->View(),
             command_palette_overlay_->View(),
             bookmarks_bar_->View(),
+            aura_sidebar_->View(),
             focus_sidebar_->View(),
             browser_host_,
             downloads_panel_->View(),
@@ -744,6 +801,7 @@ void DesktopApp::OnContextInitialized() {
                 library_panel_.reset();
                 settings_panel_.reset();
                 network_lab_panel_.reset();
+                aura_sidebar_.reset();
                 focus_sidebar_.reset();
                 chrome_.reset();
                 tab_strip_.reset();
@@ -792,6 +850,7 @@ void DesktopApp::ShutdownRuntime() {
     downloads_panel_.reset();
     library_panel_.reset();
     settings_panel_.reset();
+    aura_sidebar_.reset();
     ua_engine_.reset();
     mitigation_registry_.reset();
     profile_manager_.reset();
@@ -825,10 +884,63 @@ void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& session) {
     }
 }
 
+void DesktopApp::HideTransientPanels() {
+    CEF_REQUIRE_UI_THREAD();
+    if (focus_sidebar_) {
+        focus_sidebar_->SetVisible(false);
+    }
+    if (downloads_panel_) {
+        downloads_panel_->SetVisible(false);
+    }
+    if (library_panel_) {
+        library_panel_->SetVisible(false);
+    }
+    if (settings_panel_) {
+        settings_panel_->SetVisible(false);
+    }
+    if (network_lab_panel_) {
+        network_lab_panel_->SetVisible(false);
+    }
+}
+
+void DesktopApp::ToggleAuraSidebar() {
+    CEF_REQUIRE_UI_THREAD();
+    if (aura_sidebar_) {
+        aura_sidebar_->ToggleVisibility();
+    }
+}
+
+void DesktopApp::CycleWorkspace() {
+    CEF_REQUIRE_UI_THREAD();
+    if (tab_strip_) {
+        static_cast<void>(tab_strip_->CycleWorkspace());
+    }
+    if (aura_sidebar_) {
+        aura_sidebar_->Refresh();
+    }
+}
+
+void DesktopApp::ToggleFocusPanel() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!focus_sidebar_) {
+        return;
+    }
+    const bool show = !focus_sidebar_->IsVisible();
+    HideTransientPanels();
+    if (show) {
+        focus_sidebar_->SetVisible(true);
+    }
+}
+
 void DesktopApp::ToggleNetworkLab() {
     CEF_REQUIRE_UI_THREAD();
-    if (network_lab_panel_) {
-        network_lab_panel_->ToggleVisibility();
+    if (!network_lab_panel_) {
+        return;
+    }
+    const bool show = !network_lab_panel_->IsVisible();
+    HideTransientPanels();
+    if (show) {
+        network_lab_panel_->SetVisible(true);
     }
 }
 
@@ -848,22 +960,37 @@ void DesktopApp::ToggleBookmarksBar() {
 
 void DesktopApp::ToggleDownloadsPanel() {
     CEF_REQUIRE_UI_THREAD();
-    if (downloads_panel_) {
-        downloads_panel_->ToggleVisibility();
+    if (!downloads_panel_) {
+        return;
+    }
+    const bool show = !downloads_panel_->IsVisible();
+    HideTransientPanels();
+    if (show) {
+        downloads_panel_->SetVisible(true);
     }
 }
 
 void DesktopApp::ToggleLibraryPanel() {
     CEF_REQUIRE_UI_THREAD();
-    if (library_panel_) {
-        library_panel_->ToggleVisibility();
+    if (!library_panel_) {
+        return;
+    }
+    const bool show = !library_panel_->IsVisible();
+    HideTransientPanels();
+    if (show) {
+        library_panel_->SetVisible(true);
     }
 }
 
 void DesktopApp::ToggleSettingsPanel() {
     CEF_REQUIRE_UI_THREAD();
-    if (settings_panel_) {
-        settings_panel_->ToggleVisibility();
+    if (!settings_panel_) {
+        return;
+    }
+    const bool show = !settings_panel_->IsVisible();
+    HideTransientPanels();
+    if (show) {
+        settings_panel_->SetVisible(true);
     }
 }
 
@@ -1001,7 +1128,7 @@ std::string DesktopApp::StartupUrl() const {
         }
     }
 
-    return "https://example.com/";
+    return std::string(core::navigation::kNewTabUrl);
 }
 
 void DesktopApp::ExportNetworkHar() {
@@ -1047,7 +1174,9 @@ void DesktopApp::OpenNewTab() {
            profile_manager_->GetActiveProfile()->IsEphemeral());
     core::Tab new_tab;
     new_tab.id = new_id;
-    new_tab.url = "https://example.com/";
+    new_tab.url = is_ephemeral
+        ? std::string(core::navigation::kPrivateNewTabUrl)
+        : std::string(core::navigation::kNewTabUrl);
     new_tab.title = is_ephemeral ? "Private Tab" : "New Tab";
     new_tab.lifecycle = core::TabLifecycle::Active;
     new_tab.workspace_id = ws_id;

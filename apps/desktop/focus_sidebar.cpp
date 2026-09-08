@@ -15,6 +15,19 @@
 #include <utility>
 
 namespace openbrowser::desktop {
+namespace {
+
+class PassiveButtonDelegate final : public CefButtonDelegate {
+public:
+    void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
+        CEF_REQUIRE_UI_THREAD();
+    }
+
+private:
+    IMPLEMENT_REFCOUNTING(PassiveButtonDelegate);
+};
+
+}  // namespace
 
 class FocusSidebar::FocusPanelDelegate final : public CefPanelDelegate {
 public:
@@ -85,6 +98,7 @@ FocusSidebar::FocusSidebar(core::BrowserSession& session, core::FocusQueue& focu
     layout_ = panel_->SetToBoxLayout(settings);
 
     RebuildQueueView();
+    panel_->SetVisible(false);
 }
 
 FocusSidebar::~FocusSidebar() {
@@ -94,6 +108,29 @@ FocusSidebar::~FocusSidebar() {
 
 CefRefPtr<CefPanel> FocusSidebar::View() const noexcept {
     return panel_;
+}
+
+void FocusSidebar::SetVisible(const bool visible) {
+    CEF_REQUIRE_UI_THREAD();
+    if (!panel_) {
+        return;
+    }
+    panel_->SetVisible(visible);
+    if (visible) {
+        RebuildQueueView();
+    }
+    auto window = panel_->GetWindow();
+    if (window) {
+        window->Layout();
+    }
+}
+
+bool FocusSidebar::IsVisible() const {
+    return panel_ && panel_->IsVisible();
+}
+
+void FocusSidebar::ToggleVisibility() {
+    SetVisible(!IsVisible());
 }
 
 void FocusSidebar::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
@@ -215,7 +252,10 @@ void FocusSidebar::RebuildQueueView() {
     }
 
     std::string timer_label = "Timer: " + sprint_.FormattedTime() + " (" + state_str + ")";
-    auto timer_btn = CefLabelButton::CreateLabelButton(nullptr, timer_label);
+    CefRefPtr<CefButtonDelegate> timer_delegate(new PassiveButtonDelegate());
+    delegates_.push_back(timer_delegate);
+    auto timer_btn = CefLabelButton::CreateLabelButton(timer_delegate, timer_label);
+    timer_btn->SetEnabled(false);
     sprint_panel->AddChildView(timer_btn);
     sprint_layout->SetFlexForView(timer_btn, 0);
 
@@ -259,7 +299,10 @@ void FocusSidebar::RebuildQueueView() {
     sprint_panel->AddChildView(controls_panel);
     sprint_layout->SetFlexForView(controls_panel, 0);
 
-    auto metrics_btn = CefLabelButton::CreateLabelButton(nullptr, sprint_.FormattedMetrics());
+    CefRefPtr<CefButtonDelegate> metrics_delegate(new PassiveButtonDelegate());
+    delegates_.push_back(metrics_delegate);
+    auto metrics_btn = CefLabelButton::CreateLabelButton(metrics_delegate, sprint_.FormattedMetrics());
+    metrics_btn->SetEnabled(false);
     sprint_panel->AddChildView(metrics_btn);
     sprint_layout->SetFlexForView(metrics_btn, 0);
 

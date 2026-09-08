@@ -10,6 +10,8 @@ Openbrowser follows semantic versioning for published releases.
 
 - Started Project Aura, the v0.3.0 design campaign built around Personal, Focused, Elegant and content-first Progressive Chrome principles.
 - Added the Aura design foundation for retractable browser surfaces with Expanded, Compact, Focus and Pinned/Collapsed/Auto-hide behavior models.
+- Added the first retractable Aura sidebar with compact and expanded states for Workspaces, Focus, History & Bookmarks, Downloads, Settings, Commands and Network Lab.
+- Added a browser-owned sidebar visibility action with `Ctrl+Shift+\\` so a fully hidden sidebar can be restored without sacrificing browsing space.
 
 ### Changed
 
@@ -17,7 +19,11 @@ Openbrowser follows semantic versioning for published releases.
 - The omnibox now hides Openbrowser internal blank/new-tab implementation URLs and reclaims the site-security slot on those launch surfaces.
 - Simplified the permanent toolbar around navigation, the omnibox, bookmarks, downloads, profile and overflow; Find and Zoom remain available through standard shortcuts and browser actions instead of consuming permanent width.
 - New Tab surfaces focus the omnibox for immediate search/navigation.
-- The tab strip now gives the active tab the only dedicated close control, uses the first-party New Tab URL directly, and presents the current workspace as transitional context ahead of the Aura sidebar.
+- The tab strip now gives the active tab the only dedicated close control and uses the first-party New Tab URL directly.
+- Workspace switching moved out of the tab strip and into the Aura sidebar so workspace context no longer competes with tabs for horizontal space.
+- Focus is hidden by default and opens as a temporary side surface from the Aura rail instead of permanently consuming content width.
+- Focus, History & Bookmarks, Downloads, Settings and Network Lab now behave as mutually exclusive transient surfaces so opening one automatically returns space used by another.
+- Desktop-created tabs and startup fallbacks now use the first-party New Tab URL instead of the legacy synthetic placeholder.
 
 ## [0.2.0] - 2026-09-08
 

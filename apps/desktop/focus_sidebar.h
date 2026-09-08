@@ -31,6 +31,10 @@ public:
 
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
 
+    void SetVisible(bool visible);
+    [[nodiscard]] bool IsVisible() const;
+    void ToggleVisibility();
+
     void OnBrowserSessionChanged(const core::BrowserSession& session) override;
 
     void OnTimerTick();

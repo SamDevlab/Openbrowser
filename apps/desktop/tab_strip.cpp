@@ -76,6 +76,18 @@ CefRefPtr<CefPanel> TabStrip::View() const noexcept {
     return panel_;
 }
 
+bool TabStrip::CycleWorkspace() {
+    CEF_REQUIRE_UI_THREAD();
+    if (workspace_manager_ == nullptr) {
+        return false;
+    }
+
+    static_cast<void>(workspace_manager_->CycleNextWorkspace());
+    const bool activated = ActivateOrCreateTabForActiveWorkspace();
+    RebuildTabs();
+    return activated;
+}
+
 void TabStrip::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
     CEF_REQUIRE_UI_THREAD();
 
@@ -214,13 +226,6 @@ void TabStrip::HandleTabAction(const TabAction action, const std::string& tab_id
                 }
             }
             break;
-        case TabAction::CycleWorkspace:
-            if (workspace_manager_ != nullptr) {
-                static_cast<void>(workspace_manager_->CycleNextWorkspace());
-                static_cast<void>(ActivateOrCreateTabForActiveWorkspace());
-                RebuildTabs();
-            }
-            break;
         case TabAction::NewTab:
             static_cast<void>(OpenNewTabForActiveWorkspace());
             break;
@@ -288,19 +293,6 @@ void TabStrip::RebuildTabs() {
     auto new_tab_btn = CefLabelButton::CreateLabelButton(new_tab_delegate, "+");
     panel_->AddChildView(new_tab_btn);
     layout_->SetFlexForView(new_tab_btn, 0);
-
-    // Workspace switching remains here only as a transitional affordance until
-    // the retractable Aura sidebar lands in MVP-22. Present it as context rather
-    // than as another tab.
-    if (workspace_manager_ != nullptr) {
-        auto ws_delegate = CefRefPtr<CefButtonDelegate>(
-            new TabActionDelegate(*this, TabAction::CycleWorkspace, ""));
-        delegates_.push_back(ws_delegate);
-        const std::string ws_label = "Workspace · " + workspace_manager_->ActiveWorkspaceId();
-        auto ws_btn = CefLabelButton::CreateLabelButton(ws_delegate, ws_label);
-        panel_->AddChildView(ws_btn);
-        layout_->SetFlexForView(ws_btn, 0);
-    }
 
     panel_->Layout();
     auto window = panel_->GetWindow();
