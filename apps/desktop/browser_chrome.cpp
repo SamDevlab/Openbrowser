@@ -1,6 +1,7 @@
 #include "browser_chrome.h"
 
 #include "cef_browser_engine.h"
+#include "find_bar.h"
 #include "core/capabilities/capability_policy.h"
 #include "core/navigation/address_input.h"
 #include "core/session/browser_session.h"
@@ -11,6 +12,7 @@
 #include "include/views/cef_textfield.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <memory>
 #include <utility>
 
 namespace openbrowser::desktop {
@@ -138,6 +140,8 @@ BrowserChrome::BrowserChrome(
         make_delegate(ChromeAction::ToggleSecurityDetails), "🔒");
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter address");
+    find_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::OpenFindBar), "⌕");
     bookmarks_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ToggleBookmarksBar), "☆");
     downloads_button_ = CefLabelButton::CreateLabelButton(
@@ -157,6 +161,8 @@ BrowserChrome::BrowserChrome(
     toolbar_layout_->SetFlexForView(security_badge_, 0);
     toolbar_->AddChildView(address_bar_);
     toolbar_layout_->SetFlexForView(address_bar_, 1);
+    toolbar_->AddChildView(find_button_);
+    toolbar_layout_->SetFlexForView(find_button_, 0);
     toolbar_->AddChildView(bookmarks_button_);
     toolbar_layout_->SetFlexForView(bookmarks_button_, 0);
     toolbar_->AddChildView(downloads_button_);
@@ -224,6 +230,10 @@ BrowserChrome::BrowserChrome(
     security_details_panel_->SetVisible(false);
     container_->AddChildView(security_details_panel_);
     container_layout_->SetFlexForView(security_details_panel_, 0);
+
+    find_bar_ = std::make_unique<FindBar>(session_, engine_);
+    container_->AddChildView(find_bar_->View());
+    container_layout_->SetFlexForView(find_bar_->View(), 0);
 
     SyncAddressFromSession(session_);
     UpdatePrivatePresentation();
@@ -322,6 +332,11 @@ void BrowserChrome::UpdateSecurityDetails() {
 
 void BrowserChrome::HandleAction(const ChromeAction action) {
     CEF_REQUIRE_UI_THREAD();
+
+    if (action == ChromeAction::OpenFindBar) {
+        OpenFindBar();
+        return;
+    }
 
     if (action == ChromeAction::ToggleNetworkLab) {
         if (on_toggle_network_lab_) {
@@ -525,6 +540,13 @@ void BrowserChrome::FocusAddressBar() {
     if (address_bar_) {
         address_bar_->RequestFocus();
         address_bar_->SelectAll(false);
+    }
+}
+
+void BrowserChrome::OpenFindBar() {
+    CEF_REQUIRE_UI_THREAD();
+    if (find_bar_) {
+        find_bar_->Open();
     }
 }
 
