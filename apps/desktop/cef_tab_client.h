@@ -5,6 +5,7 @@
 #include "include/cef_client.h"
 #include "include/cef_display_handler.h"
 #include "include/cef_download_handler.h"
+#include "include/cef_find_handler.h"
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
@@ -23,6 +24,7 @@ class CefBrowserEngine;
 class CefTabClient final : public CefClient,
                            public CefDisplayHandler,
                            public CefDownloadHandler,
+                           public CefFindHandler,
                            public CefKeyboardHandler,
                            public CefLifeSpanHandler,
                            public CefLoadHandler,
@@ -37,6 +39,7 @@ public:
 
     CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
     CefRefPtr<CefDownloadHandler> GetDownloadHandler() override;
+    CefRefPtr<CefFindHandler> GetFindHandler() override;
     CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override;
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
     CefRefPtr<CefLoadHandler> GetLoadHandler() override;
@@ -48,6 +51,14 @@ public:
         const CefKeyEvent& event,
         CefEventHandle os_event,
         bool* is_keyboard_shortcut) override;
+
+    void OnFindResult(
+        CefRefPtr<CefBrowser> browser,
+        int identifier,
+        int count,
+        const CefRect& selection_rect,
+        int active_match_ordinal,
+        bool final_update) override;
 
     bool CanDownload(
         CefRefPtr<CefBrowser> browser,

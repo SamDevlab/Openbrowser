@@ -7,8 +7,11 @@ set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     cef_browser_engine.h
     cef_tab_client.cpp
     cef_tab_client.h
+    cef_tab_client_find.cpp
     desktop_app.cpp
     desktop_app.h
+    find_bar.cpp
+    find_bar.h
     focus_sidebar.cpp
     focus_sidebar.h
     internal_pages.cpp

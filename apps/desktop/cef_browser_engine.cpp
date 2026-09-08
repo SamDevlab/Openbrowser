@@ -306,6 +306,38 @@ void CefBrowserEngine::Reload(const core::TabId& tab_id) {
     }
 }
 
+void CefBrowserEngine::FindInPage(
+    const core::TabId& tab_id,
+    const std::string& text,
+    const bool forward,
+    const bool find_next) {
+    CEF_REQUIRE_UI_THREAD();
+    CefRefPtr<CefBrowser> browser = BrowserForCommand(tab_id);
+    if (!browser) {
+        return;
+    }
+    if (text.empty()) {
+        browser->GetHost()->StopFinding(true);
+        return;
+    }
+    browser->GetHost()->Find(text, forward, false, find_next);
+}
+
+void CefBrowserEngine::StopFinding(
+    const core::TabId& tab_id,
+    const bool clear_selection) {
+    CEF_REQUIRE_UI_THREAD();
+    CefRefPtr<CefBrowser> browser = BrowserForCommand(tab_id);
+    if (browser) {
+        browser->GetHost()->StopFinding(clear_selection);
+    }
+}
+
+void CefBrowserEngine::SetFindResultCallback(FindResultCallback callback) {
+    CEF_REQUIRE_UI_THREAD();
+    find_result_callback_ = std::move(callback);
+}
+
 void CefBrowserEngine::Suspend(const core::TabId& tab_id) {
     CEF_REQUIRE_UI_THREAD();
 
@@ -647,6 +679,17 @@ void CefBrowserEngine::NotifyRendererCrashed(const core::TabId& tab_id, std::str
     CEF_REQUIRE_UI_THREAD();
     if (event_sink_ != nullptr) {
         event_sink_->OnRendererCrashed({.tab_id = tab_id, .reason = std::move(reason)});
+    }
+}
+
+void CefBrowserEngine::NotifyFindResult(
+    const core::TabId& tab_id,
+    const int match_count,
+    const int active_match_ordinal,
+    const bool final_update) {
+    CEF_REQUIRE_UI_THREAD();
+    if (find_result_callback_) {
+        find_result_callback_(tab_id, match_count, active_match_ordinal, final_update);
     }
 }
 

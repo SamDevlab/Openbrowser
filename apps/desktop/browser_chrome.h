@@ -11,6 +11,7 @@
 #include "include/views/cef_textfield_delegate.h"
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -26,6 +27,7 @@ class CefTextfield;
 namespace openbrowser::desktop {
 
 class CefBrowserEngine;
+class FindBar;
 
 class BrowserChrome final : public core::BrowserSessionObserver,
                             public core::PermissionPromptObserver {
@@ -53,6 +55,7 @@ public:
     void SetProfileLabel(const std::string& label);
     void SetPrivateMode(bool enabled);
     void FocusAddressBar();
+    void OpenFindBar();
     void SetSearchProvider(core::navigation::SearchProvider provider);
 
 private:
@@ -60,6 +63,7 @@ private:
         Back,
         Forward,
         Reload,
+        OpenFindBar,
         ToggleNetworkLab,
         ToggleSecurityDetails,
         AllowPermissionOnce,
@@ -102,6 +106,7 @@ private:
     CefRefPtr<CefLabelButton> reload_button_;
     CefRefPtr<CefLabelButton> security_badge_;
     CefRefPtr<CefTextfield> address_bar_;
+    CefRefPtr<CefLabelButton> find_button_;
     CefRefPtr<CefLabelButton> palette_button_;
     CefRefPtr<CefLabelButton> bookmarks_button_;
     CefRefPtr<CefLabelButton> downloads_button_;
@@ -121,6 +126,8 @@ private:
     CefRefPtr<CefBoxLayout> security_details_layout_;
     CefRefPtr<CefLabelButton> security_details_label_;
     CefRefPtr<CefLabelButton> reset_permissions_button_;
+
+    std::unique_ptr<FindBar> find_bar_;
 
     std::vector<CefRefPtr<CefButtonDelegate>> button_delegates_;
     CefRefPtr<CefTextfieldDelegate> address_delegate_;

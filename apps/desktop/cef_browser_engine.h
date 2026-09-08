@@ -40,6 +40,12 @@ namespace openbrowser::desktop {
 
 class CefBrowserEngine final : public engine::BrowserEngine, public CefBaseRefCounted {
 public:
+    using FindResultCallback = std::function<void(
+        const core::TabId&,
+        int match_count,
+        int active_match_ordinal,
+        bool final_update)>;
+
     explicit CefBrowserEngine(CefRefPtr<CefPanel> browser_host);
 
     CefBrowserEngine(const CefBrowserEngine&) = delete;
@@ -55,6 +61,14 @@ public:
     void Reload(const core::TabId& tab_id) override;
     void Suspend(const core::TabId& tab_id) override;
     void Resume(const core::TabId& tab_id) override;
+
+    void FindInPage(
+        const core::TabId& tab_id,
+        const std::string& text,
+        bool forward,
+        bool find_next);
+    void StopFinding(const core::TabId& tab_id, bool clear_selection = true);
+    void SetFindResultCallback(FindResultCallback callback);
 
     void SetStorageRoot(std::filesystem::path root);
     [[nodiscard]] const std::filesystem::path& StorageRoot() const noexcept;
@@ -128,6 +142,11 @@ public:
         std::string error_text);
     void NotifyTitleChanged(const core::TabId& tab_id, std::string title);
     void NotifyRendererCrashed(const core::TabId& tab_id, std::string reason);
+    void NotifyFindResult(
+        const core::TabId& tab_id,
+        int match_count,
+        int active_match_ordinal,
+        bool final_update);
 
     // May be called from CEF's IO thread. Delivery to the Network Lab sink is
     // always serialized onto the CEF UI thread.
@@ -191,6 +210,7 @@ private:
     std::atomic<core::CompatibilityMitigationRegistry*> mitigation_registry_{nullptr};
     std::atomic<core::FilterDecisionLog*> filter_decision_log_{nullptr};
     std::function<void(const std::string&)> action_dispatcher_;
+    FindResultCallback find_result_callback_;
 
     IMPLEMENT_REFCOUNTING(CefBrowserEngine);
 };
