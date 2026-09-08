@@ -59,9 +59,10 @@ BookmarksBar::BookmarksBar(
     layout_ = panel_->SetToBoxLayout(settings);
 
     add_delegate_ = new AddBookmarkDelegate(*this);
-    add_button_ = CefLabelButton::CreateLabelButton(add_delegate_, "[+ Bookmark]");
+    add_button_ = CefLabelButton::CreateLabelButton(add_delegate_, "☆ Add bookmark");
 
     RebuildBar();
+    panel_->SetVisible(false);
 }
 
 BookmarksBar::~BookmarksBar() {
