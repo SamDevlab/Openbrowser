@@ -133,6 +133,9 @@ CefRefPtr<CefRequestContext> CefBrowserEngine::GetOrCreateRequestContext(
             CefRequestContextSettings settings{};
             settings.persist_session_cookies = 0;
             ephemeral_context_ = CefRequestContext::CreateContext(settings, nullptr);
+            if (ephemeral_context_) {
+                static_cast<void>(internal_pages_.RegisterForContext(ephemeral_context_));
+            }
         }
         return ephemeral_context_;
     }
@@ -156,6 +159,9 @@ CefRefPtr<CefRequestContext> CefBrowserEngine::GetOrCreateRequestContext(
     }
 
     CefRefPtr<CefRequestContext> context = CefRequestContext::CreateContext(settings, nullptr);
+    if (context) {
+        static_cast<void>(internal_pages_.RegisterForContext(context));
+    }
     workspace_contexts_[*workspace_id] = context;
     return context;
 }

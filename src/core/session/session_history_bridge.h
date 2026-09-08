@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/history/history_manager.h"
+#include "core/navigation/internal_urls.h"
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
 #include "core/session/browser_session_observer.h"
@@ -20,7 +21,7 @@ namespace openbrowser::core {
 //    - Persistent profile + persistent tab
 //    - Navigation has been explicitly committed by BrowserSession
 //    - Navigation state == NavigationState::Idle
-//    - Committed URL is valid, not empty, and not "about:blank"
+//    - Committed URL is valid, non-empty, and not an internal blank/new-tab surface
 //    - Committed URL changed since last history commit for that tab
 // 4. On committed visit: record visit and trigger history auto-save.
 // 5. Title changes, tab activations, reload notifications, suspend/resume DO NOT count as new visits.
@@ -51,8 +52,7 @@ public:
                 if (!is_profile_private && !is_tab_private) {
                     if (active_tab->has_committed_navigation &&
                         active_tab->navigation_state == NavigationState::Idle &&
-                        !active_tab->url.empty() &&
-                        active_tab->url != "about:blank") {
+                        !navigation::IsBlankOrNewTabUrl(active_tab->url)) {
                         const auto& tab_id = active_tab->id;
                         const auto it = last_committed_url_per_tab_.find(tab_id);
                         const bool url_changed =

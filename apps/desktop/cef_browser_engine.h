@@ -1,5 +1,7 @@
 #pragma once
 
+#include "internal_pages.h"
+
 #include "core/capabilities/capability_policy.h"
 #include "core/capabilities/permission_request.h"
 #include "core/workspaces/workspace.h"
@@ -163,6 +165,7 @@ private:
         uint32_t requested_media_permissions{0};
     };
 
+    InternalPageRegistry internal_pages_;
     CefRefPtr<CefPanel> browser_host_;
     SurfaceMap surfaces_;
     std::optional<core::TabId> active_tab_id_;
