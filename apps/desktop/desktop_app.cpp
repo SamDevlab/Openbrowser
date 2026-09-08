@@ -315,6 +315,17 @@ void DesktopApp::OnContextInitialized() {
             return true;
         },
     });
+    action_registry_->RegisterAction({
+        .id = "settings.toggle_panel",
+        .title = "Open Settings",
+        .description = "Show or hide local browser preferences",
+        .category = core::ActionCategory::Settings,
+        .shortcut_hint = "",
+        .handler = [this]() {
+            ToggleSettingsPanel();
+            return true;
+        },
+    });
     static_cast<void>(action_registry_->RegisterAction({
         .id = "profile.toggle_incognito",
         .title = "Toggle Private Profile",
@@ -460,6 +471,15 @@ void DesktopApp::OnContextInitialized() {
         .name = settings_manager_->Settings().search_provider_name,
         .search_url_template = settings_manager_->Settings().search_url_template,
     });
+
+    settings_panel_ = std::make_unique<SettingsPanel>(
+        *settings_manager_,
+        [this](const core::BrowserSettings& settings) {
+            ApplySettings(settings);
+        });
+    chrome_->View()->AddChildView(settings_panel_->View());
+    chrome_->View()->Layout();
+
     focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);
     network_lab_panel_ = std::make_unique<NetworkLabPanel>(
         *network_trace_, *session_,
@@ -609,6 +629,7 @@ void DesktopApp::OnContextInitialized() {
                 command_palette_overlay_.reset();
                 bookmarks_bar_.reset();
                 downloads_panel_.reset();
+                settings_panel_.reset();
                 network_lab_panel_.reset();
                 focus_sidebar_.reset();
                 chrome_.reset();
@@ -656,6 +677,7 @@ void DesktopApp::ShutdownRuntime() {
     command_palette_overlay_.reset();
     bookmarks_bar_.reset();
     downloads_panel_.reset();
+    settings_panel_.reset();
     ua_engine_.reset();
     mitigation_registry_.reset();
     profile_manager_.reset();
@@ -714,6 +736,30 @@ void DesktopApp::ToggleDownloadsPanel() {
     CEF_REQUIRE_UI_THREAD();
     if (downloads_panel_) {
         downloads_panel_->ToggleVisibility();
+    }
+}
+
+void DesktopApp::ToggleSettingsPanel() {
+    CEF_REQUIRE_UI_THREAD();
+    if (settings_panel_) {
+        settings_panel_->ToggleVisibility();
+    }
+}
+
+void DesktopApp::ApplySettings(const core::BrowserSettings& settings) {
+    CEF_REQUIRE_UI_THREAD();
+    if (chrome_) {
+        chrome_->SetSearchProvider({
+            .name = settings.search_provider_name,
+            .search_url_template = settings.search_url_template,
+        });
+    }
+
+    if (file_broker_) {
+        const auto downloads_dir = !settings.downloads_directory.empty()
+            ? std::filesystem::path(settings.downloads_directory)
+            : (StorageDirectory() / "downloads");
+        file_broker_->SetAllowedDirectory(downloads_dir);
     }
 }
 

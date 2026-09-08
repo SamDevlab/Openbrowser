@@ -1,5 +1,6 @@
 #include "core/settings/settings_manager.h"
 
+#include "core/navigation/internal_urls.h"
 #include "core/storage/atomic_file_store.h"
 #include "core/storage/json_helper.h"
 
@@ -110,13 +111,13 @@ bool SettingsManager::Deserialize(const std::string_view json) {
     const auto search_name = root->GetString("search_provider_name", "DuckDuckGo");
     const auto search_url = root->GetString("search_url_template", "https://duckduckgo.com/?q=%s");
     const auto restore_session = root->GetBool("restore_session_on_startup", true);
-    const auto home_page = root->GetString("home_page_url", "about:blank");
+    const auto home_page = root->GetString("home_page_url", std::string(navigation::kNewTabUrl));
     const auto downloads_dir = root->GetString("downloads_directory", "");
 
     settings_.search_provider_name = search_name.empty() ? "DuckDuckGo" : search_name;
     settings_.search_url_template = search_url.empty() ? "https://duckduckgo.com/?q=%s" : search_url;
     settings_.restore_session_on_startup = restore_session;
-    settings_.home_page_url = home_page.empty() ? "about:blank" : home_page;
+    settings_.home_page_url = home_page.empty() ? std::string(navigation::kNewTabUrl) : home_page;
     settings_.downloads_directory = downloads_dir;
 
     return true;
