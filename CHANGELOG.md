@@ -10,8 +10,7 @@ Openbrowser follows semantic versioning for published releases.
 
 - Reworked the desktop browser chrome into a compact browser-style toolbar with symbolic back, forward, reload, security, bookmark, downloads, profile, and overflow controls.
 - Removed the always-visible Network Lab control from the primary toolbar; developer tools remain available through the command palette and registered actions.
-- Simplified tab presentation, including active-tab state, close controls, and right-aligned workspace access.
-- Made the Focus tools collapsible so the browsing surface is no longer dominated by the full Focus Queue panel on startup.
+- Simplified tab presentation, including active-tab state and close controls.
 - Hid the bookmarks bar by default while preserving one-click access from the toolbar.
 - Simplified permission and site-security banner copy to match the new product-facing chrome.
 
