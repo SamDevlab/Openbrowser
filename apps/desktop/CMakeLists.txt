@@ -3,6 +3,7 @@ set(OPENBROWSER_DESKTOP_TARGET "openbrowser")
 set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     browser_chrome.cpp
     browser_chrome.h
+    browser_chrome_shortcuts.cpp
     cef_browser_engine.cpp
     cef_browser_engine.h
     cef_browser_engine_zoom.cpp
