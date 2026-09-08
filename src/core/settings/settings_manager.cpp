@@ -4,6 +4,8 @@
 #include "core/storage/atomic_file_store.h"
 #include "core/storage/json_helper.h"
 
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace openbrowser::core {
@@ -25,11 +27,41 @@ bool IsValidSettingsDocument(const std::string_view content) {
     const auto* home = root->Find("home_page_url");
     const auto* downloads = root->Find("downloads_directory");
 
+    // Aura keys are intentionally optional. Existing v0.2 settings documents
+    // must continue loading and receive the new defaults without migration.
     return search_name != nullptr && search_name->type == storage::JsonValue::Type::String &&
            search_url != nullptr && search_url->type == storage::JsonValue::Type::String &&
            restore != nullptr && restore->type == storage::JsonValue::Type::Bool &&
            home != nullptr && home->type == storage::JsonValue::Type::String &&
            downloads != nullptr && downloads->type == storage::JsonValue::Type::String;
+}
+
+std::string NormalizeTheme(std::string value) {
+    if (value == "dark" || value == "light" || value == "system") {
+        return value;
+    }
+    return "dark";
+}
+
+std::string NormalizeAccent(std::string value) {
+    if (value == "violet" || value == "blue" || value == "rose" || value == "green") {
+        return value;
+    }
+    return "violet";
+}
+
+std::string NormalizeSidebarState(std::string value) {
+    if (value == "compact" || value == "expanded" || value == "hidden") {
+        return value;
+    }
+    return "compact";
+}
+
+std::string NormalizeWallpaper(std::string value) {
+    if (value == "aura" || value == "midnight" || value == "soft") {
+        return value;
+    }
+    return "aura";
 }
 
 }  // namespace
@@ -42,6 +74,10 @@ const BrowserSettings& SettingsManager::Settings() const noexcept {
 }
 
 void SettingsManager::UpdateSettings(BrowserSettings settings) {
+    settings.appearance_theme = NormalizeTheme(std::move(settings.appearance_theme));
+    settings.appearance_accent = NormalizeAccent(std::move(settings.appearance_accent));
+    settings.aura_sidebar_state = NormalizeSidebarState(std::move(settings.aura_sidebar_state));
+    settings.new_tab_wallpaper = NormalizeWallpaper(std::move(settings.new_tab_wallpaper));
     settings_ = std::move(settings);
     TriggerAutoSave();
 }
@@ -87,13 +123,19 @@ void SettingsManager::TriggerAutoSave() const {
 
 std::string SettingsManager::Serialize() const {
     std::string out;
-    out.reserve(256);
+    out.reserve(512);
     out += "{\n  \"schema_version\": 1,\n";
     out += "  \"search_provider_name\": "; storage::EscapeJsonString(settings_.search_provider_name, out); out += ",\n";
     out += "  \"search_url_template\": "; storage::EscapeJsonString(settings_.search_url_template, out); out += ",\n";
     out += "  \"restore_session_on_startup\": " + std::string(settings_.restore_session_on_startup ? "true" : "false") + ",\n";
     out += "  \"home_page_url\": "; storage::EscapeJsonString(settings_.home_page_url, out); out += ",\n";
-    out += "  \"downloads_directory\": "; storage::EscapeJsonString(settings_.downloads_directory, out); out += "\n";
+    out += "  \"downloads_directory\": "; storage::EscapeJsonString(settings_.downloads_directory, out); out += ",\n";
+    out += "  \"appearance_theme\": "; storage::EscapeJsonString(settings_.appearance_theme, out); out += ",\n";
+    out += "  \"appearance_accent\": "; storage::EscapeJsonString(settings_.appearance_accent, out); out += ",\n";
+    out += "  \"aura_sidebar_state\": "; storage::EscapeJsonString(settings_.aura_sidebar_state, out); out += ",\n";
+    out += "  \"new_tab_wallpaper\": "; storage::EscapeJsonString(settings_.new_tab_wallpaper, out); out += ",\n";
+    out += "  \"new_tab_show_shortcuts\": " + std::string(settings_.new_tab_show_shortcuts ? "true" : "false") + ",\n";
+    out += "  \"new_tab_show_context\": " + std::string(settings_.new_tab_show_context ? "true" : "false") + "\n";
     out += "}\n";
     return out;
 }
@@ -119,6 +161,13 @@ bool SettingsManager::Deserialize(const std::string_view json) {
     settings_.restore_session_on_startup = restore_session;
     settings_.home_page_url = home_page.empty() ? std::string(navigation::kNewTabUrl) : home_page;
     settings_.downloads_directory = downloads_dir;
+
+    settings_.appearance_theme = NormalizeTheme(root->GetString("appearance_theme", "dark"));
+    settings_.appearance_accent = NormalizeAccent(root->GetString("appearance_accent", "violet"));
+    settings_.aura_sidebar_state = NormalizeSidebarState(root->GetString("aura_sidebar_state", "compact"));
+    settings_.new_tab_wallpaper = NormalizeWallpaper(root->GetString("new_tab_wallpaper", "aura"));
+    settings_.new_tab_show_shortcuts = root->GetBool("new_tab_show_shortcuts", true);
+    settings_.new_tab_show_context = root->GetBool("new_tab_show_context", true);
 
     return true;
 }

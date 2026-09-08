@@ -8,21 +8,30 @@
 #include "include/cef_stream.h"
 #include "include/wrapper/cef_stream_resource_handler.h"
 
+#include <map>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace openbrowser::desktop {
+
+struct NewTabAppearanceState {
+    std::mutex mutex;
+    NewTabAppearance appearance;
+};
+
 namespace {
 
 constexpr char kNewTabHost[] = "newtab.openbrowser.invalid";
 
-// The backing memory must outlive every CefStreamReader created from it.
-char kNewTabHtml[] = R"html(<!doctype html>
+constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light dark">
   <title>New Tab</title>
   <style>
     :root {
@@ -441,6 +450,8 @@ char kNewTabHtml[] = R"html(<!doctype html>
       color: #4f515d;
     }
 
+    {{APPEARANCE_CSS}}
+
     @media (max-width: 760px) {
       main {
         width: min(620px, calc(100vw - 32px));
@@ -487,11 +498,11 @@ char kNewTabHtml[] = R"html(<!doctype html>
   </style>
 </head>
 <body>
-  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-aura" checked>
-  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-midnight">
-  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-soft">
-  <input class="preference-control" type="checkbox" id="show-shortcuts" checked>
-  <input class="preference-control" type="checkbox" id="show-context" checked>
+  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-aura" {{WALLPAPER_AURA_CHECKED}}>
+  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-midnight" {{WALLPAPER_MIDNIGHT_CHECKED}}>
+  <input class="preference-control" type="radio" name="wallpaper" id="wallpaper-soft" {{WALLPAPER_SOFT_CHECKED}}>
+  <input class="preference-control" type="checkbox" id="show-shortcuts" {{SHOW_SHORTCUTS_CHECKED}}>
+  <input class="preference-control" type="checkbox" id="show-context" {{SHOW_CONTEXT_CHECKED}}>
 
   <div class="wallpaper wallpaper-aura" aria-hidden="true"></div>
   <div class="wallpaper wallpaper-midnight" aria-hidden="true"></div>
@@ -577,7 +588,7 @@ char kNewTabHtml[] = R"html(<!doctype html>
           </div>
         </div>
 
-        <p class="preview-note">These controls apply only to this New Tab. Persistent appearance preferences arrive with Aura Personalization.</p>
+        <p class="preview-note">Persistent defaults are controlled in Settings · Personalization. Changes here remain local to this tab.</p>
       </div>
     </details>
 
@@ -591,8 +602,143 @@ char kNewTabHtml[] = R"html(<!doctype html>
 </html>
 )html";
 
+void ReplaceAll(std::string& text, const std::string_view from, const std::string_view to) {
+    std::size_t start = 0;
+    while ((start = text.find(from, start)) != std::string::npos) {
+        text.replace(start, from.size(), to);
+        start += to.size();
+    }
+}
+
+std::string LightThemeCss() {
+    return R"css(
+      :root {
+        color-scheme: light;
+        --aura-bg: #f4f5f9;
+        --aura-surface: rgba(255, 255, 255, 0.82);
+        --aura-surface-strong: rgba(255, 255, 255, 0.94);
+        --aura-border: rgba(31, 34, 48, 0.11);
+        --aura-border-strong: rgba(31, 34, 48, 0.18);
+        --aura-text: #20212a;
+        --aura-muted: #686b78;
+        --aura-soft: #878a96;
+      }
+      .wallpaper-aura {
+        background:
+          radial-gradient(circle at 18% 16%, rgba(117, 103, 255, 0.18), transparent 32%),
+          radial-gradient(circle at 82% 78%, rgba(179, 92, 255, 0.10), transparent 30%),
+          linear-gradient(145deg, #f8f7ff 0%, #f1f2f8 58%, #e9ebf2 100%);
+      }
+      .wallpaper-midnight {
+        background:
+          radial-gradient(circle at 76% 18%, rgba(78, 199, 255, 0.15), transparent 30%),
+          linear-gradient(150deg, #eef6ff 0%, #eef1f7 54%, #e7eaf1 100%);
+      }
+      .wallpaper-soft {
+        background:
+          radial-gradient(circle at 22% 22%, rgba(93, 121, 255, 0.15), transparent 34%),
+          radial-gradient(circle at 74% 72%, rgba(105, 79, 173, 0.12), transparent 34%),
+          linear-gradient(145deg, #f6f4ff 0%, #f1f0f8 62%, #ebeaf1 100%);
+      }
+      .mark::after { background: #f6f5fb; box-shadow: inset 0 0 0 1px rgba(31,34,48,0.08); }
+      .search-cue { background: rgba(255,255,255,0.74); box-shadow: 0 18px 48px rgba(50,50,70,0.09); }
+      kbd { border-color: rgba(31,34,48,0.13); border-bottom-color: rgba(31,34,48,0.20); background: rgba(31,34,48,0.05); color: #454753; }
+      .shortcut { color: #353743; }
+      .shortcut:hover, .shortcut:focus-visible { background: rgba(31,34,48,0.045); }
+      .shortcut-badge { background: rgba(31,34,48,0.055); box-shadow: inset 0 0 0 1px rgba(31,34,48,0.05); color: #2d2f3a; }
+      .context-row { background: rgba(31,34,48,0.04); }
+      .context-row strong { color: #343641; }
+      .customize { border-color: rgba(31,34,48,0.09); background: rgba(255,255,255,0.52); }
+      .customize summary { color: #555865; }
+      .option { background: rgba(31,34,48,0.025); color: #555865; }
+      .option:hover { background: rgba(31,34,48,0.055); }
+    )css";
+}
+
+std::string AccentCss(const std::string& accent) {
+    std::string primary = "#7567ff";
+    std::string secondary = "#b35cff";
+    std::string highlight = "#cbc6ff";
+    std::string border = "rgba(117, 103, 255, 0.52)";
+    std::string fill = "rgba(117, 103, 255, 0.11)";
+
+    if (accent == "blue") {
+        primary = "#399cf7";
+        secondary = "#4ec7ff";
+        highlight = "#b9e6ff";
+        border = "rgba(57, 156, 247, 0.52)";
+        fill = "rgba(57, 156, 247, 0.11)";
+    } else if (accent == "rose") {
+        primary = "#f05f98";
+        secondary = "#c96cff";
+        highlight = "#ffd0e2";
+        border = "rgba(240, 95, 152, 0.52)";
+        fill = "rgba(240, 95, 152, 0.11)";
+    } else if (accent == "green") {
+        primary = "#42c996";
+        secondary = "#73d66f";
+        highlight = "#c7f5df";
+        border = "rgba(66, 201, 150, 0.52)";
+        fill = "rgba(66, 201, 150, 0.11)";
+    }
+
+    return ":root { --aura-accent: " + primary + "; --aura-accent-2: " + secondary + "; }\n"
+        ".search-icon { background: " + fill + "; color: " + highlight + "; }\n"
+        "#wallpaper-aura:checked ~ main label[for=\"wallpaper-aura\"], "
+        "#wallpaper-midnight:checked ~ main label[for=\"wallpaper-midnight\"], "
+        "#wallpaper-soft:checked ~ main label[for=\"wallpaper-soft\"], "
+        "#show-shortcuts:checked ~ main label[for=\"show-shortcuts\"], "
+        "#show-context:checked ~ main label[for=\"show-context\"] { border-color: " + border + "; background: " + fill + "; color: " + highlight + "; }\n";
+}
+
+std::string AppearanceCss(const NewTabAppearance& appearance) {
+    std::string css = AccentCss(appearance.accent);
+    if (appearance.theme == "light") {
+        css += LightThemeCss();
+    } else if (appearance.theme == "system") {
+        css += "@media (prefers-color-scheme: light) {\n" + LightThemeCss() + "\n}\n";
+    }
+    return css;
+}
+
+std::string RenderNewTabHtml(const NewTabAppearance& appearance) {
+    std::string html(kNewTabHtmlTemplate);
+    ReplaceAll(html, "{{APPEARANCE_CSS}}", AppearanceCss(appearance));
+    ReplaceAll(html, "{{WALLPAPER_AURA_CHECKED}}", appearance.wallpaper == "aura" ? "checked" : "");
+    ReplaceAll(html, "{{WALLPAPER_MIDNIGHT_CHECKED}}", appearance.wallpaper == "midnight" ? "checked" : "");
+    ReplaceAll(html, "{{WALLPAPER_SOFT_CHECKED}}", appearance.wallpaper == "soft" ? "checked" : "");
+    ReplaceAll(html, "{{SHOW_SHORTCUTS_CHECKED}}", appearance.show_shortcuts ? "checked" : "");
+    ReplaceAll(html, "{{SHOW_CONTEXT_CHECKED}}", appearance.show_context ? "checked" : "");
+    return html;
+}
+
+std::string AppearanceKey(const NewTabAppearance& appearance) {
+    return appearance.theme + "|" + appearance.accent + "|" + appearance.wallpaper + "|" +
+        (appearance.show_shortcuts ? "1" : "0") + "|" + (appearance.show_context ? "1" : "0");
+}
+
+std::string& CachedHtmlForAppearance(const NewTabAppearance& appearance) {
+    static std::mutex cache_mutex;
+    static std::map<std::string, std::unique_ptr<std::string>> cache;
+
+    const std::string key = AppearanceKey(appearance);
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    const auto found = cache.find(key);
+    if (found != cache.end()) {
+        return *found->second;
+    }
+
+    auto html = std::make_unique<std::string>(RenderNewTabHtml(appearance));
+    std::string& result = *html;
+    cache.emplace(key, std::move(html));
+    return result;
+}
+
 class NewTabPageFactory final : public CefSchemeHandlerFactory {
 public:
+    explicit NewTabPageFactory(std::shared_ptr<NewTabAppearanceState> state)
+        : state_(std::move(state)) {}
+
     CefRefPtr<CefResourceHandler> Create(
         CefRefPtr<CefBrowser> /*browser*/,
         CefRefPtr<CefFrame> /*frame*/,
@@ -602,7 +748,14 @@ public:
             return nullptr;
         }
 
-        auto stream = CefStreamReader::CreateForData(kNewTabHtml, sizeof(kNewTabHtml) - 1);
+        NewTabAppearance appearance;
+        {
+            std::lock_guard<std::mutex> lock(state_->mutex);
+            appearance = state_->appearance;
+        }
+
+        std::string& html = CachedHtmlForAppearance(appearance);
+        auto stream = CefStreamReader::CreateForData(html.data(), html.size());
         if (!stream) {
             return nullptr;
         }
@@ -615,9 +768,6 @@ public:
         headers.emplace("X-Content-Type-Options", "nosniff");
         headers.emplace("Referrer-Policy", "no-referrer");
 
-        // CefResponse::SetMimeType expects only the media type. Supplying a
-        // charset parameter here can cause Chromium to treat the custom
-        // response as plain text. UTF-8 is declared by the document itself.
         return new CefStreamResourceHandler(
             200,
             "OK",
@@ -627,20 +777,24 @@ public:
     }
 
 private:
+    std::shared_ptr<NewTabAppearanceState> state_;
+
     IMPLEMENT_REFCOUNTING(NewTabPageFactory);
 };
 
-CefRefPtr<CefSchemeHandlerFactory> CreateNewTabFactory() {
-    return new NewTabPageFactory();
+CefRefPtr<CefSchemeHandlerFactory> CreateNewTabFactory(
+    const std::shared_ptr<NewTabAppearanceState>& state) {
+    return new NewTabPageFactory(state);
 }
 
 }  // namespace
 
-InternalPageRegistry::InternalPageRegistry() {
+InternalPageRegistry::InternalPageRegistry()
+    : appearance_state_(std::make_shared<NewTabAppearanceState>()) {
     registered_ = CefRegisterSchemeHandlerFactory(
         "https",
         kNewTabHost,
-        CreateNewTabFactory());
+        CreateNewTabFactory(appearance_state_));
 }
 
 InternalPageRegistry::~InternalPageRegistry() {
@@ -657,7 +811,12 @@ bool InternalPageRegistry::RegisterForContext(CefRefPtr<CefRequestContext> conte
     return context->RegisterSchemeHandlerFactory(
         "https",
         kNewTabHost,
-        CreateNewTabFactory());
+        CreateNewTabFactory(appearance_state_));
+}
+
+void InternalPageRegistry::SetNewTabAppearance(NewTabAppearance appearance) {
+    std::lock_guard<std::mutex> lock(appearance_state_->mutex);
+    appearance_state_->appearance = std::move(appearance);
 }
 
 }  // namespace openbrowser::desktop
