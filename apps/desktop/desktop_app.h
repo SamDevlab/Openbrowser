@@ -1,5 +1,6 @@
 #pragma once
 
+#include "aura_sidebar.h"
 #include "bookmarks_bar.h"
 #include "browser_chrome.h"
 #include "cef_browser_engine.h"
@@ -63,6 +64,10 @@ private:
     [[nodiscard]] std::filesystem::path SessionFilePath() const;
     [[nodiscard]] std::filesystem::path StorageDirectory() const;
     void SaveCurrentSession(bool clean_shutdown);
+    void HideTransientPanels();
+    void ToggleAuraSidebar();
+    void CycleWorkspace();
+    void ToggleFocusPanel();
     void ToggleNetworkLab();
     void ToggleCommandPalette();
     void ToggleBookmarksBar();
@@ -93,6 +98,7 @@ private:
     std::unique_ptr<LibraryPanel> library_panel_;
     std::unique_ptr<SettingsPanel> settings_panel_;
     std::unique_ptr<CommandPaletteOverlay> command_palette_overlay_;
+    std::unique_ptr<AuraSidebar> aura_sidebar_;
     std::unique_ptr<FocusSidebar> focus_sidebar_;
     std::unique_ptr<devtools::network::NetworkTraceBuffer> network_trace_;
     std::unique_ptr<NetworkLabPanel> network_lab_panel_;

@@ -1,6 +1,8 @@
 set(OPENBROWSER_DESKTOP_TARGET "openbrowser")
 
 set(OPENBROWSER_DESKTOP_COMMON_SOURCES
+    aura_sidebar.cpp
+    aura_sidebar.h
     browser_chrome.cpp
     browser_chrome.h
     browser_chrome_shortcuts.cpp
