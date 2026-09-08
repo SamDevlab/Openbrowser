@@ -4,6 +4,7 @@
 #include "find_bar.h"
 #include "core/capabilities/capability_policy.h"
 #include "core/navigation/address_input.h"
+#include "core/navigation/internal_urls.h"
 #include "core/session/browser_session.h"
 
 #include "include/views/cef_box_layout.h"
@@ -127,9 +128,9 @@ BrowserChrome::BrowserChrome(
     toolbar_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings toolbar_settings{};
     toolbar_settings.horizontal = 1;
-    toolbar_settings.between_child_spacing = 4;
-    toolbar_settings.inside_border_horizontal_spacing = 8;
-    toolbar_settings.inside_border_vertical_spacing = 5;
+    toolbar_settings.between_child_spacing = 6;
+    toolbar_settings.inside_border_horizontal_spacing = 10;
+    toolbar_settings.inside_border_vertical_spacing = 6;
     toolbar_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     toolbar_layout_ = toolbar_->SetToBoxLayout(toolbar_settings);
 
@@ -139,15 +140,7 @@ BrowserChrome::BrowserChrome(
     security_badge_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ToggleSecurityDetails), "🔒");
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
-    address_bar_->SetPlaceholderText("Search or enter address");
-    find_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::OpenFindBar), "⌕");
-    zoom_out_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ZoomOut), "−");
-    zoom_reset_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ResetZoom), "100%");
-    zoom_in_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ZoomIn), "+");
+    address_bar_->SetPlaceholderText("Search or enter an address");
     bookmarks_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ToggleBookmarksBar), "☆");
     downloads_button_ = CefLabelButton::CreateLabelButton(
@@ -157,6 +150,9 @@ BrowserChrome::BrowserChrome(
     palette_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ToggleCommandPalette), "⋮");
 
+    // Aura keeps the permanent chrome intentionally small. Find and zoom remain
+    // first-class browser actions through shortcuts/Command Palette, but no
+    // longer consume horizontal space beside the omnibox.
     toolbar_->AddChildView(back_button_);
     toolbar_layout_->SetFlexForView(back_button_, 0);
     toolbar_->AddChildView(forward_button_);
@@ -167,14 +163,6 @@ BrowserChrome::BrowserChrome(
     toolbar_layout_->SetFlexForView(security_badge_, 0);
     toolbar_->AddChildView(address_bar_);
     toolbar_layout_->SetFlexForView(address_bar_, 1);
-    toolbar_->AddChildView(find_button_);
-    toolbar_layout_->SetFlexForView(find_button_, 0);
-    toolbar_->AddChildView(zoom_out_button_);
-    toolbar_layout_->SetFlexForView(zoom_out_button_, 0);
-    toolbar_->AddChildView(zoom_reset_button_);
-    toolbar_layout_->SetFlexForView(zoom_reset_button_, 0);
-    toolbar_->AddChildView(zoom_in_button_);
-    toolbar_layout_->SetFlexForView(zoom_in_button_, 0);
     toolbar_->AddChildView(bookmarks_button_);
     toolbar_layout_->SetFlexForView(bookmarks_button_, 0);
     toolbar_->AddChildView(downloads_button_);
@@ -268,7 +256,20 @@ void BrowserChrome::OnBrowserSessionChanged(const core::BrowserSession& session)
     SyncAddressFromSession(session);
     UpdateZoomPresentation();
 
+    // New Tab is a launch surface, not a destination the user should have to
+    // erase from the omnibox. Keep the primary action ready for immediate use.
     const auto& active_id = session.ActiveTabId();
+    if (active_id.has_value()) {
+        const auto* tab = session.FindTab(*active_id);
+        if (tab != nullptr) {
+            const std::string& display_url =
+                tab->pending_url.has_value() ? *tab->pending_url : tab->url;
+            if (core::navigation::IsBlankOrNewTabUrl(display_url) && !address_editing_) {
+                FocusAddressBar();
+            }
+        }
+    }
+
     if (active_id.has_value() && engine_) {
         const auto prompt = engine_->FindPromptForTab(*active_id);
         if (prompt.has_value()) {
@@ -493,7 +494,7 @@ void BrowserChrome::UpdatePrivatePresentation() {
     }
     if (address_bar_) {
         address_bar_->SetPlaceholderText(
-            private_mode_ ? "Private — search or enter address" : "Search or enter address");
+            private_mode_ ? "Private — search or enter an address" : "Search or enter an address");
     }
     if (always_allow_button_) {
         always_allow_button_->SetEnabled(!private_mode_);
@@ -617,7 +618,7 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
     if (!active_id.has_value()) {
         address_bar_->SetText("");
         current_origin_.clear();
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐"));
+        security_badge_->SetVisible(false);
         if (reload_button_) {
             reload_button_->SetText("↻");
         }
@@ -629,7 +630,7 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
     if (tab == nullptr) {
         address_bar_->SetText("");
         current_origin_.clear();
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐"));
+        security_badge_->SetVisible(false);
         if (reload_button_) {
             reload_button_->SetText("↻");
         }
@@ -643,6 +644,22 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
     }
 
     const std::string& display_url = tab->pending_url.has_value() ? *tab->pending_url : tab->url;
+
+    // Internal launch surfaces are browser chrome, not a web destination. Keep
+    // their implementation URL out of the user's search field and reclaim the
+    // security-badge slot for a wider omnibox.
+    if (core::navigation::IsBlankOrNewTabUrl(display_url)) {
+        address_bar_->SetText("");
+        current_origin_.clear();
+        security_badge_->SetVisible(false);
+        UpdateSecurityDetails();
+        if (toolbar_) {
+            toolbar_->InvalidateLayout();
+        }
+        return;
+    }
+
+    security_badge_->SetVisible(true);
     address_bar_->SetText(display_url);
 
     current_origin_ = core::CapabilityPolicy::ExtractOrigin(display_url).value_or("");

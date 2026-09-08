@@ -6,6 +6,19 @@ Openbrowser follows semantic versioning for published releases.
 
 ## Unreleased
 
+### Added
+
+- Started Project Aura, the v0.3.0 design campaign built around Personal, Focused, Elegant and content-first Progressive Chrome principles.
+- Added the Aura design foundation for retractable browser surfaces with Expanded, Compact, Focus and Pinned/Collapsed/Auto-hide behavior models.
+
+### Changed
+
+- Repaired the internal New Tab response MIME handling and introduced the first Aura visual treatment with local-only styling and no JavaScript or remote assets.
+- The omnibox now hides Openbrowser internal blank/new-tab implementation URLs and reclaims the site-security slot on those launch surfaces.
+- Simplified the permanent toolbar around navigation, the omnibox, bookmarks, downloads, profile and overflow; Find and Zoom remain available through standard shortcuts and browser actions instead of consuming permanent width.
+- New Tab surfaces focus the omnibox for immediate search/navigation.
+- The tab strip now gives the active tab the only dedicated close control, uses the first-party New Tab URL directly, and presents the current workspace as transitional context ahead of the Aura sidebar.
+
 ## [0.2.0] - 2026-09-08
 
 ### Added
