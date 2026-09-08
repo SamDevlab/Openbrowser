@@ -1,5 +1,6 @@
 #include "tab_strip.h"
 
+#include "core/navigation/internal_urls.h"
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
 #include "core/session/session_privacy_orchestrator.h"
@@ -52,9 +53,9 @@ TabStrip::TabStrip(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 1;
-    settings.between_child_spacing = 3;
-    settings.inside_border_horizontal_spacing = 8;
-    settings.inside_border_vertical_spacing = 4;
+    settings.between_child_spacing = 4;
+    settings.inside_border_horizontal_spacing = 10;
+    settings.inside_border_vertical_spacing = 5;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     layout_ = panel_->SetToBoxLayout(settings);
 
@@ -162,7 +163,9 @@ bool TabStrip::OpenNewTabForActiveWorkspace() {
 
     core::Tab new_tab;
     new_tab.id = new_id;
-    new_tab.url = "https://example.com/";
+    new_tab.url = is_ephemeral
+        ? std::string(core::navigation::kPrivateNewTabUrl)
+        : std::string(core::navigation::kNewTabUrl);
     new_tab.title = is_ephemeral ? "Private Tab" : "New Tab";
     new_tab.lifecycle = core::TabLifecycle::Active;
     new_tab.workspace_id = ws_id;
@@ -256,8 +259,8 @@ void TabStrip::RebuildTabs() {
         }
 
         std::string label = prefix + title_text;
-        if (label.size() > 30) {
-            label = label.substr(0, 27) + "...";
+        if (label.size() > 28) {
+            label = label.substr(0, 25) + "...";
         }
 
         auto activate_delegate = CefRefPtr<CefButtonDelegate>(
@@ -267,12 +270,16 @@ void TabStrip::RebuildTabs() {
         panel_->AddChildView(tab_btn);
         layout_->SetFlexForView(tab_btn, 0);
 
-        auto close_delegate = CefRefPtr<CefButtonDelegate>(
-            new TabActionDelegate(*this, TabAction::Close, tab.id));
-        delegates_.push_back(close_delegate);
-        auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "×");
-        panel_->AddChildView(close_btn);
-        layout_->SetFlexForView(close_btn, 0);
+        // Keep the strip visually calm: only the active tab exposes a dedicated
+        // close control. Ctrl+W remains available for every tab.
+        if (is_active) {
+            auto close_delegate = CefRefPtr<CefButtonDelegate>(
+                new TabActionDelegate(*this, TabAction::Close, tab.id));
+            delegates_.push_back(close_delegate);
+            auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "×");
+            panel_->AddChildView(close_btn);
+            layout_->SetFlexForView(close_btn, 0);
+        }
     }
 
     auto new_tab_delegate = CefRefPtr<CefButtonDelegate>(
@@ -282,11 +289,14 @@ void TabStrip::RebuildTabs() {
     panel_->AddChildView(new_tab_btn);
     layout_->SetFlexForView(new_tab_btn, 0);
 
+    // Workspace switching remains here only as a transitional affordance until
+    // the retractable Aura sidebar lands in MVP-22. Present it as context rather
+    // than as another tab.
     if (workspace_manager_ != nullptr) {
         auto ws_delegate = CefRefPtr<CefButtonDelegate>(
             new TabActionDelegate(*this, TabAction::CycleWorkspace, ""));
         delegates_.push_back(ws_delegate);
-        const std::string ws_label = "📁 " + workspace_manager_->ActiveWorkspaceId();
+        const std::string ws_label = "Workspace · " + workspace_manager_->ActiveWorkspaceId();
         auto ws_btn = CefLabelButton::CreateLabelButton(ws_delegate, ws_label);
         panel_->AddChildView(ws_btn);
         layout_->SetFlexForView(ws_btn, 0);
