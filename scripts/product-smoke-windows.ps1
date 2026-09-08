@@ -47,6 +47,33 @@ function Get-RequestCount {
     return @(Select-String -LiteralPath $LogPath -SimpleMatch "GET $RequestTarget ").Count
 }
 
+function Get-HistoryVisitCount {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$HistoryPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    if (-not (Test-Path -LiteralPath $HistoryPath -PathType Leaf)) {
+        return 0
+    }
+
+    try {
+        $history = Get-Content -LiteralPath $HistoryPath -Raw | ConvertFrom-Json
+        $entry = @($history.entries | Where-Object { $_.url -eq $Url } | Select-Object -First 1)
+        if ($entry.Count -eq 0) {
+            return 0
+        }
+        return [int]$entry[0].visit_count
+    } catch {
+        # The persistence layer writes atomically, but tolerate a polling read
+        # that races the replacement and simply try again on the next interval.
+        return 0
+    }
+}
+
 function Close-BrowserGracefully {
     param(
         [Parameter(Mandatory = $true)]
@@ -343,6 +370,10 @@ try {
     if (@($history.entries | Where-Object { $_.url -eq $smokeUrl }).Count -lt 1) {
         throw 'Committed smoke URL was not persisted in history.'
     }
+    $firstHistoryVisitCount = Get-HistoryVisitCount -HistoryPath $historyFile -Url $smokeUrl
+    if ($firstHistoryVisitCount -lt 1) {
+        throw 'Committed smoke URL did not record a history visit count.'
+    }
 
     if ($firstExitCode -ne 0) {
         throw "Openbrowser returned a non-zero status after window close."
@@ -359,11 +390,15 @@ try {
             "--session-file=$sessionFile"
         )
 
-    Wait-Until -Description 'restored packaged navigation' -TimeoutSeconds 25 -Condition {
+    # A restored page may be satisfied from the browser cache, so a second
+    # server GET is not a reliable proof of restoration. The history bridge is
+    # updated only after a committed navigation, making visit_count the durable
+    # product-level signal that the restored tab actually loaded.
+    Wait-Until -Description 'restored packaged navigation commit' -TimeoutSeconds 25 -Condition {
         if ($restoredBrowser.HasExited) {
             throw "Openbrowser exited during restored navigation (code $($restoredBrowser.ExitCode))."
         }
-        return (Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget) -gt $firstRequestCount
+        return (Get-HistoryVisitCount -HistoryPath $historyFile -Url $smokeUrl) -gt $firstHistoryVisitCount
     }
 
     $secondExitCode = Close-BrowserGracefully -Process $restoredBrowser
@@ -384,11 +419,17 @@ try {
         throw "Relaunched Openbrowser returned a non-zero status after window close."
     }
 
+    $finalHistoryVisitCount = Get-HistoryVisitCount -HistoryPath $historyFile -Url $smokeUrl
+    if ($finalHistoryVisitCount -le $firstHistoryVisitCount) {
+        throw 'Restored navigation commit was not persisted in history.'
+    }
+
     $finalRequestCount = Get-RequestCount -LogPath $serverErr -RequestTarget $requestTarget
     Write-Host "Packaged product lifecycle smoke passed."
     Write-Host "  URL: $smokeUrl"
-    Write-Host "  Observed page requests: $finalRequestCount"
-    Write-Host "  Session restore: verified"
+    Write-Host "  Observed network requests: $finalRequestCount"
+    Write-Host "  History visits: $finalHistoryVisitCount"
+    Write-Host "  Session restore navigation commit: verified"
     Write-Host "  History persistence: verified"
     Write-Host "  Clean shutdown x2: verified"
     Write-Host "  ZIP SHA-256: $actualSha"
