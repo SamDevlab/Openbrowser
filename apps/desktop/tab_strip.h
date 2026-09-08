@@ -36,6 +36,7 @@ public:
 
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
     [[nodiscard]] bool CycleWorkspace();
+    [[nodiscard]] bool SelectWorkspace(const std::string& workspace_id);
 
     void OnBrowserSessionChanged(const core::BrowserSession& session) override;
 

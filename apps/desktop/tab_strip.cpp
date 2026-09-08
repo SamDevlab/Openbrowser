@@ -88,6 +88,22 @@ bool TabStrip::CycleWorkspace() {
     return activated;
 }
 
+bool TabStrip::SelectWorkspace(const std::string& workspace_id) {
+    CEF_REQUIRE_UI_THREAD();
+    if (workspace_manager_ == nullptr || workspace_id.empty()) {
+        return false;
+    }
+
+    if (workspace_id != workspace_manager_->ActiveWorkspaceId() &&
+        !workspace_manager_->SetActiveWorkspace(workspace_id)) {
+        return false;
+    }
+
+    const bool activated = ActivateOrCreateTabForActiveWorkspace();
+    RebuildTabs();
+    return activated;
+}
+
 void TabStrip::OnBrowserSessionChanged(const core::BrowserSession& /*session*/) {
     CEF_REQUIRE_UI_THREAD();
 

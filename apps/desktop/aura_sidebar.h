@@ -29,11 +29,12 @@ void ApplyGlobalAuraSidebarState(std::string_view state);
 class AuraSidebar final : public core::BrowserSessionObserver {
 public:
     using ActionCallback = std::function<void()>;
+    using WorkspaceSelectCallback = std::function<void(const std::string&)>;
 
     AuraSidebar(
         core::BrowserSession& session,
         core::WorkspaceManager& workspace_manager,
-        ActionCallback on_cycle_workspace,
+        WorkspaceSelectCallback on_select_workspace,
         ActionCallback on_toggle_focus,
         ActionCallback on_toggle_library,
         ActionCallback on_toggle_downloads,
@@ -61,7 +62,7 @@ public:
 private:
     enum class Action {
         ToggleCollapsed,
-        CycleWorkspace,
+        SelectWorkspace,
         ToggleFocus,
         ToggleLibrary,
         ToggleDownloads,
@@ -74,14 +75,13 @@ private:
     class ActionDelegate;
     class SidebarPanelDelegate;
 
-    void HandleAction(Action action);
-    [[nodiscard]] std::string ActiveWorkspaceLabel() const;
+    void HandleAction(Action action, const std::string& target_id);
     void RelayoutWindow();
 
     core::BrowserSession& session_;
     core::WorkspaceManager& workspace_manager_;
 
-    ActionCallback on_cycle_workspace_;
+    WorkspaceSelectCallback on_select_workspace_;
     ActionCallback on_toggle_focus_;
     ActionCallback on_toggle_library_;
     ActionCallback on_toggle_downloads_;

@@ -590,7 +590,7 @@ void DesktopApp::OnContextInitialized() {
     aura_sidebar_ = std::make_unique<AuraSidebar>(
         *session_,
         *workspace_manager_,
-        [this]() { CycleWorkspace(); },
+        [this](const std::string& workspace_id) { SelectWorkspace(workspace_id); },
         [this]() { ToggleFocusPanel(); },
         [this]() { ToggleLibraryPanel(); },
         [this]() { ToggleDownloadsPanel(); },
@@ -914,6 +914,16 @@ void DesktopApp::CycleWorkspace() {
     CEF_REQUIRE_UI_THREAD();
     if (tab_strip_) {
         static_cast<void>(tab_strip_->CycleWorkspace());
+    }
+    if (aura_sidebar_) {
+        aura_sidebar_->Refresh();
+    }
+}
+
+void DesktopApp::SelectWorkspace(const std::string& workspace_id) {
+    CEF_REQUIRE_UI_THREAD();
+    if (tab_strip_) {
+        static_cast<void>(tab_strip_->SelectWorkspace(workspace_id));
     }
     if (aura_sidebar_) {
         aura_sidebar_->Refresh();

@@ -10,11 +10,26 @@ namespace openbrowser::core {
 
 namespace {
 
+std::string DefaultWorkspaceIcon(const WorkspaceId& id) {
+    if (id == "default") return "⌂";
+    if (id == "work") return "◆";
+    if (id == "personal") return "○";
+    return "◇";
+}
+
+int WorkspaceVisualRank(const WorkspaceId& id) {
+    if (id == "default") return 0;
+    if (id == "work") return 1;
+    if (id == "personal") return 2;
+    return 3;
+}
+
 const Workspace kDefaultWorkspace{
     .id = "default",
     .name = "Default",
     .badge_color = "#3B82F6",
     .is_ephemeral = false,
+    .icon = "⌂",
 };
 
 bool IsValidWorkspaceDocument(const std::string_view content) {
@@ -40,12 +55,14 @@ WorkspaceManager::WorkspaceManager() {
         .name = "Work",
         .badge_color = "#10B981",
         .is_ephemeral = false,
+        .icon = "◆",
     });
     workspaces_.emplace("personal", Workspace{
         .id = "personal",
         .name = "Personal",
         .badge_color = "#8B5CF6",
         .is_ephemeral = false,
+        .icon = "○",
     });
 }
 
@@ -89,12 +106,23 @@ std::vector<Workspace> WorkspaceManager::ListWorkspaces() const {
     for (const auto& [_, ws] : workspaces_) {
         list.push_back(ws);
     }
+    std::stable_sort(list.begin(), list.end(), [](const Workspace& lhs, const Workspace& rhs) {
+        const int lhs_rank = WorkspaceVisualRank(lhs.id);
+        const int rhs_rank = WorkspaceVisualRank(rhs.id);
+        if (lhs_rank != rhs_rank) {
+            return lhs_rank < rhs_rank;
+        }
+        return lhs.name < rhs.name;
+    });
     return list;
 }
 
 bool WorkspaceManager::CreateWorkspace(Workspace workspace) {
     if (workspace.id.empty() || HasWorkspace(workspace.id)) {
         return false;
+    }
+    if (workspace.icon.empty()) {
+        workspace.icon = DefaultWorkspaceIcon(workspace.id);
     }
     const auto id = workspace.id;
     workspaces_.emplace(id, std::move(workspace));
@@ -127,14 +155,15 @@ bool WorkspaceManager::SetActiveWorkspace(const WorkspaceId& id) {
 }
 
 std::string WorkspaceManager::CycleNextWorkspace() {
-    if (workspaces_.empty()) {
+    const auto workspaces = ListWorkspaces();
+    if (workspaces.empty()) {
         return active_workspace_id_;
     }
 
     std::vector<std::string> ids;
-    ids.reserve(workspaces_.size());
-    for (const auto& [id, _] : workspaces_) {
-        ids.push_back(id);
+    ids.reserve(workspaces.size());
+    for (const auto& workspace : workspaces) {
+        ids.push_back(workspace.id);
     }
 
     const auto it = std::find(ids.begin(), ids.end(), active_workspace_id_);
@@ -150,7 +179,7 @@ std::string WorkspaceManager::CycleNextWorkspace() {
 
 std::string WorkspaceManager::Serialize() const {
     std::string out;
-    out.reserve(512);
+    out.reserve(640);
     out += "{\n  \"schema_version\": 1,\n";
     out += "  \"active_workspace_id\": ";
     storage::EscapeJsonString(active_workspace_id_, out);
@@ -169,6 +198,7 @@ std::string WorkspaceManager::Serialize() const {
         out += "      \"id\": "; storage::EscapeJsonString(ws->id, out); out += ",\n";
         out += "      \"name\": "; storage::EscapeJsonString(ws->name, out); out += ",\n";
         out += "      \"badge_color\": "; storage::EscapeJsonString(ws->badge_color, out); out += ",\n";
+        out += "      \"icon\": "; storage::EscapeJsonString(ws->icon, out); out += ",\n";
         out += "      \"is_ephemeral\": false\n";
         out += "    }";
         if (i + 1 < to_serialize.size()) {
@@ -205,6 +235,10 @@ bool WorkspaceManager::Deserialize(const std::string_view json) {
         ws.name = item.GetString("name");
         ws.badge_color = item.GetString("badge_color", "#3B82F6");
         ws.is_ephemeral = item.GetBool("is_ephemeral", false);
+        ws.icon = item.GetString("icon", DefaultWorkspaceIcon(ws.id));
+        if (ws.icon.empty()) {
+            ws.icon = DefaultWorkspaceIcon(ws.id);
+        }
 
         if (!ws.id.empty() && !ws.is_ephemeral) {
             loaded.emplace(ws.id, std::move(ws));
