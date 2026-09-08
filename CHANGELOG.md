@@ -15,6 +15,7 @@ Openbrowser follows semantic versioning for published releases.
 - Added New Tab 2.0 with responsive quick-access cards, compact browser-context hints and CSS-only per-tab controls for wallpaper and optional modules.
 - Added the Aura Personalization Center with locally persisted theme, accent, sidebar default, New Tab wallpaper and optional module preferences.
 - Added persistent visual workspace identity with browser-owned glyphs and colors for the Aura sidebar.
+- Added the Aura Focus Experience with an expanded Focus drawer and a compact active-session timer indicator.
 
 ### Changed
 
@@ -31,6 +32,8 @@ Openbrowser follows semantic versioning for published releases.
 - Aura appearance settings remain backward-compatible with existing v0.2 `settings.json` files, apply sidebar defaults live, and become the defaults for newly loaded or reloaded New Tab surfaces.
 - The Aura sidebar now lists workspaces as directly selectable compact or expanded entries instead of forcing repeated cycling; the active workspace is visually identified while existing tab and Private Mode isolation rules remain authoritative.
 - Existing `workspaces.json` files remain readable and receive deterministic fallback glyphs when they predate visual workspace identity.
+- Starting a Focus sprint now retracts the Aura sidebar, tab strip, bookmarks bar and other transient drawers while keeping the browsing surface and omnibox available.
+- Pausing, resetting or completing a Focus sprint restores the browser chrome visibility state that was active before Focus, while the compact timer can expand the Focus drawer without ending the sprint.
 
 ## [0.2.0] - 2026-09-08
 

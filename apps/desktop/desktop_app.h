@@ -69,6 +69,8 @@ private:
     void CycleWorkspace();
     void SelectWorkspace(const std::string& workspace_id);
     void ToggleFocusPanel();
+    void ApplyFocusChromeState(bool enabled);
+    void RelayoutBrowserWindow();
     void ToggleNetworkLab();
     void ToggleCommandPalette();
     void ToggleBookmarksBar();
@@ -122,6 +124,11 @@ private:
     std::unique_ptr<core::SessionPrivacyOrchestrator> privacy_orchestrator_;
     std::filesystem::path session_file_path_;
     std::size_t next_tab_index_{1};
+
+    bool focus_chrome_active_{false};
+    bool aura_sidebar_visible_before_focus_{false};
+    bool bookmarks_bar_visible_before_focus_{false};
+    bool tab_strip_visible_before_focus_{true};
 
     IMPLEMENT_REFCOUNTING(DesktopApp);
 };

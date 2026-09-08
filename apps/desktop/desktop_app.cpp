@@ -576,7 +576,10 @@ void DesktopApp::OnContextInitialized() {
     chrome_->View()->AddChildView(library_panel_->View());
     chrome_->View()->Layout();
 
-    focus_sidebar_ = std::make_unique<FocusSidebar>(*session_, *focus_queue_);
+    focus_sidebar_ = std::make_unique<FocusSidebar>(
+        *session_,
+        *focus_queue_,
+        [this](const bool enabled) { ApplyFocusChromeState(enabled); });
     network_lab_panel_ = std::make_unique<NetworkLabPanel>(
         *network_trace_, *session_,
         connection_registry_.get(),
@@ -905,6 +908,9 @@ void DesktopApp::HideTransientPanels() {
 
 void DesktopApp::ToggleAuraSidebar() {
     CEF_REQUIRE_UI_THREAD();
+    if (focus_chrome_active_) {
+        return;
+    }
     if (aura_sidebar_) {
         aura_sidebar_->ToggleVisibility();
     }
@@ -935,10 +941,76 @@ void DesktopApp::ToggleFocusPanel() {
     if (!focus_sidebar_) {
         return;
     }
+
+    if (focus_sidebar_->IsFocusModeActive()) {
+        focus_sidebar_->ToggleVisibility();
+        return;
+    }
+
     const bool show = !focus_sidebar_->IsVisible();
     HideTransientPanels();
     if (show) {
         focus_sidebar_->SetVisible(true);
+    }
+}
+
+void DesktopApp::ApplyFocusChromeState(const bool enabled) {
+    CEF_REQUIRE_UI_THREAD();
+    if (focus_chrome_active_ == enabled) {
+        return;
+    }
+
+    if (enabled) {
+        focus_chrome_active_ = true;
+
+        if (aura_sidebar_) {
+            aura_sidebar_visible_before_focus_ = aura_sidebar_->IsVisible();
+            aura_sidebar_->SetVisible(false);
+        }
+        if (bookmarks_bar_) {
+            bookmarks_bar_visible_before_focus_ = bookmarks_bar_->IsVisible();
+            bookmarks_bar_->SetVisible(false);
+        }
+        if (tab_strip_ && tab_strip_->View()) {
+            tab_strip_visible_before_focus_ = tab_strip_->View()->IsVisible();
+            tab_strip_->View()->SetVisible(false);
+        }
+
+        // Focus remains represented by its compact timer indicator while every
+        // other transient drawer leaves the content area.
+        HideTransientPanels();
+    } else {
+        focus_chrome_active_ = false;
+
+        if (tab_strip_ && tab_strip_->View()) {
+            tab_strip_->View()->SetVisible(tab_strip_visible_before_focus_);
+        }
+        if (bookmarks_bar_) {
+            bookmarks_bar_->SetVisible(bookmarks_bar_visible_before_focus_);
+        }
+        if (aura_sidebar_) {
+            aura_sidebar_->SetVisible(aura_sidebar_visible_before_focus_);
+        }
+    }
+
+    RelayoutBrowserWindow();
+}
+
+void DesktopApp::RelayoutBrowserWindow() {
+    CEF_REQUIRE_UI_THREAD();
+    if (chrome_ && chrome_->View()) {
+        auto window = chrome_->View()->GetWindow();
+        if (window) {
+            window->Layout();
+            return;
+        }
+    }
+
+    if (browser_host_) {
+        auto window = browser_host_->GetWindow();
+        if (window) {
+            window->Layout();
+        }
     }
 }
 
@@ -963,6 +1035,9 @@ void DesktopApp::ToggleCommandPalette() {
 
 void DesktopApp::ToggleBookmarksBar() {
     CEF_REQUIRE_UI_THREAD();
+    if (focus_chrome_active_) {
+        return;
+    }
     if (bookmarks_bar_) {
         bookmarks_bar_->ToggleVisibility();
     }
