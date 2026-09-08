@@ -36,6 +36,12 @@ public:
 
 private:
     enum class Action {
+        CycleTheme,
+        CycleAccent,
+        CycleSidebarState,
+        CycleWallpaper,
+        ToggleNewTabShortcuts,
+        ToggleNewTabContext,
         ToggleRestoreSession,
         SaveHomePage,
         SaveSearchProvider,
@@ -55,6 +61,12 @@ private:
 
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
+    CefRefPtr<CefLabelButton> theme_button_;
+    CefRefPtr<CefLabelButton> accent_button_;
+    CefRefPtr<CefLabelButton> sidebar_state_button_;
+    CefRefPtr<CefLabelButton> wallpaper_button_;
+    CefRefPtr<CefLabelButton> shortcuts_button_;
+    CefRefPtr<CefLabelButton> context_button_;
     CefRefPtr<CefLabelButton> restore_session_button_;
     CefRefPtr<CefTextfield> home_page_field_;
     CefRefPtr<CefTextfield> search_provider_field_;

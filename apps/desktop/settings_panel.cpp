@@ -1,5 +1,7 @@
 #include "settings_panel.h"
 
+#include "aura_sidebar.h"
+#include "cef_browser_engine.h"
 #include "core/navigation/internal_urls.h"
 
 #include "include/views/cef_box_layout.h"
@@ -7,6 +9,8 @@
 #include "include/views/cef_textfield.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <cctype>
+#include <initializer_list>
 #include <string>
 #include <utility>
 
@@ -31,6 +35,45 @@ CefRefPtr<CefPanel> CreateRow() {
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     row->SetToBoxLayout(settings);
     return row;
+}
+
+std::string DisplayValue(std::string value) {
+    if (!value.empty()) {
+        value.front() = static_cast<char>(std::toupper(static_cast<unsigned char>(value.front())));
+    }
+    return value;
+}
+
+std::string CycleValue(
+    const std::string& current,
+    const std::initializer_list<const char*> values) {
+    if (values.size() == 0) {
+        return current;
+    }
+
+    auto it = values.begin();
+    for (; it != values.end(); ++it) {
+        if (current == *it) {
+            auto next = it;
+            ++next;
+            return next == values.end() ? std::string(*values.begin()) : std::string(*next);
+        }
+    }
+    return std::string(*values.begin());
+}
+
+void ApplyAuraPreferences(const core::BrowserSettings& settings) {
+    ApplyGlobalAuraSidebarState(settings.aura_sidebar_state);
+
+    if (auto* engine = CefBrowserEngine::ActiveInstance(); engine != nullptr) {
+        engine->SetNewTabAppearance({
+            .theme = settings.appearance_theme,
+            .accent = settings.appearance_accent,
+            .wallpaper = settings.new_tab_wallpaper,
+            .show_shortcuts = settings.new_tab_show_shortcuts,
+            .show_context = settings.new_tab_show_context,
+        });
+    }
 }
 
 }  // namespace
@@ -71,12 +114,15 @@ SettingsPanel::SettingsPanel(
         delegates_.push_back(delegate);
         return CefLabelButton::CreateLabelButton(delegate, text);
     };
+    const auto make_passive = [](const std::string& text) {
+        auto label = CefLabelButton::CreateLabelButton(new PassiveButtonDelegate(), text);
+        label->SetEnabled(false);
+        return label;
+    };
 
     CefRefPtr<CefPanel> header = CreateRow();
     CefRefPtr<CefBoxLayout> header_layout = header->GetLayout()->AsBoxLayout();
-    CefRefPtr<CefLabelButton> title = CefLabelButton::CreateLabelButton(
-        new PassiveButtonDelegate(), "Settings");
-    title->SetEnabled(false);
+    CefRefPtr<CefLabelButton> title = make_passive("Settings · Personalization");
     CefRefPtr<CefLabelButton> close = make_button(Action::Close, "Close");
     header->AddChildView(title);
     if (header_layout) {
@@ -88,6 +134,46 @@ SettingsPanel::SettingsPanel(
     }
     panel_->AddChildView(header);
     layout_->SetFlexForView(header, 0);
+
+    CefRefPtr<CefLabelButton> appearance_label = make_passive("Appearance");
+    panel_->AddChildView(appearance_label);
+    layout_->SetFlexForView(appearance_label, 0);
+
+    CefRefPtr<CefPanel> appearance_row = CreateRow();
+    CefRefPtr<CefBoxLayout> appearance_layout = appearance_row->GetLayout()->AsBoxLayout();
+    theme_button_ = make_button(Action::CycleTheme, "Theme: Dark");
+    accent_button_ = make_button(Action::CycleAccent, "Accent: Violet");
+    sidebar_state_button_ = make_button(Action::CycleSidebarState, "Sidebar default: Compact");
+    appearance_row->AddChildView(theme_button_);
+    appearance_row->AddChildView(accent_button_);
+    appearance_row->AddChildView(sidebar_state_button_);
+    if (appearance_layout) {
+        appearance_layout->SetFlexForView(theme_button_, 1);
+        appearance_layout->SetFlexForView(accent_button_, 1);
+        appearance_layout->SetFlexForView(sidebar_state_button_, 1);
+    }
+    panel_->AddChildView(appearance_row);
+    layout_->SetFlexForView(appearance_row, 0);
+
+    CefRefPtr<CefPanel> new_tab_row = CreateRow();
+    CefRefPtr<CefBoxLayout> new_tab_layout = new_tab_row->GetLayout()->AsBoxLayout();
+    wallpaper_button_ = make_button(Action::CycleWallpaper, "Wallpaper: Aura");
+    shortcuts_button_ = make_button(Action::ToggleNewTabShortcuts, "Quick access: On");
+    context_button_ = make_button(Action::ToggleNewTabContext, "Browser hints: On");
+    new_tab_row->AddChildView(wallpaper_button_);
+    new_tab_row->AddChildView(shortcuts_button_);
+    new_tab_row->AddChildView(context_button_);
+    if (new_tab_layout) {
+        new_tab_layout->SetFlexForView(wallpaper_button_, 1);
+        new_tab_layout->SetFlexForView(shortcuts_button_, 1);
+        new_tab_layout->SetFlexForView(context_button_, 1);
+    }
+    panel_->AddChildView(new_tab_row);
+    layout_->SetFlexForView(new_tab_row, 0);
+
+    CefRefPtr<CefLabelButton> browser_label = make_passive("Browser behavior");
+    panel_->AddChildView(browser_label);
+    layout_->SetFlexForView(browser_label, 0);
 
     restore_session_button_ = make_button(Action::ToggleRestoreSession, "Restore previous session: On");
     panel_->AddChildView(restore_session_button_);
@@ -154,8 +240,7 @@ SettingsPanel::SettingsPanel(
 
     CefRefPtr<CefPanel> footer = CreateRow();
     CefRefPtr<CefBoxLayout> footer_layout = footer->GetLayout()->AsBoxLayout();
-    status_label_ = CefLabelButton::CreateLabelButton(new PassiveButtonDelegate(), "Settings are stored locally");
-    status_label_->SetEnabled(false);
+    status_label_ = make_passive("Settings are stored locally");
     CefRefPtr<CefLabelButton> reset = make_button(Action::ResetDefaults, "Reset defaults");
     footer->AddChildView(status_label_);
     if (footer_layout) {
@@ -169,6 +254,7 @@ SettingsPanel::SettingsPanel(
     layout_->SetFlexForView(footer, 0);
 
     RefreshFromSettings();
+    ApplyAuraPreferences(settings_manager_.Settings());
     panel_->SetVisible(false);
 }
 
@@ -207,6 +293,26 @@ void SettingsPanel::RefreshFromSettings() {
     CEF_REQUIRE_UI_THREAD();
     const auto& settings = settings_manager_.Settings();
 
+    if (theme_button_) {
+        theme_button_->SetText("Theme: " + DisplayValue(settings.appearance_theme));
+    }
+    if (accent_button_) {
+        accent_button_->SetText("Accent: " + DisplayValue(settings.appearance_accent));
+    }
+    if (sidebar_state_button_) {
+        sidebar_state_button_->SetText("Sidebar default: " + DisplayValue(settings.aura_sidebar_state));
+    }
+    if (wallpaper_button_) {
+        wallpaper_button_->SetText("Wallpaper: " + DisplayValue(settings.new_tab_wallpaper));
+    }
+    if (shortcuts_button_) {
+        shortcuts_button_->SetText(
+            settings.new_tab_show_shortcuts ? "Quick access: On" : "Quick access: Off");
+    }
+    if (context_button_) {
+        context_button_->SetText(
+            settings.new_tab_show_context ? "Browser hints: On" : "Browser hints: Off");
+    }
     if (restore_session_button_) {
         restore_session_button_->SetText(
             settings.restore_session_on_startup
@@ -231,6 +337,51 @@ void SettingsPanel::HandleAction(const Action action) {
     CEF_REQUIRE_UI_THREAD();
 
     switch (action) {
+        case Action::CycleTheme: {
+            auto updated = settings_manager_.Settings();
+            updated.appearance_theme = CycleValue(updated.appearance_theme, {"dark", "light", "system"});
+            settings_manager_.UpdateSettings(std::move(updated));
+            NotifySettingsChanged("Theme saved · reload New Tab to refresh existing pages");
+            return;
+        }
+        case Action::CycleAccent: {
+            auto updated = settings_manager_.Settings();
+            updated.appearance_accent = CycleValue(
+                updated.appearance_accent, {"violet", "blue", "rose", "green"});
+            settings_manager_.UpdateSettings(std::move(updated));
+            NotifySettingsChanged("Accent saved · reload New Tab to refresh existing pages");
+            return;
+        }
+        case Action::CycleSidebarState: {
+            auto updated = settings_manager_.Settings();
+            updated.aura_sidebar_state = CycleValue(
+                updated.aura_sidebar_state, {"compact", "expanded", "hidden"});
+            settings_manager_.UpdateSettings(std::move(updated));
+            NotifySettingsChanged("Sidebar default saved and applied");
+            return;
+        }
+        case Action::CycleWallpaper: {
+            auto updated = settings_manager_.Settings();
+            updated.new_tab_wallpaper = CycleValue(
+                updated.new_tab_wallpaper, {"aura", "midnight", "soft"});
+            settings_manager_.UpdateSettings(std::move(updated));
+            NotifySettingsChanged("Wallpaper saved · reload New Tab to refresh existing pages");
+            return;
+        }
+        case Action::ToggleNewTabShortcuts: {
+            auto updated = settings_manager_.Settings();
+            updated.new_tab_show_shortcuts = !updated.new_tab_show_shortcuts;
+            settings_manager_.UpdateSettings(std::move(updated));
+            NotifySettingsChanged("Quick access default saved");
+            return;
+        }
+        case Action::ToggleNewTabContext: {
+            auto updated = settings_manager_.Settings();
+            updated.new_tab_show_context = !updated.new_tab_show_context;
+            settings_manager_.UpdateSettings(std::move(updated));
+            NotifySettingsChanged("Browser hints default saved");
+            return;
+        }
         case Action::ToggleRestoreSession:
             settings_manager_.SetRestoreSessionOnStartup(
                 !settings_manager_.Settings().restore_session_on_startup);
@@ -284,6 +435,7 @@ void SettingsPanel::HandleAction(const Action action) {
 
 void SettingsPanel::NotifySettingsChanged(const char* status_text) {
     RefreshFromSettings();
+    ApplyAuraPreferences(settings_manager_.Settings());
     SetStatus(status_text);
     if (on_settings_changed_) {
         on_settings_changed_(settings_manager_.Settings());

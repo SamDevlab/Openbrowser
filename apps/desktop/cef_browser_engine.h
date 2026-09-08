@@ -51,6 +51,10 @@ public:
     CefBrowserEngine(const CefBrowserEngine&) = delete;
     CefBrowserEngine& operator=(const CefBrowserEngine&) = delete;
 
+    [[nodiscard]] static CefBrowserEngine* ActiveInstance() noexcept {
+        return ActiveInstanceSlot();
+    }
+
     void SetEventSink(engine::BrowserEngineEventSink* sink) noexcept override;
     void CreateTab(const core::Tab& tab) override;
     void CloseTab(const core::TabId& tab_id) override;
@@ -77,6 +81,9 @@ public:
 
     void SetStorageRoot(std::filesystem::path root);
     [[nodiscard]] const std::filesystem::path& StorageRoot() const noexcept;
+    void SetNewTabAppearance(const NewTabAppearance& appearance) {
+        internal_pages_.SetNewTabAppearance(appearance);
+    }
 
     void SetEphemeralMode(bool enabled) noexcept override;
     [[nodiscard]] bool IsEphemeralMode() const noexcept override;
@@ -166,6 +173,31 @@ public:
     void PostAction(const std::string& action_id);
 
 private:
+    class ActiveInstanceRegistration final {
+    public:
+        explicit ActiveInstanceRegistration(CefBrowserEngine* owner) noexcept
+            : owner_(owner) {
+            ActiveInstanceSlot() = owner_;
+        }
+
+        ~ActiveInstanceRegistration() {
+            if (ActiveInstanceSlot() == owner_) {
+                ActiveInstanceSlot() = nullptr;
+            }
+        }
+
+        ActiveInstanceRegistration(const ActiveInstanceRegistration&) = delete;
+        ActiveInstanceRegistration& operator=(const ActiveInstanceRegistration&) = delete;
+
+    private:
+        CefBrowserEngine* owner_;
+    };
+
+    [[nodiscard]] static CefBrowserEngine*& ActiveInstanceSlot() noexcept {
+        static CefBrowserEngine* instance = nullptr;
+        return instance;
+    }
+
     struct Surface {
         CefRefPtr<CefBrowserView> view;
         CefRefPtr<CefClient> client;
@@ -189,6 +221,7 @@ private:
         uint32_t requested_media_permissions{0};
     };
 
+    ActiveInstanceRegistration active_instance_registration_{this};
     InternalPageRegistry internal_pages_;
     CefRefPtr<CefPanel> browser_host_;
     SurfaceMap surfaces_;

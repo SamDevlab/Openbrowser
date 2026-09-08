@@ -11,9 +11,41 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace openbrowser::desktop {
+namespace {
+
+AuraSidebar* g_active_sidebar = nullptr;
+std::string g_preferred_sidebar_state{"compact"};
+
+std::string NormalizeSidebarState(const std::string_view state) {
+    if (state == "expanded" || state == "hidden") {
+        return std::string(state);
+    }
+    return "compact";
+}
+
+}  // namespace
+
+void ApplyGlobalAuraSidebarState(const std::string_view state) {
+    CEF_REQUIRE_UI_THREAD();
+    g_preferred_sidebar_state = NormalizeSidebarState(state);
+
+    if (g_active_sidebar == nullptr) {
+        return;
+    }
+
+    if (g_preferred_sidebar_state == "hidden") {
+        g_active_sidebar->SetVisible(false);
+        return;
+    }
+
+    g_active_sidebar->SetVisible(true);
+    g_active_sidebar->SetCollapsed(g_preferred_sidebar_state != "expanded");
+}
 
 class AuraSidebar::SidebarPanelDelegate final : public CefPanelDelegate {
 public:
@@ -82,10 +114,16 @@ AuraSidebar::AuraSidebar(
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     layout_ = panel_->SetToBoxLayout(settings);
 
+    g_active_sidebar = this;
+    collapsed_ = g_preferred_sidebar_state != "expanded";
+    panel_->SetVisible(g_preferred_sidebar_state != "hidden");
     Refresh();
 }
 
 AuraSidebar::~AuraSidebar() {
+    if (g_active_sidebar == this) {
+        g_active_sidebar = nullptr;
+    }
     session_.RemoveObserver(this);
 }
 

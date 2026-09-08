@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace openbrowser::core {
@@ -19,6 +20,11 @@ class CefButtonDelegate;
 class CefPanelDelegate;
 
 namespace openbrowser::desktop {
+
+// Applies the user's persisted Aura sidebar preference. The value is retained
+// even before the native sidebar exists so startup preferences can be supplied
+// by SettingsPanel during construction.
+void ApplyGlobalAuraSidebarState(std::string_view state);
 
 class AuraSidebar final : public core::BrowserSessionObserver {
 public:
