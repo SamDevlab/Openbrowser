@@ -13,7 +13,6 @@ on:
       - "scripts/product-smoke-windows.ps1"
       - "CMakeLists.txt"
       - "LICENSE"
-      - "README.md"
       - "THIRD_PARTY.md"
       - ".github/workflows/windows-package.yml"
   push:
@@ -30,10 +29,7 @@ on:
       - "scripts/product-smoke-windows.ps1"
       - "CMakeLists.txt"
       - "LICENSE"
-      - "README.md"
       - "THIRD_PARTY.md"
-      - "CHANGELOG.md"
-      - "docs/release-process.md"
       - ".github/workflows/windows-package.yml"
   workflow_dispatch:
 

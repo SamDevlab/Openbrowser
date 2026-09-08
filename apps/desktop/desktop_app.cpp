@@ -31,6 +31,13 @@ public:
         ID_RELOAD = 1007,
         ID_BACK = 1008,
         ID_FORWARD = 1009,
+        ID_FIND_IN_PAGE = 1010,
+        ID_HISTORY = 1011,
+        ID_ZOOM_OUT = 1012,
+        ID_ZOOM_IN = 1013,
+        ID_ZOOM_IN_SHIFTED = 1014,
+        ID_ZOOM_RESET = 1015,
+        ID_RELOAD_F5 = 1016,
     };
 
     DesktopWindowDelegate(
@@ -64,7 +71,7 @@ public:
         CEF_REQUIRE_UI_THREAD();
         window->SetTitle("Openbrowser");
 
-        // Register window keyboard accelerators
+        // Register window keyboard accelerators.
         window->SetAccelerator(ID_NEW_TAB, 'T', false, true, false, false);
         window->SetAccelerator(ID_CLOSE_TAB, 'W', false, true, false, false);
         window->SetAccelerator(ID_REOPEN_CLOSED_TAB, 'T', true, true, false, false);
@@ -74,6 +81,16 @@ public:
         window->SetAccelerator(ID_RELOAD, 'R', false, true, false, false);
         window->SetAccelerator(ID_BACK, 0x25 /*VK_LEFT*/, false, false, true, false);
         window->SetAccelerator(ID_FORWARD, 0x27 /*VK_RIGHT*/, false, false, true, false);
+
+        // Browser-standard commands are high-priority so focused web content
+        // cannot consume the shortcut before Openbrowser chrome receives it.
+        window->SetAccelerator(ID_FIND_IN_PAGE, 'F', false, true, false, true);
+        window->SetAccelerator(ID_HISTORY, 'H', false, true, false, true);
+        window->SetAccelerator(ID_ZOOM_OUT, 0xBD /*VK_OEM_MINUS*/, false, true, false, true);
+        window->SetAccelerator(ID_ZOOM_IN, 0xBB /*VK_OEM_PLUS*/, false, true, false, true);
+        window->SetAccelerator(ID_ZOOM_IN_SHIFTED, 0xBB /*VK_OEM_PLUS*/, true, true, false, true);
+        window->SetAccelerator(ID_ZOOM_RESET, '0', false, true, false, true);
+        window->SetAccelerator(ID_RELOAD_F5, 0x74 /*VK_F5*/, false, false, false, true);
 
         CefRefPtr<CefPanel> root_panel = CefPanel::CreatePanel(nullptr);
         CefBoxLayoutSettings root_settings{};
@@ -151,11 +168,23 @@ public:
             case ID_FOCUS_ADDRESS_BAR:
                 return action_registry_->ExecuteAction("navigation.focus_address_bar");
             case ID_RELOAD:
+            case ID_RELOAD_F5:
                 return action_registry_->ExecuteAction("navigation.reload");
             case ID_BACK:
                 return action_registry_->ExecuteAction("navigation.back");
             case ID_FORWARD:
                 return action_registry_->ExecuteAction("navigation.forward");
+            case ID_FIND_IN_PAGE:
+                return action_registry_->ExecuteAction("navigation.find_in_page");
+            case ID_HISTORY:
+                return action_registry_->ExecuteAction("library.toggle_panel");
+            case ID_ZOOM_OUT:
+                return action_registry_->ExecuteAction("navigation.zoom_out");
+            case ID_ZOOM_IN:
+            case ID_ZOOM_IN_SHIFTED:
+                return action_registry_->ExecuteAction("navigation.zoom_in");
+            case ID_ZOOM_RESET:
+                return action_registry_->ExecuteAction("navigation.zoom_reset");
             default:
                 return false;
         }
@@ -320,7 +349,7 @@ void DesktopApp::OnContextInitialized() {
         .title = "Open History & Bookmarks",
         .description = "Show or hide the local history and bookmarks library",
         .category = core::ActionCategory::Navigation,
-        .shortcut_hint = "",
+        .shortcut_hint = "Ctrl+H",
         .handler = [this]() {
             ToggleLibraryPanel();
             return true;
@@ -586,7 +615,7 @@ void DesktopApp::OnContextInitialized() {
         .title = "Reload Page",
         .description = "Reload the current page",
         .category = core::ActionCategory::Navigation,
-        .shortcut_hint = "Ctrl+R",
+        .shortcut_hint = "Ctrl+R / F5",
         .handler = [this]() {
             if (session_ && session_->ActiveTabId().has_value()) {
                 static_cast<void>(session_->Reload(*session_->ActiveTabId()));
@@ -616,6 +645,67 @@ void DesktopApp::OnContextInitialized() {
         .handler = [this]() {
             if (session_ && session_->ActiveTabId().has_value()) {
                 static_cast<void>(session_->GoForward(*session_->ActiveTabId()));
+            }
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.find_in_page",
+        .title = "Find in Page",
+        .description = "Search within the current page",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+F",
+        .handler = [this]() {
+            if (chrome_) {
+                chrome_->OpenFindBar();
+            }
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.zoom_out",
+        .title = "Zoom Out",
+        .description = "Reduce page zoom for the active tab",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+-",
+        .handler = [this]() {
+            if (engine_ && session_ && session_->ActiveTabId().has_value()) {
+                static_cast<void>(engine_->ZoomOut(*session_->ActiveTabId()));
+                if (chrome_) {
+                    chrome_->RefreshZoomPresentation();
+                }
+            }
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.zoom_in",
+        .title = "Zoom In",
+        .description = "Increase page zoom for the active tab",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl++",
+        .handler = [this]() {
+            if (engine_ && session_ && session_->ActiveTabId().has_value()) {
+                static_cast<void>(engine_->ZoomIn(*session_->ActiveTabId()));
+                if (chrome_) {
+                    chrome_->RefreshZoomPresentation();
+                }
+            }
+            return true;
+        },
+    });
+    action_registry_->RegisterAction({
+        .id = "navigation.zoom_reset",
+        .title = "Reset Zoom",
+        .description = "Reset page zoom for the active tab",
+        .category = core::ActionCategory::Navigation,
+        .shortcut_hint = "Ctrl+0",
+        .handler = [this]() {
+            if (engine_ && session_ && session_->ActiveTabId().has_value()) {
+                static_cast<void>(engine_->ResetZoom(*session_->ActiveTabId()));
+                if (chrome_) {
+                    chrome_->RefreshZoomPresentation();
+                }
             }
             return true;
         },

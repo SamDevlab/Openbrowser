@@ -56,6 +56,7 @@ public:
     void SetPrivateMode(bool enabled);
     void FocusAddressBar();
     void OpenFindBar();
+    void RefreshZoomPresentation();
     void SetSearchProvider(core::navigation::SearchProvider provider);
 
 private:

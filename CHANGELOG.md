@@ -13,9 +13,12 @@ Openbrowser follows semantic versioning for published releases.
 - Added a native History & Bookmarks library with recent-history controls and workspace-scoped bookmark browsing.
 - Added native Find in Page with live highlighting, match counts, previous/next navigation, and a dedicated toolbar entry point.
 - Added browser-owned per-tab page zoom controls with visible percentage, zoom-out, reset, and zoom-in actions.
+- Added browser-standard desktop shortcuts for Find in Page (`Ctrl+F`), History (`Ctrl+H`), zoom out/in/reset (`Ctrl+-`, `Ctrl++`, `Ctrl+0`), and reload (`F5`).
 
 ### Changed
 
+- Documentation-only Markdown changes no longer run the Core CI matrix, and README/changelog/release-process edits no longer rebuild and smoke the Windows portable package.
+- Browser-standard desktop shortcuts are registered as high-priority CEF window accelerators so focused web content cannot consume them before browser chrome.
 - Page zoom now uses CEF browser-host zoom levels directly, remains transient per tab, and never changes persisted browser settings.
 - Find in Page follows the active tab, clears Chromium find selection when closed, and keeps search state browser-owned without persistence or network activity.
 - History can now be opened, removed entry-by-entry, or cleared from browser-owned UI; Private mode keeps persistent history hidden and immutable.
