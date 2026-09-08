@@ -64,6 +64,9 @@ private:
         Forward,
         Reload,
         OpenFindBar,
+        ZoomOut,
+        ResetZoom,
+        ZoomIn,
         ToggleNetworkLab,
         ToggleSecurityDetails,
         AllowPermissionOnce,
@@ -87,6 +90,7 @@ private:
     void ShowPrompt(const core::PermissionPrompt& prompt);
     void UpdateSecurityDetails();
     void UpdatePrivatePresentation();
+    void UpdateZoomPresentation();
 
     core::BrowserSession& session_;
     CefRefPtr<CefBrowserEngine> engine_;
@@ -107,6 +111,9 @@ private:
     CefRefPtr<CefLabelButton> security_badge_;
     CefRefPtr<CefTextfield> address_bar_;
     CefRefPtr<CefLabelButton> find_button_;
+    CefRefPtr<CefLabelButton> zoom_out_button_;
+    CefRefPtr<CefLabelButton> zoom_reset_button_;
+    CefRefPtr<CefLabelButton> zoom_in_button_;
     CefRefPtr<CefLabelButton> palette_button_;
     CefRefPtr<CefLabelButton> bookmarks_button_;
     CefRefPtr<CefLabelButton> downloads_button_;

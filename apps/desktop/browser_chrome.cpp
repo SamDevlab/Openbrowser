@@ -142,6 +142,12 @@ BrowserChrome::BrowserChrome(
     address_bar_->SetPlaceholderText("Search or enter address");
     find_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::OpenFindBar), "⌕");
+    zoom_out_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ZoomOut), "−");
+    zoom_reset_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ResetZoom), "100%");
+    zoom_in_button_ = CefLabelButton::CreateLabelButton(
+        make_delegate(ChromeAction::ZoomIn), "+");
     bookmarks_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ToggleBookmarksBar), "☆");
     downloads_button_ = CefLabelButton::CreateLabelButton(
@@ -163,6 +169,12 @@ BrowserChrome::BrowserChrome(
     toolbar_layout_->SetFlexForView(address_bar_, 1);
     toolbar_->AddChildView(find_button_);
     toolbar_layout_->SetFlexForView(find_button_, 0);
+    toolbar_->AddChildView(zoom_out_button_);
+    toolbar_layout_->SetFlexForView(zoom_out_button_, 0);
+    toolbar_->AddChildView(zoom_reset_button_);
+    toolbar_layout_->SetFlexForView(zoom_reset_button_, 0);
+    toolbar_->AddChildView(zoom_in_button_);
+    toolbar_layout_->SetFlexForView(zoom_in_button_, 0);
     toolbar_->AddChildView(bookmarks_button_);
     toolbar_layout_->SetFlexForView(bookmarks_button_, 0);
     toolbar_->AddChildView(downloads_button_);
@@ -236,6 +248,7 @@ BrowserChrome::BrowserChrome(
     container_layout_->SetFlexForView(find_bar_->View(), 0);
 
     SyncAddressFromSession(session_);
+    UpdateZoomPresentation();
     UpdatePrivatePresentation();
 }
 
@@ -253,6 +266,7 @@ CefRefPtr<CefPanel> BrowserChrome::View() const noexcept {
 void BrowserChrome::OnBrowserSessionChanged(const core::BrowserSession& session) {
     CEF_REQUIRE_UI_THREAD();
     SyncAddressFromSession(session);
+    UpdateZoomPresentation();
 
     const auto& active_id = session.ActiveTabId();
     if (active_id.has_value() && engine_) {
@@ -426,6 +440,24 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
         case ChromeAction::Reload:
             static_cast<void>(session_.Reload(*active_id));
             break;
+        case ChromeAction::ZoomOut:
+            if (engine_) {
+                static_cast<void>(engine_->ZoomOut(*active_id));
+                UpdateZoomPresentation();
+            }
+            break;
+        case ChromeAction::ResetZoom:
+            if (engine_) {
+                static_cast<void>(engine_->ResetZoom(*active_id));
+                UpdateZoomPresentation();
+            }
+            break;
+        case ChromeAction::ZoomIn:
+            if (engine_) {
+                static_cast<void>(engine_->ZoomIn(*active_id));
+                UpdateZoomPresentation();
+            }
+            break;
         default:
             break;
     }
@@ -547,6 +579,31 @@ void BrowserChrome::OpenFindBar() {
     CEF_REQUIRE_UI_THREAD();
     if (find_bar_) {
         find_bar_->Open();
+    }
+}
+
+void BrowserChrome::UpdateZoomPresentation() {
+    CEF_REQUIRE_UI_THREAD();
+
+    int percent = 100;
+    const auto& active_id = session_.ActiveTabId();
+    const bool has_active_tab = active_id.has_value();
+    if (has_active_tab && engine_) {
+        percent = engine_->ZoomPercent(*active_id);
+    }
+
+    if (zoom_reset_button_) {
+        zoom_reset_button_->SetText(std::to_string(percent) + "%");
+        zoom_reset_button_->SetEnabled(has_active_tab);
+    }
+    if (zoom_out_button_) {
+        zoom_out_button_->SetEnabled(has_active_tab && percent > 25);
+    }
+    if (zoom_in_button_) {
+        zoom_in_button_->SetEnabled(has_active_tab && percent < 500);
+    }
+    if (toolbar_) {
+        toolbar_->InvalidateLayout();
     }
 }
 

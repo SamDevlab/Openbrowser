@@ -12,9 +12,11 @@ Openbrowser follows semantic versioning for published releases.
 - Added a native Settings drawer for local startup, search-provider, and downloads preferences, accessible through the command palette.
 - Added a native History & Bookmarks library with recent-history controls and workspace-scoped bookmark browsing.
 - Added native Find in Page with live highlighting, match counts, previous/next navigation, and a dedicated toolbar entry point.
+- Added browser-owned per-tab page zoom controls with visible percentage, zoom-out, reset, and zoom-in actions.
 
 ### Changed
 
+- Page zoom now uses CEF browser-host zoom levels directly, remains transient per tab, and never changes persisted browser settings.
 - Find in Page follows the active tab, clears Chromium find selection when closed, and keeps search state browser-owned without persistence or network activity.
 - History can now be opened, removed entry-by-entry, or cleared from browser-owned UI; Private mode keeps persistent history hidden and immutable.
 - Bookmarks can now be opened and removed from the library while Private mode exposes persistent bookmarks as read-only.
