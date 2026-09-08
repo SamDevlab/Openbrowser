@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 
+sys.dont_write_bytecode = True
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
