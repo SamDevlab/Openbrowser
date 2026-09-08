@@ -1,5 +1,6 @@
 #include "tab_strip.h"
 
+#include "aura_motion.h"
 #include "core/navigation/internal_urls.h"
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
@@ -288,6 +289,8 @@ void TabStrip::RebuildTabs() {
             new TabActionDelegate(*this, TabAction::Activate, tab.id));
         delegates_.push_back(activate_delegate);
         auto tab_btn = CefLabelButton::CreateLabelButton(activate_delegate, label);
+        aura::EnableButtonMotion(tab_btn);
+        tab_btn->SetTooltipText(is_active ? title_text + " · Active tab" : title_text);
         panel_->AddChildView(tab_btn);
         layout_->SetFlexForView(tab_btn, 0);
 
@@ -298,6 +301,8 @@ void TabStrip::RebuildTabs() {
                 new TabActionDelegate(*this, TabAction::Close, tab.id));
             delegates_.push_back(close_delegate);
             auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "×");
+            aura::EnableButtonMotion(close_btn);
+            close_btn->SetTooltipText("Close active tab · Ctrl+W");
             panel_->AddChildView(close_btn);
             layout_->SetFlexForView(close_btn, 0);
         }
@@ -307,6 +312,8 @@ void TabStrip::RebuildTabs() {
         new TabActionDelegate(*this, TabAction::NewTab, ""));
     delegates_.push_back(new_tab_delegate);
     auto new_tab_btn = CefLabelButton::CreateLabelButton(new_tab_delegate, "+");
+    aura::EnableButtonMotion(new_tab_btn);
+    new_tab_btn->SetTooltipText("New tab · Ctrl+T");
     panel_->AddChildView(new_tab_btn);
     layout_->SetFlexForView(new_tab_btn, 0);
 

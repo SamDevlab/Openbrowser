@@ -1,8 +1,10 @@
 #include "aura_sidebar.h"
 
+#include "aura_motion.h"
 #include "core/session/browser_session.h"
 #include "core/workspaces/workspace_manager.h"
 
+#include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_label_button.h"
@@ -52,6 +54,16 @@ cef_color_t WorkspaceColor(const std::string_view value) {
     }
     return static_cast<cef_color_t>(0xFF000000u | rgb);
 }
+
+class PassiveButtonDelegate final : public CefButtonDelegate {
+public:
+    void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
+        CEF_REQUIRE_UI_THREAD();
+    }
+
+private:
+    IMPLEMENT_REFCOUNTING(PassiveButtonDelegate);
+};
 
 }  // namespace
 
@@ -108,6 +120,31 @@ private:
     IMPLEMENT_REFCOUNTING(ActionDelegate);
 };
 
+class AuraSidebar::FeedbackDismissTask final : public CefTask {
+public:
+    FeedbackDismissTask(
+        AuraSidebar* sidebar,
+        std::weak_ptr<bool> alive_token,
+        const std::uint64_t generation)
+        : sidebar_(sidebar),
+          alive_token_(std::move(alive_token)),
+          generation_(generation) {}
+
+    void Execute() override {
+        auto alive = alive_token_.lock();
+        if (alive && *alive && sidebar_ != nullptr) {
+            sidebar_->ClearTransientFeedback(generation_);
+        }
+    }
+
+private:
+    AuraSidebar* sidebar_;
+    std::weak_ptr<bool> alive_token_;
+    std::uint64_t generation_;
+
+    IMPLEMENT_REFCOUNTING(FeedbackDismissTask);
+};
+
 AuraSidebar::AuraSidebar(
     core::BrowserSession& session,
     core::WorkspaceManager& workspace_manager,
@@ -147,6 +184,7 @@ AuraSidebar::AuraSidebar(
 }
 
 AuraSidebar::~AuraSidebar() {
+    *alive_token_ = false;
     if (g_active_sidebar == this) {
         g_active_sidebar = nullptr;
     }
@@ -205,39 +243,49 @@ void AuraSidebar::HandleAction(const Action action, const std::string& target_id
     switch (action) {
         case Action::ToggleCollapsed:
             ToggleCollapsed();
+            ShowTransientFeedback(collapsed_ ? "Sidebar · compact" : "Sidebar · expanded");
             return;
         case Action::SelectWorkspace:
             if (!target_id.empty() && on_select_workspace_) {
                 on_select_workspace_(target_id);
+                if (const auto* workspace = workspace_manager_.FindWorkspace(target_id); workspace != nullptr) {
+                    ShowTransientFeedback("Workspace · " + workspace->name);
+                }
             }
             Refresh();
             return;
         case Action::ToggleFocus:
+            ShowTransientFeedback("Focus");
             if (on_toggle_focus_) {
                 on_toggle_focus_();
             }
             return;
         case Action::ToggleLibrary:
+            ShowTransientFeedback("History & Bookmarks");
             if (on_toggle_library_) {
                 on_toggle_library_();
             }
             return;
         case Action::ToggleDownloads:
+            ShowTransientFeedback("Downloads");
             if (on_toggle_downloads_) {
                 on_toggle_downloads_();
             }
             return;
         case Action::ToggleSettings:
+            ShowTransientFeedback("Settings");
             if (on_toggle_settings_) {
                 on_toggle_settings_();
             }
             return;
         case Action::ToggleNetworkLab:
+            ShowTransientFeedback("Network Lab");
             if (on_toggle_network_lab_) {
                 on_toggle_network_lab_();
             }
             return;
         case Action::ToggleCommands:
+            ShowTransientFeedback("Commands");
             if (on_toggle_commands_) {
                 on_toggle_commands_();
             }
@@ -246,6 +294,30 @@ void AuraSidebar::HandleAction(const Action action, const std::string& target_id
             SetVisible(false);
             return;
     }
+}
+
+void AuraSidebar::ShowTransientFeedback(std::string message) {
+    CEF_REQUIRE_UI_THREAD();
+    if (!panel_ || !panel_->IsVisible()) {
+        return;
+    }
+
+    feedback_message_ = std::move(message);
+    const std::uint64_t generation = ++feedback_generation_;
+    Refresh();
+    CefPostDelayedTask(
+        TID_UI,
+        new FeedbackDismissTask(this, alive_token_, generation),
+        aura::kTransientFeedbackDurationMs);
+}
+
+void AuraSidebar::ClearTransientFeedback(const std::uint64_t generation) {
+    CEF_REQUIRE_UI_THREAD();
+    if (generation != feedback_generation_ || feedback_message_.empty()) {
+        return;
+    }
+    feedback_message_.clear();
+    Refresh();
 }
 
 void AuraSidebar::Refresh() {
@@ -268,12 +340,14 @@ void AuraSidebar::Refresh() {
         auto button = CefLabelButton::CreateLabelButton(
             delegate,
             collapsed_ ? compact : expanded);
+        aura::EnableButtonMotion(button);
         panel_->AddChildView(button);
         layout_->SetFlexForView(button, 0);
         return button;
     };
 
-    add_button(Action::ToggleCollapsed, "O  Openbrowser        ‹", "O");
+    auto brand_button = add_button(Action::ToggleCollapsed, "O  Openbrowser        ‹", "O");
+    brand_button->SetTooltipText(collapsed_ ? "Expand Aura sidebar" : "Compact Aura sidebar");
 
     const auto& active_workspace_id = workspace_manager_.ActiveWorkspaceId();
     for (const auto& workspace : workspace_manager_.ListWorkspaces()) {
@@ -288,18 +362,40 @@ void AuraSidebar::Refresh() {
             expanded,
             compact,
             workspace.id);
-        button->SetEnabledTextColors(WorkspaceColor(workspace.badge_color));
+        const auto workspace_color = WorkspaceColor(workspace.badge_color);
+        if (is_active) {
+            aura::ApplySelectedAccent(button, workspace_color);
+        } else {
+            aura::ApplyHoverAccent(button, workspace_color);
+        }
         button->SetTooltipText(
             is_active ? workspace.name + " · Active workspace" : "Switch to " + workspace.name);
     }
 
-    add_button(Action::ToggleFocus, "◎  Focus", "◎");
-    add_button(Action::ToggleLibrary, "★  History & Bookmarks", "★");
-    add_button(Action::ToggleDownloads, "↓  Downloads", "↓");
-    add_button(Action::ToggleSettings, "⚙  Settings", "⚙");
-    add_button(Action::ToggleCommands, "⌘  Commands", "⌘");
-    add_button(Action::ToggleNetworkLab, "<>  Network Lab", "<>");
-    add_button(Action::Hide, "—  Hide sidebar", "—");
+    auto focus_button = add_button(Action::ToggleFocus, "◎  Focus", "◎");
+    focus_button->SetTooltipText("Open Focus");
+    auto library_button = add_button(Action::ToggleLibrary, "★  History & Bookmarks", "★");
+    library_button->SetTooltipText("Open History & Bookmarks");
+    auto downloads_button = add_button(Action::ToggleDownloads, "↓  Downloads", "↓");
+    downloads_button->SetTooltipText("Open Downloads");
+    auto settings_button = add_button(Action::ToggleSettings, "⚙  Settings", "⚙");
+    settings_button->SetTooltipText("Open Settings");
+    auto commands_button = add_button(Action::ToggleCommands, "⌘  Commands", "⌘");
+    commands_button->SetTooltipText("Open Commands");
+    auto network_button = add_button(Action::ToggleNetworkLab, "<>  Network Lab", "<>");
+    network_button->SetTooltipText("Open Network Lab");
+    auto hide_button = add_button(Action::Hide, "—  Hide sidebar", "—");
+    hide_button->SetTooltipText("Hide Aura sidebar · Ctrl+Shift+\\ restores it");
+
+    if (!feedback_message_.empty() && !collapsed_) {
+        CefRefPtr<CefButtonDelegate> feedback_delegate(new PassiveButtonDelegate());
+        delegates_.push_back(feedback_delegate);
+        auto feedback = CefLabelButton::CreateLabelButton(
+            feedback_delegate, "✓  " + feedback_message_);
+        feedback->SetEnabled(false);
+        panel_->AddChildView(feedback);
+        layout_->SetFlexForView(feedback, 0);
+    }
 
     panel_->InvalidateLayout();
     panel_->Layout();
