@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-compatibility-scenario="cookie-basic">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="data:,">
+  <title>Openbrowser compatibility cookie</title>
+</head>
+<body>
+  <main id="compatibility-cookie" data-compatibility-marker="cookie-basic">
+    Cookie write pending.
+  </main>
+  <script>
+    document.cookie = 'openbrowser_compatibility=stable-cookie; Path=/; SameSite=Lax';
+    document.querySelector('#compatibility-cookie').textContent =
+      document.cookie.includes('openbrowser_compatibility=stable-cookie')
+        ? 'Cookie stable-cookie visible.'
+        : 'Cookie stable-cookie missing.';
+    window.__openbrowserCompatibilityEvents = ['cookie_written'];
+  </script>
+  <script src="/compatibility-observe.js"></script>
+</body>
+</html>

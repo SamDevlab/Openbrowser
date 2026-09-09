@@ -26,14 +26,34 @@
     }
   }
 
+  const sessionStorageResult = {};
+  for (let index = 0; index < sessionStorage.length; ++index) {
+    const key = sessionStorage.key(index);
+    if (key !== null) {
+      sessionStorageResult[key] = sessionStorage.getItem(key);
+    }
+  }
+
+  const cookies = document.cookie
+    .split(';')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .sort();
+
+  const customEvents = Array.isArray(window.__openbrowserCompatibilityEvents)
+    ? window.__openbrowserCompatibilityEvents.filter((value) => typeof value === 'string')
+    : [];
+
   const observation = {
     schema_version: 1,
     scenario_id: document.documentElement.dataset.compatibilityScenario || '',
     final_url: canonicalUrl.href,
     title: document.title,
     dom_markers: domMarkers,
-    events: ['navigation_committed', 'fixture_ready'],
-    storage
+    events: ['navigation_committed', ...customEvents, 'fixture_ready'],
+    storage,
+    session_storage: sessionStorageResult,
+    cookies
   };
 
   if (observerUrl) {
