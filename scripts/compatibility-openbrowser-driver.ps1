@@ -184,7 +184,7 @@ try {
         events = @($observation.events)
         storage = $observation.storage
         adapter = [ordered]@{
-            kind = 'openbrowser-packaged'
+            kind = 'openbrowser-native'
             clean_shutdown = $true
             persisted_title = [string]$tab.title
         }
