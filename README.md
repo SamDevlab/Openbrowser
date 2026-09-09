@@ -55,7 +55,7 @@ The current `main` branch includes a native CEF Views browser with:
 - content filtering with common EasyList / Adblock Plus rule forms;
 - a command palette and browser-owned actions;
 - a native Network Lab for request inspection, decision tracing, HAR export, and `.obtrace` recording;
-- a deterministic Web Compatibility Differential Harness that runs **real Openbrowser against pinned Chromium 151** across a 10-scenario local corpus and keeps incompatibility separate from crash/timeout/lifecycle failures;
+- a deterministic Web Compatibility Differential Harness that runs **real Openbrowser against pinned Chromium 152** across a 10-scenario local corpus and keeps incompatibility separate from crash/timeout/lifecycle failures;
 - a pinned upstream **Web Platform Tests smoke lane** with exact WPT, Chrome and ChromeDriver revisions/hashes and machine-readable `wptreport` output.
 
 CEF/Chromium types remain isolated to the desktop adapter under `apps/desktop/`; the core under `src/core/` stays engine-independent.
@@ -146,7 +146,7 @@ Detailed TLS metadata that cannot be truthfully derived from standard CEF HTTP c
 
 ### Web compatibility
 
-M8.1 executes deterministic local scenarios through both real Openbrowser and a pinned Chromium 151 reference, comparing normalized browser/page observations while requiring `exit code == 0` and persisted `clean_shutdown: true` from Openbrowser. The current PR-sized corpus contains 10 scenarios.
+M8.1 executes deterministic local scenarios through both real Openbrowser and a pinned Chromium 152 reference, comparing normalized browser/page observations while requiring `exit code == 0` and persisted `clean_shutdown: true` from Openbrowser. The current PR-sized corpus contains 10 scenarios.
 
 M8.2 adds a strict, pinned WPT smoke lane for DOM, Encoding, URLSearchParams and Web Storage evidence. WPT currently runs against the pinned Chromium reference environment; direct Openbrowser execution through `wptrunner` remains a future adapter boundary.
 
@@ -165,8 +165,8 @@ See [`docs/web-compatibility.md`](docs/web-compatibility.md), [`docs/m8.1-real-b
 The desktop build is pinned to:
 
 ```text
-CEF 151.3.17+gf059e67+chromium-151.0.7922.138
-Chromium 151.0.7922.138
+CEF 152.0.6+g708dc14+chromium-152.0.7977.83
+Chromium 152.0.7977.83
 ```
 
 CEF is not vendored into the repository, and ordinary core builds do not download browser-engine binaries.
