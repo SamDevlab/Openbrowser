@@ -2,7 +2,7 @@
 
 set(
     OPENBROWSER_CEF_VERSION
-    "151.3.17+gf059e67+chromium-151.0.7922.138"
+    "152.0.6+g708dc14+chromium-152.0.7977.83"
     CACHE STRING
     "Exact CEF binary distribution version supported by the current Openbrowser desktop bootstrap"
 )
