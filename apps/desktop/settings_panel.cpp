@@ -122,7 +122,7 @@ SettingsPanel::SettingsPanel(
 
     CefRefPtr<CefPanel> header = CreateRow();
     CefRefPtr<CefBoxLayout> header_layout = header->GetLayout()->AsBoxLayout();
-    CefRefPtr<CefLabelButton> title = make_passive("Settings · Personalization");
+    CefRefPtr<CefLabelButton> title = make_passive("Settings - Personalization");
     CefRefPtr<CefLabelButton> close = make_button(Action::Close, "Close");
     header->AddChildView(title);
     if (header_layout) {
@@ -269,6 +269,7 @@ void SettingsPanel::SetVisible(const bool visible) {
     if (!panel_) {
         return;
     }
+    const bool was_visible = panel_->IsVisible();
     if (visible) {
         RefreshFromSettings();
     }
@@ -278,6 +279,13 @@ void SettingsPanel::SetVisible(const bool visible) {
             parent_panel->Layout();
         }
     }
+    if (was_visible != panel_->IsVisible() && on_visibility_changed_) {
+        on_visibility_changed_(panel_->IsVisible());
+    }
+}
+
+void SettingsPanel::SetVisibilityChangedCallback(VisibilityChangedCallback callback) {
+    on_visibility_changed_ = std::move(callback);
 }
 
 bool SettingsPanel::IsVisible() const {
@@ -341,7 +349,7 @@ void SettingsPanel::HandleAction(const Action action) {
             auto updated = settings_manager_.Settings();
             updated.appearance_theme = CycleValue(updated.appearance_theme, {"dark", "light", "system"});
             settings_manager_.UpdateSettings(std::move(updated));
-            NotifySettingsChanged("Theme saved · reload New Tab to refresh existing pages");
+            NotifySettingsChanged("Theme saved - reload New Tab to refresh existing pages");
             return;
         }
         case Action::CycleAccent: {
@@ -349,7 +357,7 @@ void SettingsPanel::HandleAction(const Action action) {
             updated.appearance_accent = CycleValue(
                 updated.appearance_accent, {"violet", "blue", "rose", "green"});
             settings_manager_.UpdateSettings(std::move(updated));
-            NotifySettingsChanged("Accent saved · reload New Tab to refresh existing pages");
+            NotifySettingsChanged("Accent saved - reload New Tab to refresh existing pages");
             return;
         }
         case Action::CycleSidebarState: {
@@ -365,7 +373,7 @@ void SettingsPanel::HandleAction(const Action action) {
             updated.new_tab_wallpaper = CycleValue(
                 updated.new_tab_wallpaper, {"aura", "midnight", "soft"});
             settings_manager_.UpdateSettings(std::move(updated));
-            NotifySettingsChanged("Wallpaper saved · reload New Tab to refresh existing pages");
+            NotifySettingsChanged("Wallpaper saved - reload New Tab to refresh existing pages");
             return;
         }
         case Action::ToggleNewTabShortcuts: {

@@ -2,6 +2,7 @@
 
 #include "core/network/network_filter_query.h"
 #include "core/session/browser_session.h"
+#include "deferred_ui_action.h"
 
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_button_delegate.h"
@@ -73,7 +74,12 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        panel_.HandleAction(action_, request_id_);
+        NetworkLabPanel* panel = &panel_;
+        const PanelAction action = action_;
+        const std::string request_id = request_id_;
+        PostDeferredUiAction(panel_.alive_token_, [panel, action, request_id]() {
+            panel->HandleAction(action, request_id);
+        });
     }
 
 private:
@@ -99,12 +105,18 @@ public:
             return false;
         }
         if (event.windows_key_code == 13) {
-            panel_.ApplyStructuredQuery();
+            NetworkLabPanel* panel = &panel_;
+            PostDeferredUiAction(panel_.alive_token_, [panel]() {
+                panel->ApplyStructuredQuery();
+            });
             return true;
         }
         if (event.windows_key_code == 27) {
             panel_.SetPendingStructuredQuery({});
-            panel_.ApplyStructuredQuery();
+            NetworkLabPanel* panel = &panel_;
+            PostDeferredUiAction(panel_.alive_token_, [panel]() {
+                panel->ApplyStructuredQuery();
+            });
             return true;
         }
         return false;
@@ -145,6 +157,7 @@ NetworkLabPanel::NetworkLabPanel(
 }
 
 NetworkLabPanel::~NetworkLabPanel() {
+    *alive_token_ = false;
     trace_buffer_.RemoveObserver(this);
     session_.RemoveObserver(this);
 }
@@ -158,11 +171,19 @@ void NetworkLabPanel::SetVisible(const bool visible) {
     if (!panel_) {
         return;
     }
+    const bool was_visible = panel_->IsVisible();
     panel_->SetVisible(visible);
     auto window = panel_->GetWindow();
     if (window) {
         window->Layout();
     }
+    if (was_visible != panel_->IsVisible() && on_visibility_changed_) {
+        on_visibility_changed_(panel_->IsVisible());
+    }
+}
+
+void NetworkLabPanel::SetVisibilityChangedCallback(VisibilityChangedCallback callback) {
+    on_visibility_changed_ = std::move(callback);
 }
 
 bool NetworkLabPanel::IsVisible() const {

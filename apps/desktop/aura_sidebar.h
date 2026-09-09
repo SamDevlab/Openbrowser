@@ -78,6 +78,8 @@ private:
     class FeedbackDismissTask;
     class SidebarPanelDelegate;
 
+    // Native button delegates defer this call so Refresh() never removes the
+    // currently dispatching CefLabelButton from inside OnButtonPressed().
     void HandleAction(Action action, const std::string& target_id);
     void ShowTransientFeedback(std::string message);
     void ClearTransientFeedback(std::uint64_t generation);

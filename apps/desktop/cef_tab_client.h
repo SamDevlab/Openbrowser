@@ -95,6 +95,7 @@ public:
         uint64_t prompt_id,
         cef_permission_request_result_t result) override;
 
+    bool DoClose(CefRefPtr<CefBrowser> browser) override;
     void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
 

@@ -1,5 +1,7 @@
 #include "downloads_panel.h"
 
+#include "deferred_ui_action.h"
+
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_label_button.h"
 #include "include/wrapper/cef_helpers.h"
@@ -8,6 +10,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 #if defined(_WIN32)
 #include <shellapi.h>
@@ -23,7 +26,12 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        panel_.HandleAction(action_, transfer_id_);
+        DownloadsPanel* panel = &panel_;
+        const TransferAction action = action_;
+        const std::string transfer_id = transfer_id_;
+        PostDeferredUiAction(panel_.alive_token_, [panel, action, transfer_id]() {
+            panel->HandleAction(action, transfer_id);
+        });
     }
 
 private:
@@ -117,6 +125,7 @@ DownloadsPanel::DownloadsPanel(
 }
 
 DownloadsPanel::~DownloadsPanel() {
+    *alive_token_ = false;
     transfer_broker_.RemoveObserver(this);
     transfer_broker_.SetFileBroker(nullptr);
 }
@@ -126,10 +135,18 @@ CefRefPtr<CefPanel> DownloadsPanel::View() const noexcept {
 }
 
 void DownloadsPanel::SetVisible(const bool visible) {
+    const bool was_visible = IsVisible();
     panel_->SetVisible(visible);
     if (visible) {
         RebuildView();
     }
+    if (was_visible != IsVisible() && on_visibility_changed_) {
+        on_visibility_changed_(IsVisible());
+    }
+}
+
+void DownloadsPanel::SetVisibilityChangedCallback(VisibilityChangedCallback callback) {
+    on_visibility_changed_ = std::move(callback);
 }
 
 bool DownloadsPanel::IsVisible() const {

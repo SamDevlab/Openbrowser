@@ -7,7 +7,9 @@
 #include "core/session/browser_session.h"
 #include "core/session/session_privacy_orchestrator.h"
 #include "core/workspaces/workspace_manager.h"
+#include "icon_system.h"
 
+#include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_label_button.h"
@@ -16,11 +18,35 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include <chrono>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
 namespace openbrowser::desktop {
+namespace {
+
+class DeferredUiTask final : public CefTask {
+public:
+    explicit DeferredUiTask(std::function<void()> callback)
+        : callback_(std::move(callback)) {}
+
+    void Execute() override {
+        CEF_REQUIRE_UI_THREAD();
+        if (callback_) {
+            callback_();
+            callback_ = nullptr;
+        }
+    }
+
+private:
+    std::function<void()> callback_;
+
+    IMPLEMENT_REFCOUNTING(DeferredUiTask);
+};
+
+}  // namespace
 
 class TabStrip::TabActionDelegate final : public CefButtonDelegate {
 public:
@@ -29,7 +55,23 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        tab_strip_.HandleTabAction(action_, tab_id_);
+
+        // BrowserSession mutations synchronously notify TabStrip and can call
+        // RebuildTabs(), which removes the current button/delegate tree. Queue
+        // the domain action to the next UI turn so the native press callback
+        // completes before any view-tree rebuild is allowed to happen.
+        TabStrip* tab_strip = &tab_strip_;
+        std::weak_ptr<bool> alive_token = tab_strip_.alive_token_;
+        const TabAction action = action_;
+        const std::string tab_id = tab_id_;
+        CefPostTask(
+            TID_UI,
+            new DeferredUiTask([tab_strip, alive_token, action, tab_id]() {
+                const auto alive = alive_token.lock();
+                if (alive && *alive && tab_strip != nullptr) {
+                    tab_strip->HandleTabAction(action, tab_id);
+                }
+            }));
     }
 
 private:
@@ -71,6 +113,7 @@ TabStrip::TabStrip(
 }
 
 TabStrip::~TabStrip() {
+    *alive_token_ = false;
     session_.RemoveObserver(this);
 }
 
@@ -268,20 +311,20 @@ void TabStrip::RebuildTabs() {
         const bool is_discarded = tab.lifecycle == core::TabLifecycle::Discarded;
         const std::string title_text = tab.title.empty() ? tab.url : tab.title;
 
-        std::string prefix;
+        std::string status_suffix;
         if (is_active) {
-            prefix += "● ";
+            status_suffix += " (active)";
         }
         if (is_discarded) {
-            prefix += "💤 ";
+            status_suffix += " (sleeping)";
         }
         if (tab.navigation_state == core::NavigationState::Loading) {
-            prefix += "⏳ ";
+            status_suffix += " (loading)";
         } else if (tab.navigation_state == core::NavigationState::Failed) {
-            prefix += "⚠ ";
+            status_suffix += " (load failed)";
         }
 
-        std::string label = prefix + title_text;
+        std::string label = title_text + status_suffix;
         if (label.size() > 28) {
             label = label.substr(0, 25) + "...";
         }
@@ -307,7 +350,7 @@ void TabStrip::RebuildTabs() {
         aura::ConfigureActionButton(
             tab_btn,
             accessible_name,
-            is_active ? title_text + " · Active tab" : title_text,
+            is_active ? title_text + " - Active tab" : title_text,
             aura::kTabAccessibilityGroupId);
         panel_->AddChildView(tab_btn);
         layout_->SetFlexForView(tab_btn, 0);
@@ -318,12 +361,19 @@ void TabStrip::RebuildTabs() {
             auto close_delegate = CefRefPtr<CefButtonDelegate>(
                 new TabActionDelegate(*this, TabAction::Close, tab.id));
             delegates_.push_back(close_delegate);
-            auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "×");
+            auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "");
+            ConfigureIconButton(
+                close_btn,
+                IconId::Close,
+                "",
+                "Close active tab " + title_text,
+                "Close active tab - Ctrl+W",
+                aura::kTabAccessibilityGroupId);
             aura::EnableButtonMotion(close_btn);
             aura::ConfigureActionButton(
                 close_btn,
                 "Close active tab " + title_text,
-                "Close active tab · Ctrl+W",
+                "Close active tab - Ctrl+W",
                 aura::kTabAccessibilityGroupId);
             panel_->AddChildView(close_btn);
             layout_->SetFlexForView(close_btn, 0);
@@ -333,12 +383,19 @@ void TabStrip::RebuildTabs() {
     auto new_tab_delegate = CefRefPtr<CefButtonDelegate>(
         new TabActionDelegate(*this, TabAction::NewTab, ""));
     delegates_.push_back(new_tab_delegate);
-    auto new_tab_btn = CefLabelButton::CreateLabelButton(new_tab_delegate, "+");
+    auto new_tab_btn = CefLabelButton::CreateLabelButton(new_tab_delegate, "");
+    ConfigureIconButton(
+        new_tab_btn,
+        IconId::Add,
+        "",
+        "New tab",
+        "New tab - Ctrl+T",
+        aura::kTabAccessibilityGroupId);
     aura::EnableButtonMotion(new_tab_btn);
     aura::ConfigureActionButton(
         new_tab_btn,
         "New tab",
-        "New tab · Ctrl+T",
+        "New tab - Ctrl+T",
         aura::kTabAccessibilityGroupId);
     panel_->AddChildView(new_tab_btn);
     layout_->SetFlexForView(new_tab_btn, 0);

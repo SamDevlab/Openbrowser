@@ -6,6 +6,7 @@
 #include "include/views/cef_panel.h"
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,9 @@ private:
 
     class TabActionDelegate;
 
+    // Native button delegates dispatch these actions on the next UI task so a
+    // synchronous BrowserSession notification cannot rebuild the tab strip and
+    // destroy the currently dispatching CefLabelButton mid-event.
     void HandleTabAction(TabAction action, const std::string& tab_id);
     [[nodiscard]] bool IsTabInActiveWorkspace(const core::Tab& tab) const;
     [[nodiscard]] bool IsTabVisibleInCurrentContext(const core::Tab& tab) const;
@@ -64,6 +68,7 @@ private:
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
     std::size_t next_tab_index_{1};
+    std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
     std::vector<CefRefPtr<CefButtonDelegate>> delegates_;
 };
 

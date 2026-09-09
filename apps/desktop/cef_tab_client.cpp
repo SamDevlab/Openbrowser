@@ -540,6 +540,18 @@ void CefTabClient::OnDismissPermissionPrompt(
     engine_->DismissPermissionPrompt(prompt_id);
 }
 
+bool CefTabClient::DoClose(CefRefPtr<CefBrowser> /*browser*/) {
+    CEF_REQUIRE_UI_THREAD();
+
+    // CefLifeSpanHandler's default DoClose path forwards a standard close
+    // notification to the BrowserView's top-level parent. In Openbrowser that
+    // parent owns every tab, so an ordinary tab close must consume that
+    // notification instead of turning it into a window close. During an
+    // explicit window shutdown we return false and preserve CEF's normal
+    // top-level close flow.
+    return engine_ != nullptr && engine_->ShouldSuppressTopLevelCloseForTab();
+}
+
 void CefTabClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
     CEF_REQUIRE_UI_THREAD();
     engine_->NotifyBrowserCreated(tab_id_, browser);

@@ -2,6 +2,7 @@
 
 #include "cef_browser_engine.h"
 #include "find_bar.h"
+#include "icon_system.h"
 #include "core/capabilities/capability_policy.h"
 #include "core/navigation/address_input.h"
 #include "core/navigation/internal_urls.h"
@@ -18,13 +19,6 @@
 
 namespace openbrowser::desktop {
 namespace {
-
-std::string SecurityBadgeLabel(const bool private_mode, std::string_view state) {
-    if (private_mode) {
-        return "🕶 " + std::string(state);
-    }
-    return std::string(state);
-}
 
 class PassiveButtonDelegate final : public CefButtonDelegate {
 public:
@@ -134,21 +128,34 @@ BrowserChrome::BrowserChrome(
     toolbar_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     toolbar_layout_ = toolbar_->SetToBoxLayout(toolbar_settings);
 
-    back_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Back), "←");
-    forward_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Forward), "→");
-    reload_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Reload), "↻");
+    back_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Back), "");
+    ConfigureIconButton(back_button_, IconId::Back, "", "Back", "Go back");
+    forward_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Forward), "");
+    ConfigureIconButton(forward_button_, IconId::Forward, "", "Forward", "Go forward");
+    reload_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Reload), "");
+    ConfigureIconButton(reload_button_, IconId::Reload, "", "Reload", "Reload the current page");
     security_badge_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ToggleSecurityDetails), "🔒");
+        make_delegate(ChromeAction::ToggleSecurityDetails), "");
+    ConfigureIconButton(
+        security_badge_, IconId::Security, "", "Connection security", "Show connection security details");
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter an address");
     bookmarks_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ToggleBookmarksBar), "☆");
+        make_delegate(ChromeAction::ToggleBookmarksBar), "");
+    ConfigureIconButton(
+        bookmarks_button_, IconId::Bookmark, "", "Bookmarks", "Show or hide the bookmarks bar");
     downloads_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ToggleDownloadsPanel), "↓");
+        make_delegate(ChromeAction::ToggleDownloadsPanel), "");
+    ConfigureIconButton(
+        downloads_button_, IconId::Download, "", "Downloads", "Show downloads");
     profile_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ToggleProfile), "👤");
+        make_delegate(ChromeAction::ToggleProfile), "");
+    ConfigureIconButton(
+        profile_button_, IconId::Profile, "", "Profile", "Switch profile");
     palette_button_ = CefLabelButton::CreateLabelButton(
-        make_delegate(ChromeAction::ToggleCommandPalette), "⋮");
+        make_delegate(ChromeAction::ToggleCommandPalette), "");
+    ConfigureIconButton(
+        palette_button_, IconId::More, "", "Command palette", "Open command palette");
 
     // Aura keeps the permanent chrome intentionally small. Find and zoom remain
     // first-class browser actions through shortcuts/Command Palette, but no
@@ -490,11 +497,13 @@ void BrowserChrome::SetPrivateMode(const bool enabled) {
 
 void BrowserChrome::UpdatePrivatePresentation() {
     if (profile_button_) {
-        profile_button_->SetText(private_mode_ ? "🕶" : "👤");
+        SetIcon(profile_button_, private_mode_ ? IconId::PrivateProfile : IconId::Profile);
+        profile_button_->SetAccessibleName(private_mode_ ? "Private profile" : "Default profile");
+        profile_button_->SetTooltipText(private_mode_ ? "Private profile" : "Default profile");
     }
     if (address_bar_) {
         address_bar_->SetPlaceholderText(
-            private_mode_ ? "Private — search or enter an address" : "Search or enter an address");
+            private_mode_ ? "Private - search or enter an address" : "Search or enter an address");
     }
     if (always_allow_button_) {
         always_allow_button_->SetEnabled(!private_mode_);
@@ -620,7 +629,7 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
         current_origin_.clear();
         security_badge_->SetVisible(false);
         if (reload_button_) {
-            reload_button_->SetText("↻");
+            SetIcon(reload_button_, IconId::Reload);
         }
         UpdateSecurityDetails();
         return;
@@ -632,7 +641,7 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
         current_origin_.clear();
         security_badge_->SetVisible(false);
         if (reload_button_) {
-            reload_button_->SetText("↻");
+            SetIcon(reload_button_, IconId::Reload);
         }
         UpdateSecurityDetails();
         return;
@@ -640,7 +649,9 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
 
     const bool is_loading = (tab->navigation_state == core::NavigationState::Loading);
     if (reload_button_) {
-        reload_button_->SetText(is_loading ? "⏳" : "↻");
+        SetIcon(reload_button_, IconId::Reload);
+        reload_button_->SetAccessibleName(is_loading ? "Stop loading" : "Reload");
+        reload_button_->SetTooltipText(is_loading ? "Stop loading" : "Reload the current page");
     }
 
     const std::string& display_url = tab->pending_url.has_value() ? *tab->pending_url : tab->url;
@@ -664,13 +675,21 @@ void BrowserChrome::SyncAddressFromSession(const core::BrowserSession& session) 
 
     current_origin_ = core::CapabilityPolicy::ExtractOrigin(display_url).value_or("");
     if (display_url.rfind("https://", 0) == 0) {
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🔒"));
+        SetIcon(security_badge_, IconId::Security);
+        security_badge_->SetAccessibleName(private_mode_ ? "Private secure connection" : "Secure connection");
+        security_badge_->SetTooltipText("Secure connection");
     } else if (display_url.rfind("http://", 0) == 0) {
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "⚠"));
+        SetIcon(security_badge_, IconId::SecurityWarning);
+        security_badge_->SetAccessibleName(private_mode_ ? "Private connection warning" : "Connection warning");
+        security_badge_->SetTooltipText("Connection warning");
     } else if (display_url.rfind("about:", 0) == 0) {
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "⚙"));
+        SetIcon(security_badge_, IconId::InternalPage);
+        security_badge_->SetAccessibleName("Internal Openbrowser page");
+        security_badge_->SetTooltipText("Internal Openbrowser page");
     } else {
-        security_badge_->SetText(SecurityBadgeLabel(private_mode_, "🌐"));
+        SetIcon(security_badge_, IconId::InternalPage);
+        security_badge_->SetAccessibleName("Page connection");
+        security_badge_->SetTooltipText("Page connection");
     }
 
     UpdateSecurityDetails();

@@ -9,6 +9,7 @@
 #include "include/cef_base.h"
 #include "include/views/cef_panel.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -29,6 +30,7 @@ namespace openbrowser::desktop {
 class NetworkLabPanel final : public devtools::network::NetworkTraceObserver,
                               public core::BrowserSessionObserver {
 public:
+    using VisibilityChangedCallback = std::function<void(bool)>;
     NetworkLabPanel(
         devtools::network::NetworkTraceBuffer& trace_buffer,
         core::BrowserSession& session,
@@ -43,6 +45,7 @@ public:
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
 
     void SetVisible(bool visible);
+    void SetVisibilityChangedCallback(VisibilityChangedCallback callback);
     [[nodiscard]] bool IsVisible() const;
     void ToggleVisibility();
 
@@ -94,6 +97,7 @@ private:
     std::string pending_structured_query_{};
     std::optional<std::string> selected_request_id_{std::nullopt};
     ActiveTab active_tab_{ActiveTab::Requests};
+    std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
 
     devtools::network::ConnectionRegistry* connection_registry_{nullptr};
     core::FilterDecisionLog* decision_log_{nullptr};
@@ -105,6 +109,7 @@ private:
     CefRefPtr<CefTextfieldDelegate> query_delegate_;
     CefRefPtr<CefTextfield> query_field_;
     std::vector<CefRefPtr<CefButtonDelegate>> delegates_;
+    VisibilityChangedCallback on_visibility_changed_;
 };
 
 }  // namespace openbrowser::desktop

@@ -8,6 +8,7 @@
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_panel.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -19,6 +20,7 @@ namespace openbrowser::desktop {
 
 class DownloadsPanel final : public core::TransferObserver {
 public:
+    using VisibilityChangedCallback = std::function<void(bool)>;
     DownloadsPanel(
         core::TransferBroker& transfer_broker,
         core::FileBroker& file_broker);
@@ -30,6 +32,7 @@ public:
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
 
     void SetVisible(bool visible);
+    void SetVisibilityChangedCallback(VisibilityChangedCallback callback);
     [[nodiscard]] bool IsVisible() const;
     void ToggleVisibility();
 
@@ -55,12 +58,14 @@ private:
 
     core::TransferBroker& transfer_broker_;
     core::FileBroker& file_broker_;
+    std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
 
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
     CefRefPtr<CefPanel> list_panel_;
     CefRefPtr<CefBoxLayout> list_layout_;
     std::vector<CefRefPtr<CefButtonDelegate>> button_delegates_;
+    VisibilityChangedCallback on_visibility_changed_;
 };
 
 } // namespace openbrowser::desktop

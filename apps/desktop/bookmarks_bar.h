@@ -51,6 +51,7 @@ private:
 
     core::BookmarkManager& bookmark_manager_;
     core::BrowserSession& session_;
+    std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
 
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
