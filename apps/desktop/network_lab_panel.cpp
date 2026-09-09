@@ -105,12 +105,18 @@ public:
             return false;
         }
         if (event.windows_key_code == 13) {
-            panel_.ApplyStructuredQuery();
+            NetworkLabPanel* panel = &panel_;
+            PostDeferredUiAction(panel_.alive_token_, [panel]() {
+                panel->ApplyStructuredQuery();
+            });
             return true;
         }
         if (event.windows_key_code == 27) {
             panel_.SetPendingStructuredQuery({});
-            panel_.ApplyStructuredQuery();
+            NetworkLabPanel* panel = &panel_;
+            PostDeferredUiAction(panel_.alive_token_, [panel]() {
+                panel->ApplyStructuredQuery();
+            });
             return true;
         }
         return false;
