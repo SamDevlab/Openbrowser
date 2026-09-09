@@ -1,6 +1,7 @@
 #include "library_panel.h"
 
 #include "core/session/browser_session.h"
+#include "deferred_ui_action.h"
 
 #include "include/wrapper/cef_helpers.h"
 
@@ -41,7 +42,11 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        panel_.HandleAction(action_);
+        LibraryPanel* panel = &panel_;
+        const Action action = action_;
+        PostDeferredUiAction(panel_.alive_token_, [panel, action]() {
+            panel->HandleAction(action);
+        });
     }
 
 private:
@@ -120,6 +125,7 @@ LibraryPanel::LibraryPanel(
 }
 
 LibraryPanel::~LibraryPanel() {
+    *alive_token_ = false;
     session_.RemoveObserver(this);
 }
 
