@@ -2,6 +2,7 @@
 
 #include "core/session/browser_session.h"
 #include "core/session/focus_session_controller.h"
+#include "deferred_ui_action.h"
 #include "icon_system.h"
 
 #include "include/cef_task.h"
@@ -72,7 +73,12 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        sidebar_.HandleFocusAction(action_, item_id_);
+        FocusSidebar* sidebar = &sidebar_;
+        const FocusAction action = action_;
+        const std::string item_id = item_id_;
+        PostDeferredUiAction(sidebar_.alive_token_, [sidebar, action, item_id]() {
+            sidebar->HandleFocusAction(action, item_id);
+        });
     }
 
 private:
