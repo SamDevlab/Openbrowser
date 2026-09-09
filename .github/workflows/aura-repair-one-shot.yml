@@ -1,0 +1,93 @@
+name: Aura regression repair (one shot)
+
+on:
+  push:
+    branches:
+      - design/aura-full-visual-polish
+    paths:
+      - .github/workflows/aura-repair-one-shot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: design/aura-full-visual-polish
+          fetch-depth: 0
+
+      - name: Repair regressions and refine browser chrome
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # The browser host is a compositor parent for CefBrowserView children.
+          # Do not paint an Aura surface on top of that host; root/body already
+          # provide the fallback canvas around real web content.
+          replace_once(
+              "apps/desktop/desktop_app.cpp",
+              "    browser_host_ = CefPanel::CreatePanel(nullptr);\n    browser_host_->SetToFillLayout();\n    aura::StyleSurface(browser_host_, aura::kCanvas);\n",
+              "    browser_host_ = CefPanel::CreatePanel(nullptr);\n    browser_host_->SetToFillLayout();\n",
+          )
+
+          # Closing a tab in a multi-tab CefWindow must detach the BrowserView
+          # from the shared parent before asking CEF to destroy that browser.
+          # Otherwise the Alloy windowed close path can forward WM_CLOSE to the
+          # top-level CefWindow. Keep the surface record until OnBeforeClose so
+          # lifecycle accounting remains authoritative.
+          replace_once(
+              "apps/desktop/cef_browser_engine.cpp",
+              "    CefRefPtr<CefBrowser> browser = surface->second.view->GetBrowser();\n    if (browser) {\n        browser->GetHost()->CloseBrowser(false);\n        return;\n    }\n\n    browser_host_->RemoveChildView(surface->second.view);\n    surfaces_.erase(surface);\n    browser_host_->Layout();\n",
+              "    CefRefPtr<CefBrowserView> closing_view = surface->second.view;\n    CefRefPtr<CefBrowser> browser = closing_view ? closing_view->GetBrowser() : nullptr;\n\n    // A tab BrowserView shares one top-level CefWindow with every other tab.\n    // Detach it before entering CEF's close path so an ordinary tab close can\n    // never be promoted to a top-level window close. Release the map's view\n    // reference now; OnBeforeClose will erase the remaining surface metadata.\n    surface->second.view = nullptr;\n    if (browser_host_ && closing_view) {\n        browser_host_->RemoveChildView(closing_view);\n        browser_host_->Layout();\n    }\n\n    if (browser) {\n        browser->GetHost()->CloseBrowser(true);\n        return;\n    }\n\n    surfaces_.erase(surface);\n",
+          )
+
+          # Bring the permanent chrome density closer to a modern browser:
+          # compact 32px action targets, a 36px primary omnibox, tighter rhythm.
+          replace_once(
+              "apps/desktop/browser_chrome.cpp",
+              "    toolbar_settings.between_child_spacing = aura::kSpace6;\n    toolbar_settings.inside_border_horizontal_spacing = aura::kSpace12;\n    toolbar_settings.inside_border_vertical_spacing = aura::kSpace8;\n",
+              "    toolbar_settings.between_child_spacing = aura::kSpace4;\n    toolbar_settings.inside_border_horizontal_spacing = aura::kSpace8;\n    toolbar_settings.inside_border_vertical_spacing = aura::kSpace6;\n",
+          )
+          replace_once(
+              "apps/desktop/browser_chrome.cpp",
+              "    address_bar_->SetAccessibleName(\"Address and search bar\");\n    aura::StyleTextField(address_bar_, true);\n",
+              "    address_bar_->SetAccessibleName(\"Address and search bar\");\n    address_bar_->SetMinimumSize(CefSize(320, aura::kOmniboxHeight));\n    aura::StyleTextField(address_bar_, true);\n",
+          )
+
+          # Tabs should read as a compact strip, not labels floating in a row.
+          replace_once(
+              "apps/desktop/tab_strip.cpp",
+              "    settings.between_child_spacing = aura::kSpace6;\n    settings.inside_border_horizontal_spacing = aura::kSpace12;\n    settings.inside_border_vertical_spacing = aura::kSpace6;\n",
+              "    settings.between_child_spacing = aura::kSpace2;\n    settings.inside_border_horizontal_spacing = aura::kSpace8;\n    settings.inside_border_vertical_spacing = aura::kSpace4;\n",
+          )
+
+          # The browser-owned raster icons were too hairline at 100% DPI.
+          # Keep them original/dependency-free, but use a stronger optical stroke.
+          replace_once(
+              "apps/desktop/icon_system.cpp",
+              "constexpr float kStroke = 1.8F;\n",
+              "constexpr float kStroke = 2.2F;\n",
+          )
+
+          # Remove this one-shot workflow from the final design diff.
+          Path(".github/workflows/aura-repair-one-shot.yml").unlink()
+
+      - name: Commit repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(ui): recover web surface and tab close before visual polish"
+          git push origin HEAD:design/aura-full-visual-polish
