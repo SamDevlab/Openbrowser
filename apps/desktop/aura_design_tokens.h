@@ -9,8 +9,9 @@
 namespace openbrowser::desktop::aura {
 
 // Aura visual tokens are intentionally browser-owned and dependency-free. Keep
-// product chrome restrained: deep neutral canvas, slightly elevated surfaces,
-// quiet borders, one accent family, and predictable control geometry.
+// native product chrome aligned with the New Tab palette: deep neutral canvas,
+// slightly elevated surfaces, quiet borders, one accent family, and predictable
+// control geometry.
 inline constexpr cef_color_t kCanvas = static_cast<cef_color_t>(0xFF0F1016u);
 inline constexpr cef_color_t kChromeSurface = static_cast<cef_color_t>(0xFF14151Du);
 inline constexpr cef_color_t kPrivateChromeSurface = static_cast<cef_color_t>(0xFF181528u);
