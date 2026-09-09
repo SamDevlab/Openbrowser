@@ -102,11 +102,11 @@ inline void StyleTextField(
         return;
     }
 
+    // CEF Views 152 exposes typography and view background styling for
+    // CefTextfield, but not the Chromium-internal text/placeholder/selection
+    // color setters. Keep Aura on the supported public API instead of relying
+    // on non-portable Views implementation details.
     field->SetFontList(prominent ? kFontBodyStrong : kFontBody);
-    field->SetTextColor(kTextPrimary);
-    field->SetPlaceholderTextColor(kTextMuted);
-    field->SetSelectionTextColor(kTextPrimary);
-    field->SetSelectionBackgroundColor(kAccentSoft);
     field->SetBackgroundColor(prominent ? kInputSurface : kChromeSurface);
 }
 
