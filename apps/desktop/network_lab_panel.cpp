@@ -2,6 +2,7 @@
 
 #include "core/network/network_filter_query.h"
 #include "core/session/browser_session.h"
+#include "deferred_ui_action.h"
 
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_button_delegate.h"
@@ -73,7 +74,12 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        panel_.HandleAction(action_, request_id_);
+        NetworkLabPanel* panel = &panel_;
+        const PanelAction action = action_;
+        const std::string request_id = request_id_;
+        PostDeferredUiAction(panel_.alive_token_, [panel, action, request_id]() {
+            panel->HandleAction(action, request_id);
+        });
     }
 
 private:
@@ -145,6 +151,7 @@ NetworkLabPanel::NetworkLabPanel(
 }
 
 NetworkLabPanel::~NetworkLabPanel() {
+    *alive_token_ = false;
     trace_buffer_.RemoveObserver(this);
     session_.RemoveObserver(this);
 }
