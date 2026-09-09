@@ -8,23 +8,23 @@
 
 namespace openbrowser::desktop::aura {
 
-// Aura visual tokens are intentionally browser-owned and dependency-free. Keep
-// native product chrome aligned with the New Tab palette: deep neutral canvas,
-// slightly elevated surfaces, quiet borders, one accent family, and predictable
-// control geometry.
-inline constexpr cef_color_t kCanvas = static_cast<cef_color_t>(0xFF0F1016u);
-inline constexpr cef_color_t kChromeSurface = static_cast<cef_color_t>(0xFF14151Du);
-inline constexpr cef_color_t kPrivateChromeSurface = static_cast<cef_color_t>(0xFF181528u);
-inline constexpr cef_color_t kSurface = static_cast<cef_color_t>(0xFF1B1C26u);
-inline constexpr cef_color_t kSurfaceRaised = static_cast<cef_color_t>(0xFF20212Du);
-inline constexpr cef_color_t kSurfaceSelected = static_cast<cef_color_t>(0xFF292A3Au);
-inline constexpr cef_color_t kInputSurface = static_cast<cef_color_t>(0xFF0E0F16u);
-inline constexpr cef_color_t kBorderSubtle = static_cast<cef_color_t>(0xFF31323Fu);
-inline constexpr cef_color_t kTextPrimary = static_cast<cef_color_t>(0xFFF5F5F7u);
-inline constexpr cef_color_t kTextSecondary = static_cast<cef_color_t>(0xFFA8A9B4u);
-inline constexpr cef_color_t kTextMuted = static_cast<cef_color_t>(0xFF777987u);
-inline constexpr cef_color_t kAccent = static_cast<cef_color_t>(0xFF7567FFu);
-inline constexpr cef_color_t kAccentSoft = static_cast<cef_color_t>(0xFF2F2A51u);
+// Aura visual tokens are intentionally browser-owned and dependency-free. The
+// permanent chrome follows the same quiet-dark family as New Tab while giving
+// tabs, omnibox and selected controls enough contrast to read as real product
+// surfaces instead of diagnostic labels floating over a canvas.
+inline constexpr cef_color_t kCanvas = static_cast<cef_color_t>(0xFF101115u);
+inline constexpr cef_color_t kChromeSurface = static_cast<cef_color_t>(0xFF1B1C20u);
+inline constexpr cef_color_t kPrivateChromeSurface = static_cast<cef_color_t>(0xFF211B2Bu);
+inline constexpr cef_color_t kSurface = static_cast<cef_color_t>(0xFF202126u);
+inline constexpr cef_color_t kSurfaceRaised = static_cast<cef_color_t>(0xFF292A30u);
+inline constexpr cef_color_t kSurfaceSelected = static_cast<cef_color_t>(0xFF35363Du);
+inline constexpr cef_color_t kInputSurface = static_cast<cef_color_t>(0xFF292A2Fu);
+inline constexpr cef_color_t kBorderSubtle = static_cast<cef_color_t>(0xFF45464Fu);
+inline constexpr cef_color_t kTextPrimary = static_cast<cef_color_t>(0xFFF4F4F6u);
+inline constexpr cef_color_t kTextSecondary = static_cast<cef_color_t>(0xFFB7B8C0u);
+inline constexpr cef_color_t kTextMuted = static_cast<cef_color_t>(0xFF858792u);
+inline constexpr cef_color_t kAccent = static_cast<cef_color_t>(0xFF806EFFu);
+inline constexpr cef_color_t kAccentSoft = static_cast<cef_color_t>(0xFF39325Du);
 inline constexpr cef_color_t kDanger = static_cast<cef_color_t>(0xFFFF7A8Au);
 
 inline constexpr int kSpace2 = 2;
@@ -36,12 +36,16 @@ inline constexpr int kSpace12 = 12;
 inline constexpr int kSpace14 = 14;
 inline constexpr int kSpace16 = 16;
 
-inline constexpr int kControlHeight = 36;
-inline constexpr int kIconControlSize = 36;
-inline constexpr int kCompactIconControlSize = 34;
-inline constexpr int kTabHeight = 36;
-inline constexpr int kSidebarRailWidth = 58;
-inline constexpr int kSidebarExpandedWidth = 220;
+// Permanent browser chrome is deliberately denser than drawers/settings. The
+// target is the visual rhythm of a mature desktop browser without copying any
+// third-party assets or geometry verbatim.
+inline constexpr int kControlHeight = 34;
+inline constexpr int kIconControlSize = 32;
+inline constexpr int kCompactIconControlSize = 28;
+inline constexpr int kTabHeight = 34;
+inline constexpr int kOmniboxHeight = 36;
+inline constexpr int kSidebarRailWidth = 52;
+inline constexpr int kSidebarExpandedWidth = 216;
 inline constexpr int kPanelPadding = 14;
 inline constexpr int kPanelGap = 8;
 
@@ -93,8 +97,9 @@ inline void StyleTabButton(
     StyleButton(button, active, !active);
     if (button) {
         button->SetFontList(active ? kFontBodyStrong : kFontBody);
-        button->SetMinimumSize(CefSize(112, kTabHeight));
-        button->SetMaximumSize(CefSize(228, kTabHeight));
+        button->SetHorizontalAlignment(CEF_HORIZONTAL_ALIGNMENT_LEFT);
+        button->SetMinimumSize(CefSize(116, kTabHeight));
+        button->SetMaximumSize(CefSize(216, kTabHeight));
     }
 }
 
