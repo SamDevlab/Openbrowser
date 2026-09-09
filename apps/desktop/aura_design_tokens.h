@@ -38,12 +38,13 @@ inline constexpr int kSpace16 = 16;
 
 // Permanent browser chrome is deliberately denser than drawers/settings. The
 // target is the visual rhythm of a mature desktop browser without copying any
-// third-party assets or geometry verbatim.
+// third-party assets or geometry verbatim. CefTextfield keeps its platform
+// intrinsic height; the omnibox still owns the horizontal flex and prominent
+// surface styling without depending on unsupported Chromium-internal setters.
 inline constexpr int kControlHeight = 34;
 inline constexpr int kIconControlSize = 32;
 inline constexpr int kCompactIconControlSize = 28;
 inline constexpr int kTabHeight = 34;
-inline constexpr int kOmniboxHeight = 36;
 inline constexpr int kSidebarRailWidth = 52;
 inline constexpr int kSidebarExpandedWidth = 216;
 inline constexpr int kPanelPadding = 14;
