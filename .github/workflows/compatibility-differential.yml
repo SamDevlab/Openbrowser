@@ -140,7 +140,7 @@ jobs:
           "OPENBROWSER_COMPAT_EXE=$($candidate.FullName.Replace('\', '/'))" |
             Add-Content -LiteralPath $env:GITHUB_ENV
 
-      - name: Download pinned Chromium reference
+      - name: Download and verify pinned Chromium reference
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -151,6 +151,15 @@ jobs:
           $archiveName = 'chrome-headless-shell-win64.zip'
           $archivePath = Join-Path $referenceDir $archiveName
           $url = "${env:CHROMIUM_REFERENCE_BASE_URL}/${env:CHROMIUM_REFERENCE_VERSION}/${env:CHROMIUM_REFERENCE_PLATFORM}/${archiveName}"
+          $lockFile = Join-Path $PWD 'third_party/chromium-reference/checksums.sha256'
+
+          $match = Get-Content -LiteralPath $lockFile | Where-Object {
+            $_ -match "^([0-9a-fA-F]{64})\s+$([regex]::Escape($archiveName))\s*$"
+          } | Select-Object -First 1
+          if ($null -eq $match) {
+            throw "Pinned Chromium reference checksum missing for $archiveName"
+          }
+          $expectedSha256 = (($match -split '\s+')[0]).ToLowerInvariant()
 
           Invoke-WebRequest `
             -Uri $url `
@@ -159,7 +168,10 @@ jobs:
             -RetryIntervalSec 2
 
           $sha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "Chromium reference archive SHA-256: $sha256"
+          if ($sha256 -ne $expectedSha256) {
+            throw "Chromium reference archive checksum mismatch. Expected=$expectedSha256 Actual=$sha256"
+          }
+          Write-Host "Pinned Chromium reference archive SHA-256 verified: $sha256"
           "CHROMIUM_REFERENCE_ARCHIVE_SHA256=$sha256" | Add-Content -LiteralPath $env:GITHUB_ENV
 
           $extractDir = Join-Path $referenceDir 'extracted'
