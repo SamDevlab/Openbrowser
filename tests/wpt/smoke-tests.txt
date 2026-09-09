@@ -1,0 +1,10 @@
+# M8.2 fast WPT standards smoke.
+# Keep this list deterministic, small, and focused on foundational Web APIs.
+
+dom/nodes/Document-createElement.html
+encoding/api-basics.any.js
+encoding/textencoder-utf16-surrogates.any.js
+url/urlsearchparams-constructor.any.js
+url/urlsearchparams-get.any.js
+webstorage/storage_setitem.window.js
+webstorage/storage_key.window.js

@@ -1,16 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-compatibility-scenario="redirect-chain">
 <head>
   <meta charset="utf-8">
+  <link rel="icon" href="data:,">
   <title>Openbrowser compatibility redirect target</title>
 </head>
 <body>
   <main id="compatibility-redirect" data-compatibility-marker="redirect-final">
     Redirect target loaded.
   </main>
-  <script>
-    fetch('/__compatibility__/ready?token=' + encodeURIComponent(
-      new URLSearchParams(location.search).get('__ob_token') || ''));
-  </script>
+  <script src="/compatibility-observe.js"></script>
 </body>
 </html>
