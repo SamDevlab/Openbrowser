@@ -65,6 +65,12 @@ public:
         bool forward,
         const std::function<bool(const Tab&)>& filter = nullptr);
 
+    // These are non-owning views into the session's internal storage. Any
+    // operation that mutates the tab collection (for example OpenTab,
+    // CloseTab, ReopenLastClosedTab, or privacy-mode transitions that perform
+    // those operations) may invalidate previously returned Tab pointers or
+    // references. Keep stable TabId values across mutations and reacquire the
+    // view afterwards instead of retaining a Tab* or Tab&.
     [[nodiscard]] const Tab* FindTab(const TabId& tab_id) const;
     [[nodiscard]] const std::vector<Tab>& Tabs() const noexcept;
     [[nodiscard]] const std::optional<TabId>& ActiveTabId() const noexcept;
