@@ -1,0 +1,82 @@
+name: Fuzz Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/core/filters/**"
+      - "src/core/network/filter_decision_log.*"
+      - "fuzz/**"
+      - ".github/workflows/fuzz-smoke.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/core/filters/**"
+      - "src/core/network/filter_decision_log.*"
+      - "fuzz/**"
+      - ".github/workflows/fuzz-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  adblock-parser:
+    name: Adblock parser / libFuzzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 / Node 24
+
+      - name: Show compiler
+        shell: bash
+        run: clang++ --version
+
+      - name: Build fuzz target
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ \
+            -std=c++20 \
+            -O1 \
+            -g \
+            -fno-omit-frame-pointer \
+            -fsanitize=fuzzer,address,undefined \
+            -Isrc \
+            fuzz/adblock_rule_parser_fuzz.cpp \
+            src/core/filters/adblock_rule_parser.cpp \
+            src/core/filters/content_filter.cpp \
+            src/core/network/filter_decision_log.cpp \
+            -o adblock_rule_parser_fuzz
+
+      - name: Prepare deterministic seed corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fuzz-corpus/adblock
+          printf '%s\n' '||ads.example^$script,third-party' > fuzz-corpus/adblock/domain-rule.txt
+          printf '%s\n' '@@||cdn.example^$image' > fuzz-corpus/adblock/exception-rule.txt
+          printf '%s\n' '|https://example.test/path|$xmlhttprequest' > fuzz-corpus/adblock/anchored-rule.txt
+          printf '%s\n' '##.cosmetic-rule' > fuzz-corpus/adblock/cosmetic-rule.txt
+          printf '%s\n' '[Adblock Plus 2.0]' > fuzz-corpus/adblock/header.txt
+
+      - name: Run bounded fuzz smoke
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          set -euo pipefail
+          ./adblock_rule_parser_fuzz \
+            fuzz-corpus/adblock \
+            -dict=fuzz/adblock_rule_parser.dict \
+            -max_total_time=30 \
+            -timeout=5 \
+            -max_len=8192 \
+            -rss_limit_mb=1024 \
+            -print_final_stats=1
