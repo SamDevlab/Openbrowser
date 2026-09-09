@@ -6,6 +6,7 @@
 #include "include/views/cef_panel.h"
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -64,6 +65,7 @@ private:
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
     std::size_t next_tab_index_{1};
+    std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
     std::vector<CefRefPtr<CefButtonDelegate>> delegates_;
 };
 
