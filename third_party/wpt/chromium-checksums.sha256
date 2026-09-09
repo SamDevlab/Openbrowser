@@ -1,4 +1,4 @@
-# Chrome for Testing 151.0.7922.138 / linux64 archives used by M8.2 WPT smoke.
+# Chrome for Testing 152.0.7977.83 / linux64 archives used by M8.2 WPT smoke.
 # Format: <sha256>  <archive-name>
-f2c1d48c310a2fc79aad59e985103902f27b70fd186b3f663ee67c4c722f5566  chrome-linux64.zip
-5f956ac30d5c78453f5eb578fea14cb09caf62bb05141429be43af0b0c9922f8  chromedriver-linux64.zip
+ecae8b71d4890cf5f32577ab5ea1b3840c2b5e05f51490b1666674cf1f5b0c37  chrome-linux64.zip
+6871c2e3d3e8b56736f066b9d22f19a04e1ac4360d15e6555a76af5f4083b68a  chromedriver-linux64.zip

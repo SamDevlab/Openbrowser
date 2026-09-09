@@ -6,8 +6,8 @@ This file is the dependency ledger for browser-engine binaries that Openbrowser 
 
 | Component | Role | License / notice status | Pinned/bootstrap status |
 | --- | --- | --- | --- |
-| Chromium Embedded Framework (CEF) | Initial Chromium-family engine adapter | BSD-style CEF license; Chromium and bundled third-party notices also apply to distributions | `151.3.17+gf059e67+chromium-151.0.7922.138`; not vendored |
-| Chromium | Rendering, JavaScript runtime, networking and browser platform transitively used by CEF | Chromium BSD license plus numerous third-party licenses | `151.0.7922.138` transitively through the pinned CEF build; not vendored |
+| Chromium Embedded Framework (CEF) | Initial Chromium-family engine adapter | BSD-style CEF license; Chromium and bundled third-party notices also apply to distributions | `152.0.6+g708dc14+chromium-152.0.7977.83`; not vendored |
+| Chromium | Rendering, JavaScript runtime, networking and browser platform transitively used by CEF | Chromium BSD license plus numerous third-party licenses | `152.0.7977.83` transitively through the pinned CEF build; not vendored |
 
 The CEF pin was selected from the preferred Stable channel on 2026-09-06. A newer beta is not automatically a better production bootstrap. Engine upgrades require explicit compatibility/security review and a pin change.
 

@@ -7,8 +7,8 @@ Openbrowser uses Chromium Embedded Framework (CEF) as its first browser-engine a
 The current desktop bootstrap is pinned to:
 
 ```text
-CEF 151.3.17+gf059e67+chromium-151.0.7922.138
-Chromium 151.0.7922.138
+CEF 152.0.6+g708dc14+chromium-152.0.7977.83
+Chromium 152.0.7977.83
 ```
 
 This was the preferred Stable build when the pin was selected on 2026-09-06. CEF 152 was already available as a beta and was intentionally not selected for the first shell.
@@ -42,7 +42,7 @@ Example:
 ```bash
 cmake -S . -B build-desktop \
   -DOPENBROWSER_BUILD_DESKTOP=ON \
-  -DCEF_ROOT=/absolute/path/to/cef_binary_151.3.17+gf059e67+chromium-151.0.7922.138_<platform>
+  -DCEF_ROOT=/absolute/path/to/cef_binary_152.0.6+g708dc14+chromium-152.0.7977.83_<platform>
 ```
 
 The configuration step validates:
