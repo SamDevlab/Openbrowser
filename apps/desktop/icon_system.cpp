@@ -1,5 +1,7 @@
 #include "icon_system.h"
 
+#include "aura_design_tokens.h"
+
 #include "include/views/cef_label_button.h"
 
 #include <algorithm>
@@ -367,7 +369,9 @@ void ConfigureIconButton(
     button->SetAccessibleName(std::string(accessible_name));
     button->SetTooltipText(std::string(tooltip));
     button->SetFocusable(true);
-    button->SetMinimumSize(CefSize(text.empty() ? 32 : 96, 30));
+    button->SetMinimumSize(CefSize(
+        text.empty() ? aura::kIconControlSize : 104,
+        aura::kControlHeight));
     if (group_id != 0) {
         button->SetGroupID(group_id);
     }

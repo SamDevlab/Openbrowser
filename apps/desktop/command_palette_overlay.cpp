@@ -1,5 +1,8 @@
 #include "command_palette_overlay.h"
 
+#include "aura_accessibility.h"
+#include "aura_design_tokens.h"
+
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_label_button.h"
 #include "include/views/cef_textfield.h"
@@ -68,23 +71,27 @@ CommandPaletteOverlay::CommandPaletteOverlay(
 
     CefBoxLayoutSettings container_settings{};
     container_settings.horizontal = 0;
-    container_settings.between_child_spacing = 4;
-    container_settings.inside_border_horizontal_spacing = 12;
-    container_settings.inside_border_vertical_spacing = 8;
+    container_settings.between_child_spacing = aura::kPanelGap;
+    container_settings.inside_border_horizontal_spacing = aura::kPanelPadding;
+    container_settings.inside_border_vertical_spacing = aura::kPanelPadding;
     container_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     container_layout_ = container_->SetToBoxLayout(container_settings);
+    aura::StyleSurface(container_, aura::kSurfaceRaised);
 
     search_delegate_ = new QueryFieldDelegate(*this);
     search_field_ = CefTextfield::CreateTextfield(search_delegate_);
-    search_field_->SetPlaceholderText("Type a command or search action (e.g. 'network', 'tab', 'focus')...");
+    search_field_->SetPlaceholderText("Search commands");
+    search_field_->SetAccessibleName("Search Openbrowser commands");
+    aura::StyleTextField(search_field_, true);
     container_->AddChildView(search_field_);
 
     results_panel_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings results_settings{};
     results_settings.horizontal = 0;
-    results_settings.between_child_spacing = 2;
+    results_settings.between_child_spacing = aura::kSpace4;
     results_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     results_layout_ = results_panel_->SetToBoxLayout(results_settings);
+    aura::StyleSurface(results_panel_, aura::kSurfaceRaised);
     container_->AddChildView(results_panel_);
 
     container_->SetVisible(false);
@@ -148,16 +155,24 @@ void CommandPaletteOverlay::RebuildResultsView() {
     const std::size_t max_items = std::min<std::size_t>(current_results_.size(), 6);
     for (std::size_t i = 0; i < max_items; ++i) {
         const auto& res = current_results_[i];
-        std::string label = "[" + core::ActionCategoryToString(res.action.category) + "] " +
-                            res.action.title + " - " + res.action.description;
+        std::string label = res.action.title;
         if (!res.action.shortcut_hint.empty()) {
-            label += " (" + res.action.shortcut_hint + ")";
+            label += "    " + res.action.shortcut_hint;
+        }
+        std::string accessible = core::ActionCategoryToString(res.action.category) +
+            ", " + res.action.title + ". " + res.action.description;
+        if (!res.action.shortcut_hint.empty()) {
+            accessible += ". Shortcut " + res.action.shortcut_hint;
         }
 
         auto delegate = new ActionItemDelegate(*this, res.action.id);
         result_delegates_.push_back(delegate);
 
         auto btn = CefLabelButton::CreateLabelButton(delegate, label);
+        aura::ConfigureActionButton(btn, accessible, res.action.description);
+        aura::StyleButton(btn, i == 0);
+        btn->SetHorizontalAlignment(CEF_HORIZONTAL_ALIGNMENT_LEFT);
+        btn->SetMinimumSize(CefSize(360, aura::kControlHeight));
         results_panel_->AddChildView(btn);
     }
 

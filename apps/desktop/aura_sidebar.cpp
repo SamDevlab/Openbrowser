@@ -2,6 +2,7 @@
 
 #include "aura_accessibility.h"
 #include "aura_motion.h"
+#include "aura_design_tokens.h"
 #include "icon_system.h"
 #include "core/session/browser_session.h"
 #include "core/workspaces/workspace_manager.h"
@@ -124,11 +125,13 @@ public:
     explicit SidebarPanelDelegate(AuraSidebar& sidebar) : sidebar_(sidebar) {}
 
     CefSize GetPreferredSize(CefRefPtr<CefView> /*view*/) override {
-        return CefSize(sidebar_.IsCollapsed() ? 54 : 202, 640);
+        return CefSize(
+            sidebar_.IsCollapsed() ? aura::kSidebarRailWidth : aura::kSidebarExpandedWidth,
+            640);
     }
 
     CefSize GetMinimumSize(CefRefPtr<CefView> /*view*/) override {
-        return CefSize(sidebar_.IsCollapsed() ? 50 : 180, 240);
+        return CefSize(sidebar_.IsCollapsed() ? aura::kSidebarRailWidth : 190, 240);
     }
 
 private:
@@ -222,11 +225,12 @@ AuraSidebar::AuraSidebar(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 0;
-    settings.between_child_spacing = 5;
-    settings.inside_border_horizontal_spacing = 6;
-    settings.inside_border_vertical_spacing = 8;
+    settings.between_child_spacing = aura::kSpace6;
+    settings.inside_border_horizontal_spacing = aura::kSpace8;
+    settings.inside_border_vertical_spacing = aura::kSpace10;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     layout_ = panel_->SetToBoxLayout(settings);
+    aura::StyleSurface(panel_, aura::kChromeSurface);
 
     g_active_sidebar = this;
     collapsed_ = g_preferred_sidebar_state != "expanded";
@@ -400,6 +404,12 @@ void AuraSidebar::Refresh() {
             accessible_name,
             tooltip,
             aura::kSidebarAccessibilityGroupId);
+        if (collapsed_) {
+            aura::StyleIconButton(button);
+        } else {
+            aura::StyleButton(button);
+            button->SetHorizontalAlignment(CEF_HORIZONTAL_ALIGNMENT_LEFT);
+        }
         panel_->AddChildView(button);
         layout_->SetFlexForView(button, 0);
         return button;
@@ -415,9 +425,7 @@ void AuraSidebar::Refresh() {
     const auto& active_workspace_id = workspace_manager_.ActiveWorkspaceId();
     for (const auto& workspace : workspace_manager_.ListWorkspaces()) {
         const bool is_active = workspace.id == active_workspace_id;
-        const std::string expanded = is_active
-            ? workspace.name + " (active)"
-            : workspace.name;
+        const std::string expanded = workspace.name;
         const std::string accessible_name = is_active
             ? "Workspace " + workspace.name + ", active"
             : "Switch to workspace " + workspace.name;
@@ -434,6 +442,7 @@ void AuraSidebar::Refresh() {
         const auto workspace_color = WorkspaceColor(workspace.badge_color);
         if (is_active) {
             aura::ApplySelectedAccent(button, workspace_color);
+            button->SetBackgroundColor(aura::kSurfaceSelected);
         } else {
             aura::ApplyHoverAccent(button, workspace_color);
         }
@@ -469,6 +478,7 @@ void AuraSidebar::Refresh() {
             feedback_delegate, "Status: " + feedback_message_);
         aura::ConfigurePassiveStatus(feedback, "Status: " + feedback_message_);
         feedback->SetEnabled(false);
+        aura::StylePassiveLabel(feedback, false, true);
         panel_->AddChildView(feedback);
         layout_->SetFlexForView(feedback, 0);
     }
