@@ -3,14 +3,8 @@ name: Core CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
   workflow_dispatch:
 
 permissions:
@@ -32,7 +26,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 / Node 24
 
       - name: Configure
         run: cmake -S . -B build -DOPENBROWSER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
@@ -42,3 +36,23 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
+
+  gate:
+    name: CI Gate
+    needs: core
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Require successful Core CI matrix
+        shell: bash
+        env:
+          CORE_RESULT: ${{ needs.core.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$CORE_RESULT" != "success" ]]; then
+            echo "Core CI matrix did not succeed: $CORE_RESULT" >&2
+            exit 1
+          fi
+          echo "Core CI matrix succeeded."

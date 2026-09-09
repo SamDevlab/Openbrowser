@@ -1,0 +1,191 @@
+name: WPT Smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wpt-smoke.yml"
+      - "tests/wpt/**"
+      - "third_party/wpt/**"
+      - "docs/m8.2-wpt-smoke.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/wpt-smoke.yml"
+      - "tests/wpt/**"
+      - "third_party/wpt/**"
+      - "docs/m8.2-wpt-smoke.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wpt-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WPT_REVISION: 3a1177e6c76f1a7f854f3ae4b93a00835e171fad
+  CHROME_VERSION: 151.0.7922.138
+  CHROME_PLATFORM: linux64
+  CHROME_FOR_TESTING_BASE_URL: https://storage.googleapis.com/chrome-for-testing-public
+
+jobs:
+  chromium-wpt-smoke:
+    name: Chromium 151 / pinned WPT smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Openbrowser
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Checkout pinned Web Platform Tests
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: web-platform-tests/wpt
+          ref: ${{ env.WPT_REVISION }}
+          path: .cache/wpt
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify WPT revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C .cache/wpt rev-parse HEAD)"
+          if [[ "$actual" != "$WPT_REVISION" ]]; then
+            echo "Pinned WPT revision mismatch: expected=$WPT_REVISION actual=$actual" >&2
+            exit 1
+          fi
+          printf 'Pinned WPT revision: %s\n' "$actual"
+
+      - name: Install WPT Linux bootstrap dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev \
+            libffi-dev \
+            libgirepository1.0-dev \
+            libglib2.0-dev \
+            pkg-config \
+            python3-dev
+
+      - name: Download and verify pinned Chrome for Testing and ChromeDriver
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/chrome-reference
+          chrome_archive=".cache/chrome-reference/chrome-${CHROME_PLATFORM}.zip"
+          driver_archive=".cache/chrome-reference/chromedriver-${CHROME_PLATFORM}.zip"
+          chrome_url="${CHROME_FOR_TESTING_BASE_URL}/${CHROME_VERSION}/${CHROME_PLATFORM}/chrome-${CHROME_PLATFORM}.zip"
+          driver_url="${CHROME_FOR_TESTING_BASE_URL}/${CHROME_VERSION}/${CHROME_PLATFORM}/chromedriver-${CHROME_PLATFORM}.zip"
+          checksum_file="third_party/wpt/chromium-checksums.sha256"
+
+          expected_chrome_sha="$(awk '$2 == "chrome-linux64.zip" {print $1}' "$checksum_file")"
+          expected_driver_sha="$(awk '$2 == "chromedriver-linux64.zip" {print $1}' "$checksum_file")"
+          if [[ ! "$expected_chrome_sha" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Pinned Chrome SHA-256 is missing or invalid." >&2
+            exit 1
+          fi
+          if [[ ! "$expected_driver_sha" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Pinned ChromeDriver SHA-256 is missing or invalid." >&2
+            exit 1
+          fi
+
+          curl --fail --location --retry 3 --retry-delay 2 "$chrome_url" --output "$chrome_archive"
+          curl --fail --location --retry 3 --retry-delay 2 "$driver_url" --output "$driver_archive"
+
+          chrome_sha="$(sha256sum "$chrome_archive" | awk '{print $1}')"
+          driver_sha="$(sha256sum "$driver_archive" | awk '{print $1}')"
+          echo "Chrome archive SHA-256: $chrome_sha"
+          echo "ChromeDriver archive SHA-256: $driver_sha"
+          if [[ "$chrome_sha" != "$expected_chrome_sha" ]]; then
+            echo "Chrome archive checksum mismatch: expected=$expected_chrome_sha actual=$chrome_sha" >&2
+            exit 1
+          fi
+          if [[ "$driver_sha" != "$expected_driver_sha" ]]; then
+            echo "ChromeDriver archive checksum mismatch: expected=$expected_driver_sha actual=$driver_sha" >&2
+            exit 1
+          fi
+          echo "WPT_CHROME_ARCHIVE_SHA256=$chrome_sha" >> "$GITHUB_ENV"
+          echo "WPT_CHROMEDRIVER_ARCHIVE_SHA256=$driver_sha" >> "$GITHUB_ENV"
+
+          rm -rf .cache/chrome-reference/chrome .cache/chrome-reference/driver
+          mkdir -p .cache/chrome-reference/chrome .cache/chrome-reference/driver
+          unzip -q "$chrome_archive" -d .cache/chrome-reference/chrome
+          unzip -q "$driver_archive" -d .cache/chrome-reference/driver
+
+          chrome_bin="$GITHUB_WORKSPACE/.cache/chrome-reference/chrome/chrome-linux64/chrome"
+          driver_bin="$GITHUB_WORKSPACE/.cache/chrome-reference/driver/chromedriver-linux64/chromedriver"
+          chmod +x "$chrome_bin" "$driver_bin"
+
+          chrome_reported="$($chrome_bin --version)"
+          driver_reported="$($driver_bin --version)"
+          echo "Chrome: $chrome_reported"
+          echo "ChromeDriver: $driver_reported"
+          grep -F "$CHROME_VERSION" <<<"$chrome_reported" >/dev/null
+          grep -F "$CHROME_VERSION" <<<"$driver_reported" >/dev/null
+
+          echo "WPT_CHROME_BIN=$chrome_bin" >> "$GITHUB_ENV"
+          echo "WPT_CHROMEDRIVER_BIN=$driver_bin" >> "$GITHUB_ENV"
+
+      - name: Run pinned WPT smoke subset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p wpt-artifacts
+          mapfile -t smoke_tests < <(grep -Ev '^[[:space:]]*(#|$)' tests/wpt/smoke-tests.txt)
+          if [[ "${#smoke_tests[@]}" -eq 0 ]]; then
+            echo "WPT smoke manifest is empty." >&2
+            exit 1
+          fi
+
+          pushd .cache/wpt >/dev/null
+          python ./wpt.py run \
+            --yes \
+            --headless \
+            --no-manifest-download \
+            --no-restart-on-unexpected \
+            --binary="$WPT_CHROME_BIN" \
+            --binary-arg=--no-sandbox \
+            --webdriver-binary="$WPT_CHROMEDRIVER_BIN" \
+            --log-wptreport="$GITHUB_WORKSPACE/wpt-artifacts/wpt-report.json" \
+            --log-mach=- \
+            --log-mach-level=info \
+            chrome \
+            "${smoke_tests[@]}"
+          popd >/dev/null
+
+      - name: Record WPT smoke metadata
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p wpt-artifacts
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = {
+              "wpt_revision": os.environ.get("WPT_REVISION", ""),
+              "chrome_version": os.environ.get("CHROME_VERSION", ""),
+              "chrome_archive_sha256": os.environ.get("WPT_CHROME_ARCHIVE_SHA256", ""),
+              "chromedriver_archive_sha256": os.environ.get("WPT_CHROMEDRIVER_ARCHIVE_SHA256", ""),
+              "openbrowser_commit": os.environ.get("GITHUB_SHA", ""),
+          }
+          Path("wpt-artifacts/wpt-smoke-metadata.json").write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Upload WPT smoke report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Openbrowser-wpt-smoke
+          path: wpt-artifacts
+          if-no-files-found: error
+          retention-days: 14
