@@ -2,35 +2,96 @@
 
 ## Purpose
 
-Openbrowser intends to diverge from upstream browser behavior in privacy, UI, native tooling and policy. Those differences must not silently become web-site breakage.
+Openbrowser intentionally differs from upstream browsers in privacy, UI, native tooling and policy. Those differences must not silently become website breakage.
 
-The future Web Compatibility System exists to answer two separate questions:
+The Web Compatibility System answers two separate questions:
 
 1. **Does Openbrowser implement the Web platform correctly?**
 2. **Did an intentional Openbrowser policy change break a site that works in the pinned upstream Chromium reference?**
 
 Compatibility work is therefore treated as an engineering subsystem, not as a collection of ad-hoc user-agent hacks.
 
-## Current implementation: M8 initial differential harness
+## Current implementation
 
-The repository now contains a first usable differential harness for local,
-deterministic fixtures:
+The repository now contains three complementary compatibility layers.
 
-- `scripts/compatibility_harness.py` owns fixture serving, per-run isolation,
-  runner process timeouts, child-process cleanup, result normalization and
-  comparison;
-- `tests/compatibility/fixtures/manifest.json` defines local navigation,
-  redirect and JavaScript/storage scenarios without depending on mutable
-  production sites;
-- `scripts/compatibility-openbrowser-driver.ps1` is a Windows adapter for a
-  packaged Openbrowser executable. It waits for fixture readiness, requires a
-  graceful zero exit, verifies `clean_shutdown`, and writes the common result
-  document;
-- the harness is registered with CTest when Python is available, so its
-  protocol and lifecycle classifications run in the existing Core CI matrix.
+### M8 protocol and deterministic harness
 
-The harness accepts one command for Openbrowser and one for the reference
-runner. Commands receive these environment variables:
+`scripts/compatibility_harness.py` owns local fixture serving, per-run isolation, runner timeouts, process-tree cleanup, normalized observations, normalized request comparison and machine-readable result classification.
+
+Runner results use a versioned JSON protocol. A scenario is classified as one of:
+
+- `passed`;
+- `incompatible`;
+- `runner-failure`;
+- `timeout`;
+- `runner-crash`;
+- `observation-error`;
+- `fixture-not-observed`.
+
+A crash, timeout or bad shutdown is never converted into a compatibility pass.
+
+### M8.1 real Openbrowser vs pinned Chromium
+
+The Windows differential workflow executes the same deterministic local scenarios against:
+
+- a native Openbrowser build using CEF `151.3.17+gf059e67+chromium-151.0.7922.138`;
+- Chrome for Testing `151.0.7922.138`, pinned by exact archive SHA-256 and checked again by the executable-reported version.
+
+Fixtures publish bounded test-only observations to a per-run localhost collector protected by an unguessable token. This avoids adding a production DOM-inspection backdoor to the browser.
+
+The current PR-sized corpus contains 10 scenarios covering:
+
+1. navigation;
+2. redirect chains;
+3. JavaScript DOM mutation and localStorage;
+4. fragment/hash navigation;
+5. History API state replacement;
+6. same-origin JSON XHR;
+7. external same-origin scripts;
+8. JavaScript cookie visibility;
+9. localStorage/sessionStorage lifecycle behavior;
+10. core DOM creation and mutation APIs.
+
+Observed fields can include final URL, title, DOM markers/text, deterministic fixture events, localStorage, sessionStorage, cookies and normalized fixture-server requests.
+
+The Openbrowser side additionally requires:
+
+- successful native launch;
+- fixture observation;
+- graceful close acceptance;
+- process exit code `0`;
+- persisted `clean_shutdown: true`.
+
+The expanded corpus has completed with `10 passed, 0 incompatible, 0 runner failures` against the pinned Chromium reference.
+
+See:
+
+- [`m8.1-real-browser-differential.md`](m8.1-real-browser-differential.md)
+- [`m8.1-compatibility-corpus.md`](m8.1-compatibility-corpus.md)
+
+### M8.2 pinned WPT smoke
+
+M8.2 adds the first upstream Web Platform Tests smoke lane.
+
+The workflow pins:
+
+- an exact `web-platform-tests/wpt` commit;
+- Chrome for Testing `151.0.7922.138`;
+- ChromeDriver `151.0.7922.138`;
+- SHA-256 values for both downloaded browser archives.
+
+The initial smoke subset covers selected DOM, Encoding, URLSearchParams and Web Storage tests. Unexpected WPT failures remain failures; broad expectations and `--no-fail-on-unexpected` are not used to hide regressions.
+
+The WPT lane currently validates standards-test ingestion and the pinned Chromium reference environment. It does **not** yet run Openbrowser directly through `wptrunner` because Openbrowser does not expose a WebDriver-compatible product adapter.
+
+M8.1 remains the layer that directly executes Openbrowser itself.
+
+See [`m8.2-wpt-smoke.md`](m8.2-wpt-smoke.md).
+
+## Local differential execution
+
+The harness accepts one command for Openbrowser and one for the reference runner. Commands receive these environment variables:
 
 ```text
 OPENBROWSER_COMPAT_SCENARIO
@@ -40,15 +101,9 @@ OPENBROWSER_COMPAT_STORAGE_DIR
 OPENBROWSER_COMPAT_STATUS_URL
 ```
 
-The `{url}`, `{result_file}`, `{storage_dir}`, `{scenario_id}` and
-`{status_url}` placeholders are also available in command arguments. Each
-runner must write a UTF-8 JSON object with `schema_version: 1` and the matching
-`scenario_id`. Stable observations such as `final_url`, `title`, `dom_markers`,
-`events` and `storage` are compared according to the scenario manifest. The
-harness additionally compares the normalized requests observed by the local
-fixture server.
+The `{url}`, `{result_file}`, `{storage_dir}`, `{scenario_id}` and `{status_url}` placeholders are also available in command arguments.
 
-For example, an adapter pair can be run locally with:
+A generic local invocation looks like:
 
 ```text
 python scripts/compatibility_harness.py \
@@ -58,18 +113,7 @@ python scripts/compatibility_harness.py \
   --output compatibility-report.json
 ```
 
-Reports use a stable machine-readable JSON schema. A result is classified as
-`passed`, `incompatible`, `runner-failure`, `timeout`, `runner-crash`,
-`observation-error` or `fixture-not-observed`; a browser crash is never
-converted into a compatibility pass. Temporary storage and process trees are
-cleaned after every scenario, including timeout paths.
-
-This is intentionally an initial slice, not a claim that the full WPT,
-reference-browser matrix, rendering reftests or a CEF DOM-inspection bridge
-already exist. The supplied Openbrowser adapter currently reports the
-observations available from persisted session state and lifecycle checks;
-adapters that expose richer DOM, storage or console observations can use the
-same protocol without changing the harness.
+Temporary storage and process trees are cleaned after each scenario, including timeout paths.
 
 ## Reference principle
 
@@ -78,11 +122,11 @@ For every shipped engine milestone, Openbrowser should have a pinned upstream Ch
 ```text
 Openbrowser build
       |
-      +--> standards tests
+      +--> deterministic scenarios
       |
-      +--> deterministic site scenarios
+      +--> standards-test evidence
       |
-      +--> rendering comparisons
+      +--> future rendering comparisons
       |
       `--> differential comparison
                   |
@@ -110,22 +154,23 @@ Unknown differences are never automatically added as compatibility exceptions.
 
 ### 1. Web Platform Tests
 
-Openbrowser should consume Web Platform Tests (WPT) as the primary cross-browser standards suite.
+WPT is the primary upstream standards suite.
 
-Planned execution tiers:
+Current state:
 
-- **PR smoke subset** — fast tests around areas touched by the change;
-- **nightly compatibility run** — broader WPT coverage;
-- **release candidate matrix** — pinned Openbrowser and reference browser results;
-- **regression quarantine** — known upstream failures are recorded separately from Openbrowser-specific failures.
+- **PR smoke subset** — implemented against the pinned Chromium reference;
+- **direct Openbrowser wptrunner product adapter** — not implemented yet;
+- **nightly broader WPT coverage** — future work;
+- **release candidate matrix** — future work;
+- **regression quarantine** — future work.
 
 WPT results are evidence, not a reason to copy browser-specific bugs.
 
 ### 2. Rendering / reftest checks
 
-Where deterministic rendering matters, Openbrowser should support reference-image or reference-page comparisons.
+Deterministic rendering/reftest comparison is not implemented yet.
 
-Comparisons must record:
+When added, comparisons must record at minimum:
 
 - engine version;
 - operating system;
@@ -139,29 +184,24 @@ A pixel difference without environmental metadata is not a useful compatibility 
 
 ### 3. Differential browser scenarios
 
-A deterministic scenario runner should execute the same scenario against Openbrowser and a pinned Chromium reference.
+Implemented through M8.1. The same local scenario is run against Openbrowser and the pinned Chromium reference, and stable observations are compared rather than engine-private IDs.
 
-Candidate observations include:
+High-value future observations include:
 
-- navigation and redirect chain;
-- final committed URL;
-- DOM-visible results;
-- cookies/storage outcomes;
+- Fetch/CORS behavior;
+- CSP behavior;
+- IndexedDB;
+- workers and service workers;
+- WebSockets;
+- module loading;
 - permissions behavior;
-- request/response sequence;
-- service-worker involvement;
-- console errors;
 - downloads;
-- renderer crashes/hangs;
-- screenshots/reftests where deterministic.
-
-The runner should compare normalized observations, not engine-private IDs.
+- console errors;
+- deterministic screenshots/reftests.
 
 ### 4. Site compatibility corpus
 
-Openbrowser may maintain a curated set of deterministic site scenarios for high-impact or historically fragile applications.
-
-The corpus should prefer:
+A broader curated corpus is future work. It should prefer:
 
 - local fixtures;
 - self-hosted test applications;
@@ -172,7 +212,7 @@ Live third-party production sites should not be the only evidence for a regressi
 
 ## Compatibility profiles and mitigations
 
-Openbrowser may eventually support narrowly scoped compatibility mitigations, but they must be transparent and reversible.
+Openbrowser may support narrowly scoped compatibility mitigations, but they must remain transparent and reversible.
 
 A compatibility mitigation must have:
 
@@ -230,15 +270,17 @@ Site-specific UA overrides are a last-resort compatibility mechanism and must be
 
 A future release should be blocked when:
 
-- an unexplained compatibility delta appears in critical WPT areas;
-- a known-good deterministic site scenario regresses;
+- an unexplained compatibility delta appears in a tested critical path;
+- a known-good deterministic scenario regresses;
 - a compatibility workaround broadens beyond its declared origin/version scope;
 - privacy protections are weakened globally to fix a site-specific bug;
 - Openbrowser differs from its reference build without classification in a tested critical path.
 
+As the WPT and rendering layers mature, their critical subsets should become release-candidate gates as well.
+
 ## Storage and reporting
 
-Compatibility results should be local artifacts by default.
+Compatibility results are local/CI artifacts by default.
 
 Optional report submission, if ever implemented, must be explicit and redact browsing data. A failing site URL or capture must never be uploaded automatically merely because compatibility diagnostics are enabled.
 
