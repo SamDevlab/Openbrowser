@@ -1,5 +1,6 @@
 #include "library_panel.h"
 
+#include "aura_design_tokens.h"
 #include "core/session/browser_session.h"
 #include "deferred_ui_action.h"
 
@@ -27,7 +28,7 @@ CefRefPtr<CefPanel> CreateRow() {
     CefRefPtr<CefPanel> row = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings settings{};
     settings.horizontal = 1;
-    settings.between_child_spacing = 6;
+    settings.between_child_spacing = aura::kSpace6;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     row->SetToBoxLayout(settings);
     return row;
@@ -80,16 +81,18 @@ LibraryPanel::LibraryPanel(
     panel_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings panel_settings{};
     panel_settings.horizontal = 0;
-    panel_settings.between_child_spacing = 6;
-    panel_settings.inside_border_horizontal_spacing = 10;
-    panel_settings.inside_border_vertical_spacing = 8;
+    panel_settings.between_child_spacing = aura::kPanelGap;
+    panel_settings.inside_border_horizontal_spacing = aura::kPanelPadding;
+    panel_settings.inside_border_vertical_spacing = aura::kPanelPadding;
     panel_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     layout_ = panel_->SetToBoxLayout(panel_settings);
+    aura::StyleSurface(panel_, aura::kSurface);
 
     CefRefPtr<CefPanel> header = CreateRow();
     CefRefPtr<CefBoxLayout> header_layout = header->GetLayout()->AsBoxLayout();
 
     CefRefPtr<CefLabelButton> title = MakeLabel("Library", static_delegates_);
+    aura::StylePassiveLabel(title, true);
     history_button_ = MakeActionButton(
         {ActionKind::ShowHistory, {}}, "History", static_delegates_);
     bookmarks_button_ = MakeActionButton(
@@ -115,6 +118,7 @@ LibraryPanel::LibraryPanel(
     body_settings.between_child_spacing = 4;
     body_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     body_layout_ = body_->SetToBoxLayout(body_settings);
+    aura::StyleSurface(body_, aura::kSurface);
     panel_->AddChildView(body_);
     if (layout_) {
         layout_->SetFlexForView(body_, 1);
@@ -198,7 +202,9 @@ CefRefPtr<CefLabelButton> LibraryPanel::MakeActionButton(
     std::vector<CefRefPtr<CefButtonDelegate>>& owner) {
     CefRefPtr<CefButtonDelegate> delegate = new ActionDelegate(*this, action);
     owner.push_back(delegate);
-    return CefLabelButton::CreateLabelButton(delegate, text);
+    auto button = CefLabelButton::CreateLabelButton(delegate, text);
+    aura::StyleButton(button);
+    return button;
 }
 
 CefRefPtr<CefLabelButton> LibraryPanel::MakeLabel(
@@ -208,6 +214,7 @@ CefRefPtr<CefLabelButton> LibraryPanel::MakeLabel(
     owner.push_back(delegate);
     CefRefPtr<CefLabelButton> label = CefLabelButton::CreateLabelButton(delegate, text);
     label->SetEnabled(false);
+    aura::StylePassiveLabel(label);
     return label;
 }
 
@@ -266,10 +273,12 @@ void LibraryPanel::RebuildBody() {
     body_delegates_.clear();
 
     if (history_button_) {
-        history_button_->SetText(section_ == Section::History ? "History *" : "History");
+        history_button_->SetText("History");
+        aura::StyleButton(history_button_, section_ == Section::History);
     }
     if (bookmarks_button_) {
-        bookmarks_button_->SetText(section_ == Section::Bookmarks ? "Bookmarks *" : "Bookmarks");
+        bookmarks_button_->SetText("Bookmarks");
+        aura::StyleButton(bookmarks_button_, section_ == Section::Bookmarks);
     }
 
     if (section_ == Section::History) {
