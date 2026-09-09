@@ -1,0 +1,56 @@
+name: Engine Security Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/engine-security-monitor.yml'
+      - 'cmake/OpenbrowserCEF.cmake'
+      - 'scripts/engine_security_monitor.py'
+      - 'tests/engine_security_monitor_tests.py'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/engine-security-monitor.yml'
+      - 'cmake/OpenbrowserCEF.cmake'
+      - 'scripts/engine_security_monitor.py'
+      - 'tests/engine_security_monitor_tests.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-security-monitor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine-security-monitor:
+    name: CEF / Chromium currency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Test monitor logic
+        run: python3 -m unittest tests/engine_security_monitor_tests.py
+
+      - name: Check supported CEF and Chrome Stable
+        run: >-
+          python3 scripts/engine_security_monitor.py
+          --fail-on-cef-update
+          --output engine-security-report.json
+
+      - name: Upload engine security report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: engine-security-report
+          path: engine-security-report.json
+          if-no-files-found: warn
+          retention-days: 30
