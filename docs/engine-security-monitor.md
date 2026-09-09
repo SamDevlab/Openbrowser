@@ -7,6 +7,12 @@ Openbrowser embeds Chromium through a supported Chromium Embedded Framework (CEF
 
 A newer Chrome Stable version is a useful security/currency signal, but it is not permission to replace the supported CEF distribution with a Chrome binary or an arbitrary Chromium build.
 
+## Current baseline
+
+The monitor was introduced while Openbrowser still pinned CEF 151. Its first real execution detected that the stable CEF channel had advanced and correctly blocked on an explicit review. That review upgraded the repository baseline to CEF `152.0.6+g708dc14+chromium-152.0.7977.83` before this monitor is merged.
+
+This is the intended operating model: the monitor discovers currency drift, a separate reviewed PR updates trust anchors and validates the browser, and only then does the monitor return to its steady-state watch role.
+
 ## Automated monitor
 
 `.github/workflows/engine-security-monitor.yml` runs weekly, on demand, and whenever the monitor or CEF pin changes.
