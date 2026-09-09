@@ -314,11 +314,18 @@ void TestPrivateTabVisibilityAndActivationGuard() {
     Require(orchestrator.IsTabVisible(*tab1), "Normal tab is visible in normal mode");
     Require(orchestrator.CanActivateTab("tab-persistent-1"), "Normal tab can be activated in normal mode");
 
+    // EnterPrivateMode opens a new tab. BrowserSession stores tabs in a
+    // std::vector, so that mutation may invalidate pointers returned by
+    // FindTab(). Reacquire by stable TabId before reading the persistent tab.
     Require(orchestrator.EnterPrivateMode(), "Entered private mode");
     Require(orchestrator.IsPrivateModeActive(), "Private mode active");
     Require(session.Tabs().size() == 2, "Session has 2 tabs (1 normal, 1 private)");
 
-    const auto* priv_tab = session.FindTab(*session.ActiveTabId());
+    tab1 = session.FindTab("tab-persistent-1");
+    Require(tab1 != nullptr, "Persistent tab still exists after entering Private Mode");
+
+    const auto private_tab_id = *session.ActiveTabId();
+    const auto* priv_tab = session.FindTab(private_tab_id);
     Require(priv_tab != nullptr, "Active tab is private tab");
     Require(priv_tab->is_ephemeral, "Active tab is marked ephemeral");
 
@@ -329,9 +336,9 @@ void TestPrivateTabVisibilityAndActivationGuard() {
     const bool activation_result = orchestrator.ActivateTab("tab-persistent-1");
     Require(!activation_result, "ActivateTab must REJECT activating persistent tab during Private Mode");
     Require(*session.ActiveTabId() != "tab-persistent-1", "Active tab must NOT switch to persistent tab");
-    Require(*session.ActiveTabId() == priv_tab->id, "Active tab must remain the private tab");
+    Require(*session.ActiveTabId() == private_tab_id, "Active tab must remain the private tab");
 
-    Require(orchestrator.CanActivateTab(priv_tab->id), "CanActivateTab returns true for ephemeral tab in Private Mode");
+    Require(orchestrator.CanActivateTab(private_tab_id), "CanActivateTab returns true for ephemeral tab in Private Mode");
 }
 
 void TestPrivateExitWithNormalTabsRestoresPersistentTab() {

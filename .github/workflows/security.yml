@@ -1,0 +1,93 @@
+name: Security CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sanitizers:
+    name: Sanitizers / Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 / Node 24
+
+      - name: Configure ASan + UBSan
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-sanitized \
+            -DOPENBROWSER_BUILD_TESTS=ON \
+            -DOPENBROWSER_BUILD_DESKTOP=OFF \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build sanitized core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build-sanitized --parallel
+
+      - name: Run sanitized tests
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-sanitized --output-on-failure
+
+  codeql:
+    name: CodeQL / C++
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 / Node 24
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+
+      - name: Configure CodeQL build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-codeql \
+            -DOPENBROWSER_BUILD_TESTS=ON \
+            -DOPENBROWSER_BUILD_DESKTOP=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build CodeQL database inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build-codeql --parallel
+
+      - name: Run core tests before analysis
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-codeql --output-on-failure
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        with:
+          category: /language:c-cpp
