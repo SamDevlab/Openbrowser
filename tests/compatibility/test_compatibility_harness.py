@@ -6,6 +6,7 @@ import json
 import sys
 import tempfile
 import unittest
+import urllib.request
 from pathlib import Path
 
 
@@ -14,6 +15,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
 from compatibility_harness import run_harness  # noqa: E402
+from compatibility_observer import ObservationServer  # noqa: E402
 
 
 class CompatibilityHarnessTests(unittest.TestCase):
@@ -62,6 +64,32 @@ class CompatibilityHarnessTests(unittest.TestCase):
         report = self.run_case(reference_mode="timeout", timeout_seconds=0.25)
         self.assertEqual(report["summary"]["runner_failures"], 3)
         self.assertTrue(all(item["reference"]["status"] == "timeout" for item in report["scenarios"]))
+
+    def test_page_observation_collector_round_trip(self) -> None:
+        payload = {
+            "schema_version": 1,
+            "scenario_id": "navigation-basic",
+            "final_url": "http://127.0.0.1/navigation-basic.html",
+            "title": "Openbrowser compatibility navigation",
+            "dom_markers": {
+                "compatibility-navigation": {
+                    "marker": "navigation-basic",
+                    "text": "Navigation fixture loaded.",
+                }
+            },
+            "events": ["navigation_committed", "fixture_ready"],
+            "storage": {},
+        }
+        with ObservationServer("navigation-basic") as observer:
+            request = urllib.request.Request(
+                observer.url,
+                data=json.dumps(payload).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "text/plain;charset=UTF-8"},
+            )
+            with urllib.request.urlopen(request, timeout=2) as response:
+                self.assertEqual(response.status, 204)
+            self.assertEqual(observer.wait(1.0), payload)
 
 
 if __name__ == "__main__":

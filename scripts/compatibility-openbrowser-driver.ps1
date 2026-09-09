@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Executable
+    [string]$Executable,
+
+    [string]$Python = 'python'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,16 +65,48 @@ $resultPath = $env:OPENBROWSER_COMPAT_RESULT_FILE
 $storageDirectory = $env:OPENBROWSER_COMPAT_STORAGE_DIR
 $statusUrl = $env:OPENBROWSER_COMPAT_STATUS_URL
 $sessionPath = Join-Path $storageDirectory 'session.json'
+$observerUrlPath = Join-Path $storageDirectory 'observer-url.txt'
+$observationPath = Join-Path $storageDirectory 'page-observation.json'
+$observerScript = Join-Path $PSScriptRoot 'compatibility_observer.py'
 $resolvedExecutable = (Resolve-Path -LiteralPath $Executable).Path
+$resolvedObserverScript = (Resolve-Path -LiteralPath $observerScript).Path
 
 New-Item -ItemType Directory -Force -Path $storageDirectory | Out-Null
 $browser = $null
+$observer = $null
 
 try {
+    $observer = Start-Process `
+        -FilePath $Python `
+        -ArgumentList @(
+            $resolvedObserverScript,
+            '--scenario-id', $scenario,
+            '--url-file', $observerUrlPath,
+            '--result-file', $observationPath,
+            '--timeout-seconds', '35'
+        ) `
+        -WorkingDirectory $PSScriptRoot `
+        -PassThru `
+        -WindowStyle Hidden
+
+    Wait-Until -Description 'compatibility observation collector startup' -Condition {
+        if ($observer.HasExited) {
+            throw "Compatibility observer exited during startup (code $($observer.ExitCode))."
+        }
+        return Test-Path -LiteralPath $observerUrlPath -PathType Leaf
+    }
+
+    $observerUrl = (Get-Content -LiteralPath $observerUrlPath -Raw).Trim()
+    if ([string]::IsNullOrWhiteSpace($observerUrl)) {
+        throw 'Compatibility observer produced an empty endpoint URL.'
+    }
+    $separator = if ($url.Contains('?')) { '&' } else { '?' }
+    $instrumentedUrl = "$url$separator`__ob_observer=$([Uri]::EscapeDataString($observerUrl))"
+
     $browser = Start-Process `
         -FilePath $resolvedExecutable `
         -ArgumentList @(
-            "--url=$url",
+            "--url=$instrumentedUrl",
             '--disable-gpu',
             "--storage-dir=$storageDirectory",
             "--session-file=$sessionPath"
@@ -100,6 +134,28 @@ try {
         }
     }
 
+    Wait-Until -Description 'page compatibility observation' -Condition {
+        if ($observer.HasExited -and -not (Test-Path -LiteralPath $observationPath -PathType Leaf)) {
+            throw "Compatibility observer exited before writing an observation (code $($observer.ExitCode))."
+        }
+        return Test-Path -LiteralPath $observationPath -PathType Leaf
+    }
+
+    if (-not $observer.WaitForExit(5000)) {
+        throw 'Compatibility observer did not exit after receiving the page observation.'
+    }
+    if ($observer.ExitCode -ne 0) {
+        throw "Compatibility observer returned unexpected exit code $($observer.ExitCode)."
+    }
+
+    $observation = Get-Content -LiteralPath $observationPath -Raw | ConvertFrom-Json
+    if ([int]$observation.schema_version -ne 1) {
+        throw 'Compatibility observation schema_version mismatch.'
+    }
+    if ([string]$observation.scenario_id -ne $scenario) {
+        throw 'Compatibility observation scenario_id mismatch.'
+    }
+
     if (-not $browser.CloseMainWindow()) {
         throw 'Openbrowser rejected the graceful compatibility-run close request.'
     }
@@ -118,16 +174,27 @@ try {
         throw 'Openbrowser compatibility run did not record a clean shutdown.'
     }
     $tab = Get-SessionTab -Session $session
+
     $result = [ordered]@{
         schema_version = 1
         scenario_id = $scenario
-        final_url = [string]$tab.url
-        title = [string]$tab.title
-        events = @('navigation_committed', 'fixture_ready', 'clean_shutdown')
+        final_url = [string]$observation.final_url
+        title = [string]$observation.title
+        dom_markers = $observation.dom_markers
+        events = @($observation.events)
+        storage = $observation.storage
+        adapter = [ordered]@{
+            kind = 'openbrowser-packaged'
+            clean_shutdown = $true
+            persisted_title = [string]$tab.title
+        }
     }
-    $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+    $result | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $resultPath -Encoding UTF8
 } finally {
     if ($null -ne $browser -and -not $browser.HasExited) {
         & taskkill.exe /PID $browser.Id /T /F | Out-Null
+    }
+    if ($null -ne $observer -and -not $observer.HasExited) {
+        & taskkill.exe /PID $observer.Id /T /F | Out-Null
     }
 }

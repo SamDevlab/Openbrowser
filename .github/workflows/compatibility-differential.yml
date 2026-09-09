@@ -1,0 +1,224 @@
+name: Web Compatibility Differential
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/compatibility*.py"
+      - "scripts/compatibility*.ps1"
+      - "tests/compatibility/**"
+      - "third_party/chromium-reference/**"
+      - ".github/workflows/compatibility-differential.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/compatibility*.py"
+      - "scripts/compatibility*.ps1"
+      - "tests/compatibility/**"
+      - "third_party/chromium-reference/**"
+      - ".github/workflows/compatibility-differential.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility-differential-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CEF_VERSION: 151.3.17+gf059e67+chromium-151.0.7922.138
+  CEF_PLATFORM: windows64
+  CEF_BASE_URL: https://cef-builds.spotifycdn.com
+  CHROMIUM_REFERENCE_VERSION: 151.0.7922.138
+  CHROMIUM_REFERENCE_PLATFORM: win64
+  CHROMIUM_REFERENCE_BASE_URL: https://storage.googleapis.com/chrome-for-testing-public
+
+jobs:
+  windows-real-browser-differential:
+    name: Windows / Openbrowser vs Chromium 151
+    runs-on: windows-2025
+    timeout-minutes: 50
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Restore CEF archive cache
+        id: cef-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .cache/cef/*.tar.bz2
+          key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
+
+      - name: Download and verify exact CEF distribution
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+
+          $cacheDir = Join-Path $PWD '.cache/cef'
+          New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+
+          $archive = "cef_binary_${env:CEF_VERSION}_${env:CEF_PLATFORM}.tar.bz2"
+          $encodedArchive = $archive.Replace('+', '%2B')
+          $archivePath = Join-Path $cacheDir $archive
+          $lockFile = Join-Path $PWD 'third_party/cef/checksums.sha1'
+          $upstreamShaPath = "$archivePath.upstream.sha1"
+
+          $match = Get-Content -LiteralPath $lockFile | Where-Object {
+            $_ -match "^([0-9a-fA-F]{40})\s+$([regex]::Escape($archive))\s*$"
+          } | Select-Object -First 1
+          if ($null -eq $match) {
+            throw "Pinned checksum missing for $archive"
+          }
+          $expectedSha1 = (($match -split '\s+')[0]).ToLowerInvariant()
+
+          Invoke-WebRequest `
+            -Uri "${env:CEF_BASE_URL}/${encodedArchive}.sha1" `
+            -OutFile $upstreamShaPath `
+            -MaximumRetryCount 3 `
+            -RetryIntervalSec 2
+          $upstreamSha1 = (Get-Content -LiteralPath $upstreamShaPath -Raw).Trim().ToLowerInvariant()
+          if ($upstreamSha1 -ne $expectedSha1) {
+            throw "CEF checksum mismatch. Pinned=$expectedSha1 Upstream=$upstreamSha1"
+          }
+
+          if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
+            Invoke-WebRequest `
+              -Uri "${env:CEF_BASE_URL}/${encodedArchive}" `
+              -OutFile $archivePath `
+              -MaximumRetryCount 3 `
+              -RetryIntervalSec 2
+          }
+          $actualSha1 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA1).Hash.ToLowerInvariant()
+          if ($actualSha1 -ne $expectedSha1) {
+            throw "Downloaded CEF archive checksum mismatch. Expected=$expectedSha1 Actual=$actualSha1"
+          }
+
+          $extractDir = Join-Path $cacheDir 'extracted-windows'
+          Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+          Push-Location $extractDir
+          try {
+            cmake -E tar xjf $archivePath
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to extract CEF archive.' }
+          } finally {
+            Pop-Location
+          }
+
+          $cefRoot = Join-Path $extractDir "cef_binary_${env:CEF_VERSION}_${env:CEF_PLATFORM}"
+          if (-not (Test-Path -LiteralPath (Join-Path $cefRoot 'include/cef_version.h') -PathType Leaf)) {
+            throw "Extracted CEF_ROOT is invalid: $cefRoot"
+          }
+          "CEF_ROOT=$cefRoot" | Add-Content -LiteralPath $env:GITHUB_ENV
+
+      - name: Save verified CEF archive cache
+        if: steps.cef-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .cache/cef/*.tar.bz2
+          key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
+
+      - name: Build Openbrowser desktop
+        shell: pwsh
+        run: |
+          cmake -S . -B build-compat -G "Visual Studio 18 2026" -A x64 `
+            -DOPENBROWSER_BUILD_TESTS=OFF `
+            -DOPENBROWSER_BUILD_DESKTOP=ON `
+            -DCEF_ROOT="$env:CEF_ROOT" `
+            -DUSE_SANDBOX=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-compat --target openbrowser --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $candidate = Get-ChildItem -Path build-compat -Recurse -File -Filter openbrowser.exe |
+            Where-Object { $_.FullName -match '[\\/]Release[\\/]' } |
+            Select-Object -First 1
+          if ($null -eq $candidate) {
+            throw 'Could not locate the built Openbrowser executable.'
+          }
+          "OPENBROWSER_COMPAT_EXE=$($candidate.FullName.Replace('\', '/'))" |
+            Add-Content -LiteralPath $env:GITHUB_ENV
+
+      - name: Download pinned Chromium reference
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+
+          $referenceDir = Join-Path $PWD '.cache/chromium-reference'
+          New-Item -ItemType Directory -Force -Path $referenceDir | Out-Null
+          $archiveName = 'chrome-headless-shell-win64.zip'
+          $archivePath = Join-Path $referenceDir $archiveName
+          $url = "${env:CHROMIUM_REFERENCE_BASE_URL}/${env:CHROMIUM_REFERENCE_VERSION}/${env:CHROMIUM_REFERENCE_PLATFORM}/${archiveName}"
+
+          Invoke-WebRequest `
+            -Uri $url `
+            -OutFile $archivePath `
+            -MaximumRetryCount 3 `
+            -RetryIntervalSec 2
+
+          $sha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Chromium reference archive SHA-256: $sha256"
+          "CHROMIUM_REFERENCE_ARCHIVE_SHA256=$sha256" | Add-Content -LiteralPath $env:GITHUB_ENV
+
+          $extractDir = Join-Path $referenceDir 'extracted'
+          Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir
+
+          $executable = Get-ChildItem -Path $extractDir -Recurse -File -Filter chrome-headless-shell.exe |
+            Select-Object -First 1
+          if ($null -eq $executable) {
+            throw 'Pinned Chromium reference executable was not found after extraction.'
+          }
+
+          $reportedVersion = (& $executable.FullName --version 2>&1 | Out-String).Trim()
+          if ($reportedVersion -notmatch [regex]::Escape($env:CHROMIUM_REFERENCE_VERSION)) {
+            throw "Chromium reference version mismatch. Expected=$env:CHROMIUM_REFERENCE_VERSION Reported=$reportedVersion"
+          }
+          Write-Host "Pinned Chromium reference: $reportedVersion"
+          "CHROMIUM_REFERENCE_EXE=$($executable.FullName.Replace('\', '/'))" |
+            Add-Content -LiteralPath $env:GITHUB_ENV
+
+      - name: Run real-browser differential
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path compatibility-artifacts | Out-Null
+
+          $openbrowserCommand = "pwsh -NoProfile -File scripts/compatibility-openbrowser-driver.ps1 -Executable $env:OPENBROWSER_COMPAT_EXE -Python python"
+          $referenceCommand = "python scripts/compatibility-chromium-driver.py --executable $env:CHROMIUM_REFERENCE_EXE"
+
+          python scripts/compatibility_harness.py `
+            --manifest tests/compatibility/fixtures/manifest.json `
+            --openbrowser-command $openbrowserCommand `
+            --reference-command $referenceCommand `
+            --output compatibility-artifacts/real-browser-differential.json `
+            --timeout-seconds 45
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content -LiteralPath compatibility-artifacts/real-browser-differential.json -Raw
+            exit $LASTEXITCODE
+          }
+
+          Get-Content -LiteralPath compatibility-artifacts/real-browser-differential.json -Raw
+
+      - name: Record reference metadata
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path compatibility-artifacts | Out-Null
+          [ordered]@{
+            chromium_reference_version = $env:CHROMIUM_REFERENCE_VERSION
+            chromium_reference_archive_sha256 = $env:CHROMIUM_REFERENCE_ARCHIVE_SHA256
+            cef_version = $env:CEF_VERSION
+            openbrowser_commit = '${{ github.sha }}'
+          } | ConvertTo-Json | Set-Content -LiteralPath compatibility-artifacts/reference-metadata.json -Encoding UTF8
+
+      - name: Upload compatibility report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Openbrowser-real-browser-differential
+          path: compatibility-artifacts
+          if-no-files-found: error
+          retention-days: 14
