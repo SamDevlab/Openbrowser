@@ -78,9 +78,8 @@ private:
     class FeedbackDismissTask;
     class SidebarPanelDelegate;
 
-    // Button delegates defer HandleAction to the next UI task because several
-    // actions rebuild the sidebar view tree as part of state/feedback updates.
-    // This prevents removal of the currently dispatching CefLabelButton.
+    // Native button delegates defer this call so Refresh() never removes the
+    // currently dispatching CefLabelButton from inside OnButtonPressed().
     void HandleAction(Action action, const std::string& target_id);
     void ShowTransientFeedback(std::string message);
     void ClearTransientFeedback(std::uint64_t generation);
