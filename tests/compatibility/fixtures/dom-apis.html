@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-compatibility-scenario="dom-apis">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="data:,">
+  <title>Openbrowser compatibility DOM APIs</title>
+</head>
+<body>
+  <main id="compatibility-dom" data-compatibility-marker="dom-apis">
+    DOM mutation pending.
+  </main>
+  <script>
+    const main = document.querySelector('#compatibility-dom');
+    main.classList.add('ready');
+    main.dataset.state = 'stable';
+    main.textContent = 'DOM root ready.';
+
+    const generated = document.createElement('span');
+    generated.id = 'compatibility-generated';
+    generated.dataset.compatibilityMarker = 'generated-node';
+    generated.textContent = 'Generated node ready.';
+    document.body.appendChild(generated);
+    window.__openbrowserCompatibilityEvents = ['dom_mutated'];
+  </script>
+  <script src="/compatibility-observe.js"></script>
+</body>
+</html>
