@@ -10,6 +10,7 @@
 #include "include/views/cef_panel.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -92,6 +93,7 @@ private:
     core::BrowserSession& session_;
     DataChangedCallback on_data_changed_;
     Section section_{Section::History};
+    std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
 
     CefRefPtr<CefPanel> panel_;
     CefRefPtr<CefBoxLayout> layout_;
