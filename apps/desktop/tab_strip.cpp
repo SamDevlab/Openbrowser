@@ -56,10 +56,10 @@ public:
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
 
-        // Session mutations notify TabStrip synchronously and RebuildTabs()
-        // removes the current native button/delegate tree. Defer the mutation
-        // until this press callback has returned so CEF never observes its
-        // dispatch target being destroyed mid-event.
+        // BrowserSession mutations synchronously notify TabStrip and can call
+        // RebuildTabs(), which removes the current button/delegate tree. Queue
+        // the domain action to the next UI turn so the native press callback
+        // completes before any view-tree rebuild is allowed to happen.
         TabStrip* tab_strip = &tab_strip_;
         std::weak_ptr<bool> alive_token = tab_strip_.alive_token_;
         const TabAction action = action_;
