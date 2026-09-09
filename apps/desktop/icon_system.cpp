@@ -18,7 +18,7 @@ namespace openbrowser::desktop {
 namespace {
 
 constexpr int kIconDip = 20;
-constexpr float kStroke = 1.8F;
+constexpr float kStroke = 2.2F;
 
 struct Point {
     float x;

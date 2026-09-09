@@ -236,15 +236,25 @@ void CefBrowserEngine::CloseTab(const core::TabId& tab_id) {
         DismissPermissionPrompt(id);
     }
 
-    CefRefPtr<CefBrowser> browser = surface->second.view->GetBrowser();
+    CefRefPtr<CefBrowserView> closing_view = surface->second.view;
+    CefRefPtr<CefBrowser> browser = closing_view ? closing_view->GetBrowser() : nullptr;
+
+    // A tab BrowserView shares one top-level CefWindow with every other tab.
+    // Detach it before entering CEF's close path so an ordinary tab close can
+    // never be promoted to a top-level window close. Release the map's view
+    // reference now; OnBeforeClose will erase the remaining surface metadata.
+    surface->second.view = nullptr;
+    if (browser_host_ && closing_view) {
+        browser_host_->RemoveChildView(closing_view);
+        browser_host_->Layout();
+    }
+
     if (browser) {
-        browser->GetHost()->CloseBrowser(false);
+        browser->GetHost()->CloseBrowser(true);
         return;
     }
 
-    browser_host_->RemoveChildView(surface->second.view);
     surfaces_.erase(surface);
-    browser_host_->Layout();
 }
 
 void CefBrowserEngine::ActivateTab(const core::TabId& tab_id) {

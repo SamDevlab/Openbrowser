@@ -124,9 +124,9 @@ BrowserChrome::BrowserChrome(
     toolbar_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings toolbar_settings{};
     toolbar_settings.horizontal = 1;
-    toolbar_settings.between_child_spacing = aura::kSpace6;
-    toolbar_settings.inside_border_horizontal_spacing = aura::kSpace12;
-    toolbar_settings.inside_border_vertical_spacing = aura::kSpace8;
+    toolbar_settings.between_child_spacing = aura::kSpace4;
+    toolbar_settings.inside_border_horizontal_spacing = aura::kSpace8;
+    toolbar_settings.inside_border_vertical_spacing = aura::kSpace6;
     toolbar_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     toolbar_layout_ = toolbar_->SetToBoxLayout(toolbar_settings);
     aura::StyleSurface(toolbar_, aura::kChromeSurface);
@@ -144,6 +144,7 @@ BrowserChrome::BrowserChrome(
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter an address");
     address_bar_->SetAccessibleName("Address and search bar");
+    address_bar_->SetMinimumSize(CefSize(320, aura::kOmniboxHeight));
     aura::StyleTextField(address_bar_, true);
     bookmarks_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ToggleBookmarksBar), "");

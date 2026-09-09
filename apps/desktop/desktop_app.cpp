@@ -289,7 +289,6 @@ void DesktopApp::OnContextInitialized() {
 
     browser_host_ = CefPanel::CreatePanel(nullptr);
     browser_host_->SetToFillLayout();
-    aura::StyleSurface(browser_host_, aura::kCanvas);
 
     engine_ = new CefBrowserEngine(browser_host_);
     engine_->SetStorageRoot(storage_dir);

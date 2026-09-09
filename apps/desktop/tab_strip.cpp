@@ -98,9 +98,9 @@ TabStrip::TabStrip(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 1;
-    settings.between_child_spacing = aura::kSpace6;
-    settings.inside_border_horizontal_spacing = aura::kSpace12;
-    settings.inside_border_vertical_spacing = aura::kSpace6;
+    settings.between_child_spacing = aura::kSpace2;
+    settings.inside_border_horizontal_spacing = aura::kSpace8;
+    settings.inside_border_vertical_spacing = aura::kSpace4;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     layout_ = panel_->SetToBoxLayout(settings);
     aura::StyleSurface(panel_, aura::kChromeSurface);
