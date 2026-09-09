@@ -149,6 +149,7 @@ jobs:
             --no-manifest-download \
             --no-restart-on-unexpected \
             --binary="$WPT_CHROME_BIN" \
+            --binary-arg=--no-sandbox \
             --webdriver-binary="$WPT_CHROMEDRIVER_BIN" \
             --log-wptreport="$GITHUB_WORKSPACE/wpt-artifacts/wpt-report.json" \
             --log-mach=- \
