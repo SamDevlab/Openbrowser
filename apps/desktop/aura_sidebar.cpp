@@ -145,10 +145,10 @@ public:
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
 
-        // Several Aura actions rebuild the sidebar as part of state/feedback
-        // updates. Defer dispatch until this native button callback returns so
-        // the currently dispatching CefLabelButton/delegate cannot be removed
-        // from the view tree while CEF is still processing its press event.
+        // Aura actions can synchronously rebuild the sidebar to refresh active
+        // state or transient feedback. Queue the action to the next UI turn so
+        // CEF completes this native press callback before any child/delegate is
+        // removed from the sidebar view tree.
         AuraSidebar* sidebar = &sidebar_;
         std::weak_ptr<bool> alive_token = sidebar_.alive_token_;
         const Action action = action_;
