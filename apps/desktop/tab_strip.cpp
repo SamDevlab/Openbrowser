@@ -9,6 +9,7 @@
 #include "core/workspaces/workspace_manager.h"
 #include "icon_system.h"
 
+#include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_button_delegate.h"
 #include "include/views/cef_label_button.h"
@@ -17,11 +18,35 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include <chrono>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
 namespace openbrowser::desktop {
+namespace {
+
+class DeferredUiTask final : public CefTask {
+public:
+    explicit DeferredUiTask(std::function<void()> callback)
+        : callback_(std::move(callback)) {}
+
+    void Execute() override {
+        CEF_REQUIRE_UI_THREAD();
+        if (callback_) {
+            callback_();
+            callback_ = nullptr;
+        }
+    }
+
+private:
+    std::function<void()> callback_;
+
+    IMPLEMENT_REFCOUNTING(DeferredUiTask);
+};
+
+}  // namespace
 
 class TabStrip::TabActionDelegate final : public CefButtonDelegate {
 public:
@@ -30,7 +55,23 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        tab_strip_.HandleTabAction(action_, tab_id_);
+
+        // Session mutations notify TabStrip synchronously and RebuildTabs()
+        // removes the current native button/delegate tree. Defer the mutation
+        // until this press callback has returned so CEF never observes its
+        // dispatch target being destroyed mid-event.
+        TabStrip* tab_strip = &tab_strip_;
+        std::weak_ptr<bool> alive_token = tab_strip_.alive_token_;
+        const TabAction action = action_;
+        const std::string tab_id = tab_id_;
+        CefPostTask(
+            TID_UI,
+            new DeferredUiTask([tab_strip, alive_token, action, tab_id]() {
+                const auto alive = alive_token.lock();
+                if (alive && *alive && tab_strip != nullptr) {
+                    tab_strip->HandleTabAction(action, tab_id);
+                }
+            }));
     }
 
 private:
@@ -72,6 +113,7 @@ TabStrip::TabStrip(
 }
 
 TabStrip::~TabStrip() {
+    *alive_token_ = false;
     session_.RemoveObserver(this);
 }
 
