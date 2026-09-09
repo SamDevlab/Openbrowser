@@ -1,0 +1,70 @@
+name: CEF 152 Upgrade Review
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/cef-152-upgrade-review.yml"
+      - "cmake/OpenbrowserCEF.cmake"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-trust-metadata:
+    name: Official archive metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CEF_VERSION: 152.0.6+g708dc14+chromium-152.0.7977.83
+      CEF_BASE_URL: https://cef-builds.spotifycdn.com
+      CHROME_VERSION: 152.0.7977.83
+      CHROME_BASE_URL: https://storage.googleapis.com/chrome-for-testing-public
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Read official CEF SHA-1 metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          for platform in linux64 windows64; do
+            archive="cef_binary_${CEF_VERSION}_${platform}.tar.bz2"
+            encoded="${archive//+/%2B}"
+            sha1="$(curl --fail --silent --show-error --location --retry 3 "${CEF_BASE_URL}/${encoded}.sha1" | tr -d '\r\n')"
+            [[ "$sha1" =~ ^[0-9a-fA-F]{40}$ ]]
+            printf '%s  %s\n' "${sha1,,}" "$archive"
+          done | tee cef-152-checksums.sha1
+
+      - name: Download Chrome reference archives and calculate SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/chrome
+          declare -a specs=(
+            "win64/chrome-headless-shell-win64.zip"
+            "linux64/chrome-linux64.zip"
+            "linux64/chromedriver-linux64.zip"
+          )
+          : > chromium-152-checksums.sha256
+          for spec in "${specs[@]}"; do
+            platform="${spec%%/*}"
+            archive="${spec#*/}"
+            path=".cache/chrome/${archive}"
+            curl --fail --location --retry 3 --retry-delay 2 \
+              "${CHROME_BASE_URL}/${CHROME_VERSION}/${platform}/${archive}" \
+              --output "$path"
+            sha256="$(sha256sum "$path" | awk '{print $1}')"
+            printf '%s  %s\n' "$sha256" "$archive" | tee -a chromium-152-checksums.sha256
+          done
+
+      - name: Upload review trust metadata
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: cef-152-upgrade-review-metadata
+          path: |
+            cef-152-checksums.sha1
+            chromium-152-checksums.sha256
+          if-no-files-found: error
+          retention-days: 30
