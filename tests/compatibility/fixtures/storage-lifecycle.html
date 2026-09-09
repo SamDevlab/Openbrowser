@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" data-compatibility-scenario="storage-lifecycle">
+<head>
+  <meta charset="utf-8">
+  <title>Openbrowser compatibility storage lifecycle</title>
+</head>
+<body>
+  <main id="compatibility-storage-lifecycle" data-compatibility-marker="storage-lifecycle">
+    Storage lifecycle pending.
+  </main>
+  <script>
+    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.setItem('alpha', '1');
+    localStorage.setItem('beta', '2');
+    localStorage.removeItem('alpha');
+    sessionStorage.setItem('gamma', '3');
+    document.querySelector('#compatibility-storage-lifecycle').textContent =
+      `Local beta=${localStorage.getItem('beta')}; session gamma=${sessionStorage.getItem('gamma')}.`;
+    window.__openbrowserCompatibilityEvents = ['storage_mutated'];
+  </script>
+  <script src="/compatibility-observe.js"></script>
+</body>
+</html>

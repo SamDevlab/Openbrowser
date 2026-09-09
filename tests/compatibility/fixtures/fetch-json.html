@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-compatibility-scenario="fetch-json">
+<head>
+  <meta charset="utf-8">
+  <title>Openbrowser compatibility fetch JSON</title>
+</head>
+<body>
+  <main id="compatibility-fetch" data-compatibility-marker="fetch-json">
+    JSON request pending.
+  </main>
+  <script>
+    const request = new XMLHttpRequest();
+    request.open('GET', '/compatibility-data.json', false);
+    request.send(null);
+    if (request.status !== 200) {
+      throw new Error(`Compatibility JSON request failed: ${request.status}`);
+    }
+    const payload = JSON.parse(request.responseText);
+    document.querySelector('#compatibility-fetch').textContent =
+      `JSON payload ${payload.name}:${payload.value}.`;
+    window.__openbrowserCompatibilityEvents = ['xhr_complete'];
+  </script>
+  <script src="/compatibility-observe.js"></script>
+</body>
+</html>

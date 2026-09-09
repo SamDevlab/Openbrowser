@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" data-compatibility-scenario="history-state">
+<head>
+  <meta charset="utf-8">
+  <title>Openbrowser compatibility history state</title>
+</head>
+<body>
+  <main id="compatibility-history" data-compatibility-marker="history-state">
+    History state pending.
+  </main>
+  <script>
+    const target = new URL(location.href);
+    target.searchParams.set('mode', 'stable');
+    history.replaceState({mode: 'stable'}, '', target.href);
+    document.querySelector('#compatibility-history').textContent = 'History state mode stable.';
+    window.__openbrowserCompatibilityEvents = ['history_replaced'];
+  </script>
+  <script src="/compatibility-observe.js"></script>
+</body>
+</html>

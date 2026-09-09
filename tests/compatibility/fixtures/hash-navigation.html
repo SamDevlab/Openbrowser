@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en" data-compatibility-scenario="hash-navigation">
+<head>
+  <meta charset="utf-8">
+  <title>Openbrowser compatibility hash navigation</title>
+</head>
+<body>
+  <main id="compatibility-hash" data-compatibility-marker="hash-navigation">
+    Hash navigation pending.
+  </main>
+  <script>
+    location.hash = 'section-b';
+    document.querySelector('#compatibility-hash').textContent = 'Hash navigation reached section-b.';
+    window.__openbrowserCompatibilityEvents = ['hash_changed'];
+  </script>
+  <script src="/compatibility-observe.js"></script>
+</body>
+</html>

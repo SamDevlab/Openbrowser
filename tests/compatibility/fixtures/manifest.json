@@ -6,48 +6,72 @@
       "id": "navigation-basic",
       "description": "A local HTML document commits a navigation and exposes a stable DOM marker.",
       "path": "navigation-basic.html",
-      "expected_request_paths": [
-        "/navigation-basic.html"
-      ],
-      "compare_fields": [
-        "final_url",
-        "title",
-        "dom_markers",
-        "events"
-      ]
+      "expected_request_paths": ["/navigation-basic.html"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events"]
     },
     {
       "id": "redirect-chain",
       "description": "A local redirect resolves to a final document without leaving the fixture origin.",
       "path": "redirect.html",
-      "redirects": {
-        "/redirect.html": "/redirect-final.html"
-      },
-      "expected_request_paths": [
-        "/redirect.html",
-        "/redirect-final.html"
-      ],
-      "compare_fields": [
-        "final_url",
-        "title",
-        "dom_markers",
-        "events"
-      ]
+      "redirects": {"/redirect.html": "/redirect-final.html"},
+      "expected_request_paths": ["/redirect.html", "/redirect-final.html"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events"]
     },
     {
       "id": "javascript-storage",
       "description": "A local script performs deterministic DOM and local-storage work.",
       "path": "javascript-storage.html",
-      "expected_request_paths": [
-        "/javascript-storage.html"
-      ],
-      "compare_fields": [
-        "final_url",
-        "title",
-        "dom_markers",
-        "events",
-        "storage"
-      ]
+      "expected_request_paths": ["/javascript-storage.html"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events", "storage"]
+    },
+    {
+      "id": "hash-navigation",
+      "description": "A script updates the fragment and DOM without a network navigation.",
+      "path": "hash-navigation.html",
+      "expected_request_paths": ["/hash-navigation.html"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events"]
+    },
+    {
+      "id": "history-state",
+      "description": "The History API replaces URL state while preserving deterministic content.",
+      "path": "history-state.html",
+      "expected_request_paths": ["/history-state.html"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events"]
+    },
+    {
+      "id": "fetch-json",
+      "description": "A same-origin XHR loads deterministic JSON and projects it into the DOM.",
+      "path": "fetch-json.html",
+      "expected_request_paths": ["/fetch-json.html", "/compatibility-data.json"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events"]
+    },
+    {
+      "id": "external-script",
+      "description": "An external same-origin script mutates the page before observation.",
+      "path": "external-script.html",
+      "expected_request_paths": ["/external-script.html", "/compatibility-external.js"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events"]
+    },
+    {
+      "id": "cookie-basic",
+      "description": "JavaScript writes a same-origin cookie that is exposed through document.cookie.",
+      "path": "cookie-basic.html",
+      "expected_request_paths": ["/cookie-basic.html"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events", "cookies"]
+    },
+    {
+      "id": "storage-lifecycle",
+      "description": "Local and session storage mutation semantics converge on deterministic final state.",
+      "path": "storage-lifecycle.html",
+      "expected_request_paths": ["/storage-lifecycle.html"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events", "storage", "session_storage"]
+    },
+    {
+      "id": "dom-apis",
+      "description": "Core DOM mutation APIs create and update deterministic marked nodes.",
+      "path": "dom-apis.html",
+      "expected_request_paths": ["/dom-apis.html"],
+      "compare_fields": ["final_url", "title", "dom_markers", "events"]
     }
   ]
 }

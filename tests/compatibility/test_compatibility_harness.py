@@ -21,6 +21,7 @@ from compatibility_observer import ObservationServer  # noqa: E402
 class CompatibilityHarnessTests(unittest.TestCase):
     manifest = REPOSITORY_ROOT / "tests" / "compatibility" / "fixtures" / "manifest.json"
     driver = REPOSITORY_ROOT / "tests" / "compatibility" / "fake_compatibility_runner.py"
+    scenario_count = 10
 
     def command(self, mode: str) -> list[str]:
         return [sys.executable, str(self.driver), mode]
@@ -41,7 +42,15 @@ class CompatibilityHarnessTests(unittest.TestCase):
 
     def test_local_fixture_differential_pass(self) -> None:
         report = self.run_case()
-        self.assertEqual(report["summary"], {"total": 3, "passed": 3, "incompatible": 0, "runner_failures": 0})
+        self.assertEqual(
+            report["summary"],
+            {
+                "total": self.scenario_count,
+                "passed": self.scenario_count,
+                "incompatible": 0,
+                "runner_failures": 0,
+            },
+        )
         self.assertTrue(all(item["verdict"] == "passed" for item in report["scenarios"]))
         self.assertTrue(
             all("_token" not in runner for item in report["scenarios"] for runner in (item["openbrowser"], item["reference"]))
@@ -50,19 +59,19 @@ class CompatibilityHarnessTests(unittest.TestCase):
     def test_observation_difference_is_not_a_runner_failure(self) -> None:
         report = self.run_case(reference_mode="different")
         self.assertEqual(report["summary"]["passed"], 0)
-        self.assertEqual(report["summary"]["incompatible"], 3)
+        self.assertEqual(report["summary"]["incompatible"], self.scenario_count)
         self.assertEqual(report["summary"]["runner_failures"], 0)
         self.assertTrue(all(item["verdict"] == "incompatible" for item in report["scenarios"]))
 
     def test_runner_crash_is_classified_separately(self) -> None:
         report = self.run_case(reference_mode="crash")
-        self.assertEqual(report["summary"]["runner_failures"], 3)
+        self.assertEqual(report["summary"]["runner_failures"], self.scenario_count)
         self.assertTrue(all(item["verdict"] == "runner-failure" for item in report["scenarios"]))
         self.assertTrue(all(item["reference"]["status"] == "runner-crash" for item in report["scenarios"]))
 
     def test_runner_timeout_is_classified_and_cleaned_up(self) -> None:
         report = self.run_case(reference_mode="timeout", timeout_seconds=0.25)
-        self.assertEqual(report["summary"]["runner_failures"], 3)
+        self.assertEqual(report["summary"]["runner_failures"], self.scenario_count)
         self.assertTrue(all(item["reference"]["status"] == "timeout" for item in report["scenarios"]))
 
     def test_page_observation_collector_round_trip(self) -> None:
@@ -79,6 +88,8 @@ class CompatibilityHarnessTests(unittest.TestCase):
             },
             "events": ["navigation_committed", "fixture_ready"],
             "storage": {},
+            "session_storage": {},
+            "cookies": [],
         }
         with ObservationServer("navigation-basic") as observer:
             request = urllib.request.Request(
