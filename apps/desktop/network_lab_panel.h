@@ -9,8 +9,8 @@
 #include "include/cef_base.h"
 #include "include/views/cef_panel.h"
 
-#include <memory>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -97,6 +97,7 @@ private:
     std::string pending_structured_query_{};
     std::optional<std::string> selected_request_id_{std::nullopt};
     ActiveTab active_tab_{ActiveTab::Requests};
+    std::shared_ptr<bool> alive_token_{std::make_shared<bool>(true)};
 
     devtools::network::ConnectionRegistry* connection_registry_{nullptr};
     core::FilterDecisionLog* decision_log_{nullptr};
