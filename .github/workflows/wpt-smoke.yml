@@ -25,13 +25,13 @@ concurrency:
 
 env:
   WPT_REVISION: 3a1177e6c76f1a7f854f3ae4b93a00835e171fad
-  CHROME_VERSION: 151.0.7922.138
+  CHROME_VERSION: 152.0.7977.83
   CHROME_PLATFORM: linux64
   CHROME_FOR_TESTING_BASE_URL: https://storage.googleapis.com/chrome-for-testing-public
 
 jobs:
   chromium-wpt-smoke:
-    name: Chromium 151 / pinned WPT smoke
+    name: Chromium 152 / pinned WPT smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
