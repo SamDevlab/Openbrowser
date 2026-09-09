@@ -50,6 +50,9 @@ private:
 
     class TabActionDelegate;
 
+    // Native button delegates dispatch these actions on the next UI task so a
+    // synchronous BrowserSession notification cannot rebuild the tab strip and
+    // destroy the currently dispatching CefLabelButton mid-event.
     void HandleTabAction(TabAction action, const std::string& tab_id);
     [[nodiscard]] bool IsTabInActiveWorkspace(const core::Tab& tab) const;
     [[nodiscard]] bool IsTabVisibleInCurrentContext(const core::Tab& tab) const;
