@@ -54,8 +54,9 @@ The current `main` branch includes a native CEF Views browser with:
 - Focus Queue and focus-session tooling;
 - content filtering with common EasyList / Adblock Plus rule forms;
 - a command palette and browser-owned actions;
-- a native Network Lab for request inspection, decision tracing, HAR export, and `.obtrace` recording.
-- a local-fixture Web Compatibility Differential Harness with deterministic JSON reports and explicit crash/timeout classification.
+- a native Network Lab for request inspection, decision tracing, HAR export, and `.obtrace` recording;
+- a deterministic Web Compatibility Differential Harness that runs **real Openbrowser against pinned Chromium 151** across a 10-scenario local corpus and keeps incompatibility separate from crash/timeout/lifecycle failures;
+- a pinned upstream **Web Platform Tests smoke lane** with exact WPT, Chrome and ChromeDriver revisions/hashes and machine-readable `wptreport` output.
 
 CEF/Chromium types remain isolated to the desktop adapter under `apps/desktop/`; the core under `src/core/` stays engine-independent.
 
@@ -143,6 +144,14 @@ Network Lab is browser-native developer observability rather than an extension. 
 
 Detailed TLS metadata that cannot be truthfully derived from standard CEF HTTP callbacks is intentionally left unpopulated until deeper transport telemetry is integrated.
 
+### Web compatibility
+
+M8.1 executes deterministic local scenarios through both real Openbrowser and a pinned Chromium 151 reference, comparing normalized browser/page observations while requiring `exit code == 0` and persisted `clean_shutdown: true` from Openbrowser. The current PR-sized corpus contains 10 scenarios.
+
+M8.2 adds a strict, pinned WPT smoke lane for DOM, Encoding, URLSearchParams and Web Storage evidence. WPT currently runs against the pinned Chromium reference environment; direct Openbrowser execution through `wptrunner` remains a future adapter boundary.
+
+See [`docs/web-compatibility.md`](docs/web-compatibility.md), [`docs/m8.1-real-browser-differential.md`](docs/m8.1-real-browser-differential.md), and [`docs/m8.2-wpt-smoke.md`](docs/m8.2-wpt-smoke.md).
+
 ## Technology
 
 ### Core
@@ -194,11 +203,13 @@ The desktop target intentionally fails configuration if the CEF pin is wrong ins
 
 ## CI and release guarantees
 
-Openbrowser uses three main validation layers:
+Openbrowser uses multiple validation layers:
 
-1. **Core CI** validates engine-independent code across supported CI platforms.
+1. **Core CI** validates engine-independent code across Linux, Windows and macOS and reports an always-present `CI Gate` for pull requests targeting `main`.
 2. **CEF Desktop Smoke** builds the real CEF desktop adapter against the pinned distribution.
 3. **Windows Package / Product Smoke** builds the portable Windows artifact, extracts that exact ZIP, launches the packaged browser, performs real local navigation, validates persistence/session restoration, and verifies clean shutdown behavior.
+4. **Web Compatibility Differential** executes real Openbrowser against the pinned Chromium reference on deterministic local scenarios.
+5. **WPT Smoke** verifies the pinned WPT/Chromium standards-test environment and fails on unexpected results.
 
 Tag-driven releases publish the **same artifact that passed Product Smoke** rather than rebuilding a separate release binary. See [`docs/release-process.md`](docs/release-process.md).
 
@@ -208,11 +219,13 @@ Openbrowser is still experimental. Current limitations include:
 
 - Windows x64 is the only published desktop package;
 - macOS desktop packaging is not enabled;
+- Linux desktop distribution/sandbox hardening is not release-qualified;
 - the browser is not security-hardened for sensitive daily use;
-- the initial local-fixture differential harness is implemented, but the full Web Platform Tests/reference-browser matrix, rendering reftests and richer CEF DOM observation bridge are not yet implemented;
+- the compatibility system now includes real Openbrowser-vs-Chromium differential execution and a pinned WPT smoke lane, but direct Openbrowser `wptrunner` integration, broad WPT coverage, rendering reftests and a broader deterministic site corpus are not yet implemented;
 - deep TLS/transport telemetry remains incomplete without a lower-level observation source;
 - hosted multi-device sync is not implemented;
-- BitTorrent / `magnet:` transfer support is not implemented.
+- BitTorrent / `magnet:` transfer support is not implemented;
+- Windows artifacts are integrity-checked with SHA-256 but are not yet documented as Authenticode-signed release binaries.
 
 ## Project structure
 
@@ -220,11 +233,11 @@ Openbrowser is still experimental. Current limitations include:
 apps/desktop/        Native CEF Views browser shell and engine adapter
 src/core/            Engine-independent browser domain and policies
 src/engine/          Browser-engine ports/events
-devtools/network/    Network Lab models, tracing, diagnostics, exports
-tests/               Core and integration tests
-docs/                Architecture, milestones, release process
-.github/workflows/   Core, CEF smoke, packaging, and product-smoke CI
-scripts/             Packaging, product smoke, and compatibility harness tooling
+src/devtools/network/ Network Lab models, tracing, diagnostics, exports
+tests/               Core, integration, compatibility and WPT smoke inputs
+docs/                Architecture, compatibility, milestones, release process
+.github/workflows/   Core, CEF, packaging, compatibility and WPT CI
+scripts/             Packaging, product smoke, compatibility and reference-runner tooling
 ```
 
 ## License
