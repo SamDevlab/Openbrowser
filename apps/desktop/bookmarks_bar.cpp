@@ -1,6 +1,7 @@
 #include "bookmarks_bar.h"
 
 #include "core/session/browser_session.h"
+#include "deferred_ui_action.h"
 #include "icon_system.h"
 
 #include "include/views/cef_box_layout.h"
@@ -16,7 +17,11 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        bar_.NavigateTo(url_);
+        BookmarksBar* bar = &bar_;
+        const std::string url = url_;
+        PostDeferredUiAction(bar_.alive_token_, [bar, url]() {
+            bar->NavigateTo(url);
+        });
     }
 
 private:
@@ -33,7 +38,10 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        bar_.BookmarkCurrentPage();
+        BookmarksBar* bar = &bar_;
+        PostDeferredUiAction(bar_.alive_token_, [bar]() {
+            bar->BookmarkCurrentPage();
+        });
     }
 
 private:
@@ -69,6 +77,7 @@ BookmarksBar::BookmarksBar(
 }
 
 BookmarksBar::~BookmarksBar() {
+    *alive_token_ = false;
     session_.RemoveObserver(this);
 }
 
