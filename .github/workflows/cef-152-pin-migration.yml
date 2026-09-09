@@ -1,0 +1,111 @@
+name: CEF 152 Pin Migration
+
+on:
+  push:
+    branches:
+      - chore/cef-152-upgrade-review
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: ${{ !contains(github.event.head_commit.message, '[cef152-pins]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout upgrade branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: chore/cef-152-upgrade-review
+          fetch-depth: 0
+
+      - name: Replace only validated engine pins
+        shell: python
+        run: |
+          from pathlib import Path
+
+          old_cef = "151.3.17+gf059e67+chromium-151.0.7922.138"
+          new_cef = "152.0.6+g708dc14+chromium-152.0.7977.83"
+          old_chrome = "151.0.7922.138"
+          new_chrome = "152.0.7977.83"
+
+          files = [
+              Path(".github/workflows/windows-package.yml"),
+              Path(".github/workflows/compatibility-differential.yml"),
+              Path(".github/workflows/wpt-smoke.yml"),
+              Path("README.md"),
+              Path("THIRD_PARTY.md"),
+              Path("docs/cef-bootstrap.md"),
+              Path("docs/m8.1-real-browser-differential.md"),
+              Path("docs/m8.2-wpt-smoke.md"),
+          ]
+
+          changed = []
+          for path in files:
+              text = path.read_text(encoding="utf-8")
+              before = text
+              text = text.replace(old_cef, new_cef)
+              text = text.replace(old_chrome, new_chrome)
+              text = text.replace("CEF 151", "CEF 152")
+              text = text.replace("Chromium 151", "Chromium 152")
+              text = text.replace("Chrome for Testing 151", "Chrome for Testing 152")
+              if text != before:
+                  path.write_text(text, encoding="utf-8")
+                  changed.append(str(path))
+
+          required = {
+              ".github/workflows/windows-package.yml",
+              ".github/workflows/compatibility-differential.yml",
+              ".github/workflows/wpt-smoke.yml",
+              "README.md",
+              "THIRD_PARTY.md",
+              "docs/cef-bootstrap.md",
+              "docs/m8.1-real-browser-differential.md",
+              "docs/m8.2-wpt-smoke.md",
+          }
+          missing = sorted(required.difference(changed))
+          if missing:
+              raise SystemExit(f"Expected pin replacements missing in: {missing}")
+
+          # Update version-specific reference hashes that were already derived
+          # from the official archives in the review lane.
+          replacements = {
+              Path("docs/m8.1-real-browser-differential.md"): {
+                  "714f4b9d17cb82a41ee10734dde15fd8c27c08b3229ce799c0c6a7dcc7730e1e":
+                      "296be51c38ffd882fdff3af76817510a0894a2aa0d8274694f5cb802f8589b93",
+              },
+              Path("docs/m8.2-wpt-smoke.md"): {
+                  "f2c1d48c310a2fc79aad59e985103902f27b70fd186b3f663ee67c4c722f5566":
+                      "ecae8b71d4890cf5f32577ab5ea1b3840c2b5e05f51490b1666674cf1f5b0c37",
+                  "5f956ac30d5c78453f5eb578fea14cb09caf62bb05141429be43af0b0c9922f8":
+                      "6871c2e3d3e8b56736f066b9d22f19a04e1ac4360d15e6555a76af5f4083b68a",
+              },
+          }
+          for path, mapping in replacements.items():
+              text = path.read_text(encoding="utf-8")
+              for old, new in mapping.items():
+                  if old not in text:
+                      raise SystemExit(f"Expected hash {old} missing in {path}")
+                  text = text.replace(old, new)
+              path.write_text(text, encoding="utf-8")
+
+          print("Updated engine pins in:")
+          for path in changed:
+              print(f"- {path}")
+
+      - name: Commit migrated pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            .github/workflows/windows-package.yml \
+            .github/workflows/compatibility-differential.yml \
+            .github/workflows/wpt-smoke.yml \
+            README.md THIRD_PARTY.md docs/cef-bootstrap.md \
+            docs/m8.1-real-browser-differential.md docs/m8.2-wpt-smoke.md
+          git diff --cached --check
+          git commit -m "chore(cef): align CEF and Chromium 152 pins [cef152-pins]"
+          git push origin HEAD:chore/cef-152-upgrade-review
