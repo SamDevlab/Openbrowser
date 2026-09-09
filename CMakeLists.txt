@@ -38,6 +38,7 @@ add_library(openbrowser_core
     src/core/storage/atomic_file_store.cpp
     src/core/storage/json_helper.cpp
     src/core/settings/settings_manager.cpp
+    src/core/ui/transient_panel_state.cpp
 )
 
 add_library(Openbrowser::Core ALIAS openbrowser_core)
@@ -258,6 +259,11 @@ if(OPENBROWSER_BUILD_TESTS)
     target_include_directories(openbrowser_local_persistence_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_features(openbrowser_local_persistence_tests PRIVATE cxx_std_20)
 
+    add_executable(openbrowser_transient_panel_state_tests tests/transient_panel_state_tests.cpp)
+    target_link_libraries(openbrowser_transient_panel_state_tests PRIVATE Openbrowser::Core)
+    target_include_directories(openbrowser_transient_panel_state_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_features(openbrowser_transient_panel_state_tests PRIVATE cxx_std_20)
+
     if(MSVC)
         target_compile_options(openbrowser_core_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE /W4 /permissive-)
@@ -295,6 +301,7 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_network_lab_enhanced_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_browser_core_flow_tests PRIVATE /W4 /permissive-)
         target_compile_options(openbrowser_local_persistence_tests PRIVATE /W4 /permissive-)
+        target_compile_options(openbrowser_transient_panel_state_tests PRIVATE /W4 /permissive-)
     else()
         target_compile_options(openbrowser_core_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_session_reentrant_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
@@ -332,6 +339,7 @@ if(OPENBROWSER_BUILD_TESTS)
         target_compile_options(openbrowser_network_lab_enhanced_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_browser_core_flow_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
         target_compile_options(openbrowser_local_persistence_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+        target_compile_options(openbrowser_transient_panel_state_tests PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
     endif()
 
     add_test(NAME openbrowser.core COMMAND openbrowser_core_tests)
@@ -375,6 +383,7 @@ if(OPENBROWSER_BUILD_TESTS)
     add_test(NAME openbrowser.browser_core_flow COMMAND openbrowser_browser_core_flow_tests)
     # MVP-2 tests
     add_test(NAME openbrowser.local_persistence COMMAND openbrowser_local_persistence_tests)
+    add_test(NAME openbrowser.transient_panel_state COMMAND openbrowser_transient_panel_state_tests)
 
     # M8 compatibility harness protocol and local-fixture integration test.
     find_package(Python3 COMPONENTS Interpreter QUIET)

@@ -18,6 +18,8 @@ set(OPENBROWSER_DESKTOP_COMMON_SOURCES
     find_bar.h
     focus_sidebar.cpp
     focus_sidebar.h
+    icon_system.cpp
+    icon_system.h
     internal_pages.cpp
     internal_pages.h
     library_panel.cpp

@@ -192,6 +192,7 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
     }
 
     .search-icon {
+      position: relative;
       width: 36px;
       height: 36px;
       display: grid;
@@ -200,7 +201,24 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
       border-radius: 11px;
       background: rgba(117, 103, 255, 0.12);
       color: #cbc6ff;
-      font-size: 18px;
+    }
+
+    .search-icon::before {
+      content: "";
+      width: 13px;
+      height: 13px;
+      border: 2px solid currentColor;
+      border-radius: 50%;
+    }
+
+    .search-icon::after {
+      content: "";
+      position: absolute;
+      width: 8px;
+      height: 2px;
+      background: currentColor;
+      border-radius: 2px;
+      transform: translate(8px, 8px) rotate(45deg);
     }
 
     .search-copy {
@@ -372,14 +390,6 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
 
     .customize summary::-webkit-details-marker { display: none; }
 
-    .customize summary::after {
-      content: "+";
-      float: right;
-      color: #858796;
-    }
-
-    .customize[open] summary::after { content: "−"; }
-
     .customize-body {
       padding: 2px 15px 15px;
       display: grid;
@@ -466,11 +476,7 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
       text-transform: uppercase;
     }
 
-    .principles span + span::before {
-      content: "•";
-      margin-right: 10px;
-      color: #4f515d;
-    }
+    .principles span + span::before { content: ""; margin-right: 10px; }
 
     {{APPEARANCE_CSS}}
 
@@ -554,10 +560,10 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
       <p class="tagline">Your browser, your space.</p>
 
       <div class="search-cue" role="note" aria-label="Search from the address bar">
-        <span class="search-icon" aria-hidden="true">⌕</span>
+        <span class="search-icon" aria-hidden="true"></span>
         <span class="search-copy">
           <strong>Search or enter an address</strong>
-          <span>Start typing — the address bar is already focused.</span>
+          <span>Start typing - the address bar is already focused.</span>
         </span>
         <kbd>Ctrl + L</kbd>
       </div>
@@ -627,7 +633,7 @@ constexpr char kNewTabHtmlTemplate[] = R"html(<!doctype html>
           </div>
         </div>
 
-        <p class="preview-note">Persistent defaults are controlled in Settings · Personalization. Changes here remain local to this tab.</p>
+        <p class="preview-note">Persistent defaults are controlled in Settings - Personalization. Changes here remain local to this tab.</p>
       </div>
     </details>
 

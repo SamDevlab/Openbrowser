@@ -158,11 +158,19 @@ void NetworkLabPanel::SetVisible(const bool visible) {
     if (!panel_) {
         return;
     }
+    const bool was_visible = panel_->IsVisible();
     panel_->SetVisible(visible);
     auto window = panel_->GetWindow();
     if (window) {
         window->Layout();
     }
+    if (was_visible != panel_->IsVisible() && on_visibility_changed_) {
+        on_visibility_changed_(panel_->IsVisible());
+    }
+}
+
+void NetworkLabPanel::SetVisibilityChangedCallback(VisibilityChangedCallback callback) {
+    on_visibility_changed_ = std::move(callback);
 }
 
 bool NetworkLabPanel::IsVisible() const {

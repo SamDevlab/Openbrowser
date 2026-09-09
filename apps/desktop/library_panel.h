@@ -22,6 +22,7 @@ namespace openbrowser::desktop {
 class LibraryPanel final : public core::BrowserSessionObserver {
 public:
     using DataChangedCallback = std::function<void()>;
+    using VisibilityChangedCallback = std::function<void(bool)>;
 
     LibraryPanel(
         core::HistoryManager& history_manager,
@@ -36,6 +37,7 @@ public:
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
 
     void SetVisible(bool visible);
+    void SetVisibilityChangedCallback(VisibilityChangedCallback callback);
     [[nodiscard]] bool IsVisible() const;
     void ToggleVisibility();
     void ShowHistory();
@@ -99,6 +101,7 @@ private:
     CefRefPtr<CefLabelButton> bookmarks_button_;
     std::vector<CefRefPtr<CefButtonDelegate>> static_delegates_;
     std::vector<CefRefPtr<CefButtonDelegate>> body_delegates_;
+    VisibilityChangedCallback on_visibility_changed_;
 };
 
 }  // namespace openbrowser::desktop

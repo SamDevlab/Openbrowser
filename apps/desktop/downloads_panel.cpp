@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 #if defined(_WIN32)
 #include <shellapi.h>
@@ -126,10 +127,18 @@ CefRefPtr<CefPanel> DownloadsPanel::View() const noexcept {
 }
 
 void DownloadsPanel::SetVisible(const bool visible) {
+    const bool was_visible = IsVisible();
     panel_->SetVisible(visible);
     if (visible) {
         RebuildView();
     }
+    if (was_visible != IsVisible() && on_visibility_changed_) {
+        on_visibility_changed_(IsVisible());
+    }
+}
+
+void DownloadsPanel::SetVisibilityChangedCallback(VisibilityChangedCallback callback) {
+    on_visibility_changed_ = std::move(callback);
 }
 
 bool DownloadsPanel::IsVisible() const {

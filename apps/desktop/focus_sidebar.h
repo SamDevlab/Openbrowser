@@ -25,6 +25,7 @@ namespace openbrowser::desktop {
 class FocusSidebar final : public core::BrowserSessionObserver {
 public:
     using FocusModeCallback = std::function<void(bool)>;
+    using VisibilityChangedCallback = std::function<void(bool)>;
 
     FocusSidebar(
         core::BrowserSession& session,
@@ -38,6 +39,7 @@ public:
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
 
     void SetVisible(bool visible);
+    void SetVisibilityChangedCallback(VisibilityChangedCallback callback);
     [[nodiscard]] bool IsVisible() const;
     void ToggleVisibility();
     [[nodiscard]] bool IsCompactIndicator() const noexcept { return compact_indicator_; }
@@ -83,6 +85,7 @@ private:
     bool timer_running_{false};
     bool compact_indicator_{false};
     bool focus_mode_notified_{false};
+    VisibilityChangedCallback on_visibility_changed_;
 
     CefRefPtr<CefPanelDelegate> panel_delegate_;
     CefRefPtr<CefPanel> panel_;

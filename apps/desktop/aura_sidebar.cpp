@@ -2,6 +2,7 @@
 
 #include "aura_accessibility.h"
 #include "aura_motion.h"
+#include "icon_system.h"
 #include "core/session/browser_session.h"
 #include "core/workspaces/workspace_manager.h"
 
@@ -30,6 +31,19 @@ std::string NormalizeSidebarState(const std::string_view state) {
         return std::string(state);
     }
     return "compact";
+}
+
+IconId WorkspaceIcon(const std::string_view workspace_id) {
+    if (workspace_id == "default") {
+        return IconId::WorkspaceHome;
+    }
+    if (workspace_id == "work") {
+        return IconId::WorkspaceWork;
+    }
+    if (workspace_id == "personal") {
+        return IconId::WorkspacePersonal;
+    }
+    return IconId::WorkspaceGeneric;
 }
 
 int HexNibble(const char value) {
@@ -244,13 +258,13 @@ void AuraSidebar::HandleAction(const Action action, const std::string& target_id
     switch (action) {
         case Action::ToggleCollapsed:
             ToggleCollapsed();
-            ShowTransientFeedback(collapsed_ ? "Sidebar · compact" : "Sidebar · expanded");
+            ShowTransientFeedback(collapsed_ ? "Sidebar - compact" : "Sidebar - expanded");
             return;
         case Action::SelectWorkspace:
             if (!target_id.empty() && on_select_workspace_) {
                 on_select_workspace_(target_id);
                 if (const auto* workspace = workspace_manager_.FindWorkspace(target_id); workspace != nullptr) {
-                    ShowTransientFeedback("Workspace · " + workspace->name);
+                    ShowTransientFeedback("Workspace - " + workspace->name);
                 }
             }
             Refresh();
@@ -332,8 +346,8 @@ void AuraSidebar::Refresh() {
 
     auto add_button = [this](
         const Action action,
+        const IconId icon,
         const std::string& expanded,
-        const std::string& compact,
         const std::string& accessible_name,
         const std::string& tooltip,
         std::string target_id = {}) {
@@ -342,7 +356,8 @@ void AuraSidebar::Refresh() {
         delegates_.push_back(delegate);
         auto button = CefLabelButton::CreateLabelButton(
             delegate,
-            collapsed_ ? compact : expanded);
+            collapsed_ ? "" : expanded);
+        ConfigureIconButton(button, icon, collapsed_ ? "" : expanded, accessible_name, tooltip);
         aura::EnableButtonMotion(button);
         aura::ConfigureActionButton(
             button,
@@ -356,29 +371,27 @@ void AuraSidebar::Refresh() {
 
     add_button(
         Action::ToggleCollapsed,
-        "O  Openbrowser        ‹",
-        "O",
+        collapsed_ ? IconId::Sidebar : IconId::SidebarCollapse,
+        "Openbrowser",
         collapsed_ ? "Expand Aura sidebar" : "Compact Aura sidebar",
         collapsed_ ? "Expand Aura sidebar" : "Compact Aura sidebar");
 
     const auto& active_workspace_id = workspace_manager_.ActiveWorkspaceId();
     for (const auto& workspace : workspace_manager_.ListWorkspaces()) {
         const bool is_active = workspace.id == active_workspace_id;
-        const std::string icon = workspace.icon.empty() ? "◇" : workspace.icon;
         const std::string expanded = is_active
-            ? "●  " + icon + "  " + workspace.name
-            : "   " + icon + "  " + workspace.name;
-        const std::string compact = is_active ? "●" + icon : icon;
+            ? workspace.name + " (active)"
+            : workspace.name;
         const std::string accessible_name = is_active
             ? "Workspace " + workspace.name + ", active"
             : "Switch to workspace " + workspace.name;
         const std::string tooltip = is_active
-            ? workspace.name + " · Active workspace"
+            ? workspace.name + " - Active workspace"
             : "Switch to " + workspace.name;
         auto button = add_button(
             Action::SelectWorkspace,
+            WorkspaceIcon(workspace.id),
             expanded,
-            compact,
             accessible_name,
             tooltip,
             workspace.id);
@@ -390,34 +403,34 @@ void AuraSidebar::Refresh() {
         }
     }
 
-    add_button(Action::ToggleFocus, "◎  Focus", "◎", "Open Focus", "Open Focus");
+    add_button(Action::ToggleFocus, IconId::Focus, "Focus", "Open Focus", "Open Focus");
     add_button(
         Action::ToggleLibrary,
-        "★  History & Bookmarks",
-        "★",
+        IconId::Library,
+        "History & Bookmarks",
         "Open History and Bookmarks",
         "Open History & Bookmarks");
-    add_button(Action::ToggleDownloads, "↓  Downloads", "↓", "Open Downloads", "Open Downloads");
-    add_button(Action::ToggleSettings, "⚙  Settings", "⚙", "Open Settings", "Open Settings");
-    add_button(Action::ToggleCommands, "⌘  Commands", "⌘", "Open Commands", "Open Commands");
+    add_button(Action::ToggleDownloads, IconId::Download, "Downloads", "Open Downloads", "Open Downloads");
+    add_button(Action::ToggleSettings, IconId::Settings, "Settings", "Open Settings", "Open Settings");
+    add_button(Action::ToggleCommands, IconId::Commands, "Commands", "Open Commands", "Open Commands");
     add_button(
         Action::ToggleNetworkLab,
-        "<>  Network Lab",
-        "<>",
+        IconId::Network,
+        "Network Lab",
         "Open Network Lab",
         "Open Network Lab");
     add_button(
         Action::Hide,
-        "—  Hide sidebar",
-        "—",
+        IconId::SidebarCollapse,
+        "Hide sidebar",
         "Hide Aura sidebar",
-        "Hide Aura sidebar · Ctrl+Shift+\\ restores it");
+        "Hide Aura sidebar - Ctrl+Shift+\\ restores it");
 
     if (!feedback_message_.empty() && !collapsed_) {
         CefRefPtr<CefButtonDelegate> feedback_delegate(new PassiveButtonDelegate());
         delegates_.push_back(feedback_delegate);
         auto feedback = CefLabelButton::CreateLabelButton(
-            feedback_delegate, "✓  " + feedback_message_);
+            feedback_delegate, "Status: " + feedback_message_);
         aura::ConfigurePassiveStatus(feedback, "Status: " + feedback_message_);
         feedback->SetEnabled(false);
         panel_->AddChildView(feedback);

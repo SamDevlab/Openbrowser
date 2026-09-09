@@ -18,6 +18,7 @@ namespace openbrowser::desktop {
 class SettingsPanel final {
 public:
     using SettingsChangedCallback = std::function<void(const core::BrowserSettings&)>;
+    using VisibilityChangedCallback = std::function<void(bool)>;
 
     SettingsPanel(
         core::SettingsManager& settings_manager,
@@ -30,6 +31,7 @@ public:
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
 
     void SetVisible(bool visible);
+    void SetVisibilityChangedCallback(VisibilityChangedCallback callback);
     [[nodiscard]] bool IsVisible() const;
     void ToggleVisibility();
     void RefreshFromSettings();
@@ -74,6 +76,7 @@ private:
     CefRefPtr<CefTextfield> downloads_directory_field_;
     CefRefPtr<CefLabelButton> status_label_;
     std::vector<CefRefPtr<CefButtonDelegate>> delegates_;
+    VisibilityChangedCallback on_visibility_changed_;
 };
 
 }  // namespace openbrowser::desktop

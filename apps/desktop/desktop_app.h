@@ -26,6 +26,7 @@
 #include "core/sync/local_filesystem_sync.h"
 #include "core/transfers/file_broker.h"
 #include "core/transfers/transfer_broker.h"
+#include "core/ui/transient_panel_state.h"
 #include "core/workspaces/workspace_manager.h"
 #include "devtools/network/connection_diagnostics.h" // M7.1
 #include "devtools/network/network_trace.h"
@@ -65,6 +66,10 @@ private:
     [[nodiscard]] std::filesystem::path StorageDirectory() const;
     void SaveCurrentSession(bool clean_shutdown);
     void HideTransientPanels();
+    void ToggleTransientPanel(core::TransientPanel panel);
+    void SetTransientPanelVisible(core::TransientPanel panel, bool visible);
+    [[nodiscard]] bool IsTransientPanelVisible(core::TransientPanel panel) const;
+    void OnTransientPanelVisibilityChanged(core::TransientPanel panel, bool visible);
     void ToggleAuraSidebar();
     void CycleWorkspace();
     void SelectWorkspace(const std::string& workspace_id);
@@ -129,6 +134,8 @@ private:
     bool aura_sidebar_visible_before_focus_{false};
     bool bookmarks_bar_visible_before_focus_{false};
     bool tab_strip_visible_before_focus_{true};
+    core::TransientPanelState transient_panel_state_;
+    bool synchronizing_transient_panel_state_{false};
 
     IMPLEMENT_REFCOUNTING(DesktopApp);
 };

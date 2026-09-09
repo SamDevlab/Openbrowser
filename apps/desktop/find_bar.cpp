@@ -1,6 +1,7 @@
 #include "find_bar.h"
 
 #include "core/session/browser_session.h"
+#include "icon_system.h"
 
 #include "include/wrapper/cef_helpers.h"
 
@@ -86,9 +87,12 @@ FindBar::FindBar(core::BrowserSession& session, CefRefPtr<CefBrowserEngine> engi
 
     result_label_ = CefLabelButton::CreateLabelButton(new PassiveButtonDelegate(), "0 / 0");
     result_label_->SetEnabled(false);
-    CefRefPtr<CefLabelButton> previous = CefLabelButton::CreateLabelButton(previous_delegate, "↑");
-    CefRefPtr<CefLabelButton> next = CefLabelButton::CreateLabelButton(next_delegate, "↓");
-    CefRefPtr<CefLabelButton> close = CefLabelButton::CreateLabelButton(close_delegate, "×");
+    CefRefPtr<CefLabelButton> previous = CefLabelButton::CreateLabelButton(previous_delegate, "");
+    ConfigureIconButton(previous, IconId::Previous, "", "Previous match", "Previous match");
+    CefRefPtr<CefLabelButton> next = CefLabelButton::CreateLabelButton(next_delegate, "");
+    ConfigureIconButton(next, IconId::Next, "", "Next match", "Next match");
+    CefRefPtr<CefLabelButton> close = CefLabelButton::CreateLabelButton(close_delegate, "");
+    ConfigureIconButton(close, IconId::Close, "", "Close find bar", "Close find bar");
 
     panel_->AddChildView(search_field_);
     layout_->SetFlexForView(search_field_, 1);

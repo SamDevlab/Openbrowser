@@ -1,6 +1,7 @@
 #include "bookmarks_bar.h"
 
 #include "core/session/browser_session.h"
+#include "icon_system.h"
 
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_label_button.h"
@@ -59,7 +60,9 @@ BookmarksBar::BookmarksBar(
     layout_ = panel_->SetToBoxLayout(settings);
 
     add_delegate_ = new AddBookmarkDelegate(*this);
-    add_button_ = CefLabelButton::CreateLabelButton(add_delegate_, "☆ Add bookmark");
+    add_button_ = CefLabelButton::CreateLabelButton(add_delegate_, "Add bookmark");
+    ConfigureIconButton(
+        add_button_, IconId::Bookmark, "Add bookmark", "Add bookmark", "Bookmark the current page");
 
     RebuildBar();
     panel_->SetVisible(false);
@@ -134,12 +137,13 @@ void BookmarksBar::RebuildBar() {
         if (display_title.length() > 20) {
             display_title = display_title.substr(0, 17) + "...";
         }
-        std::string label = "★ " + display_title;
 
         auto delegate = new BookmarkItemDelegate(*this, b.url);
         item_delegates_.push_back(delegate);
 
-        auto btn = CefLabelButton::CreateLabelButton(delegate, label);
+        auto btn = CefLabelButton::CreateLabelButton(delegate, display_title);
+        ConfigureIconButton(
+            btn, IconId::Bookmark, display_title, "Open bookmark " + display_title, "Open bookmark");
         panel_->AddChildView(btn);
     }
 

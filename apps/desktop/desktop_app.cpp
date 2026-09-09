@@ -586,6 +586,22 @@ void DesktopApp::OnContextInitialized() {
         filter_decision_log_.get(),
         obtrace_recorder_.get());
 
+    focus_sidebar_->SetVisibilityChangedCallback([this](const bool visible) {
+        OnTransientPanelVisibilityChanged(core::TransientPanel::Focus, visible);
+    });
+    downloads_panel_->SetVisibilityChangedCallback([this](const bool visible) {
+        OnTransientPanelVisibilityChanged(core::TransientPanel::Downloads, visible);
+    });
+    library_panel_->SetVisibilityChangedCallback([this](const bool visible) {
+        OnTransientPanelVisibilityChanged(core::TransientPanel::Library, visible);
+    });
+    settings_panel_->SetVisibilityChangedCallback([this](const bool visible) {
+        OnTransientPanelVisibilityChanged(core::TransientPanel::Settings, visible);
+    });
+    network_lab_panel_->SetVisibilityChangedCallback([this](const bool visible) {
+        OnTransientPanelVisibilityChanged(core::TransientPanel::NetworkLab, visible);
+    });
+
     CefRefPtr<CefCommandLine> command_line = CefCommandLine::GetGlobalCommandLine();
     const bool show_network_lab = command_line && command_line->HasSwitch("network-lab");
     network_lab_panel_->SetVisible(show_network_lab);
@@ -889,6 +905,7 @@ void DesktopApp::OnBrowserSessionChanged(const core::BrowserSession& session) {
 
 void DesktopApp::HideTransientPanels() {
     CEF_REQUIRE_UI_THREAD();
+    synchronizing_transient_panel_state_ = true;
     if (focus_sidebar_) {
         focus_sidebar_->SetVisible(false);
     }
@@ -903,6 +920,82 @@ void DesktopApp::HideTransientPanels() {
     }
     if (network_lab_panel_) {
         network_lab_panel_->SetVisible(false);
+    }
+    synchronizing_transient_panel_state_ = false;
+    transient_panel_state_.Close();
+}
+
+void DesktopApp::ToggleTransientPanel(const core::TransientPanel panel) {
+    CEF_REQUIRE_UI_THREAD();
+    const bool show = !IsTransientPanelVisible(panel);
+    HideTransientPanels();
+    if (show) {
+        SetTransientPanelVisible(panel, true);
+        transient_panel_state_.Open(panel);
+    }
+}
+
+void DesktopApp::SetTransientPanelVisible(const core::TransientPanel panel, const bool visible) {
+    switch (panel) {
+    case core::TransientPanel::Focus:
+        if (focus_sidebar_) {
+            focus_sidebar_->SetVisible(visible);
+        }
+        break;
+    case core::TransientPanel::Library:
+        if (library_panel_) {
+            library_panel_->SetVisible(visible);
+        }
+        break;
+    case core::TransientPanel::Downloads:
+        if (downloads_panel_) {
+            downloads_panel_->SetVisible(visible);
+        }
+        break;
+    case core::TransientPanel::Settings:
+        if (settings_panel_) {
+            settings_panel_->SetVisible(visible);
+        }
+        break;
+    case core::TransientPanel::NetworkLab:
+        if (network_lab_panel_) {
+            network_lab_panel_->SetVisible(visible);
+        }
+        break;
+    case core::TransientPanel::None:
+        break;
+    }
+}
+
+bool DesktopApp::IsTransientPanelVisible(const core::TransientPanel panel) const {
+    switch (panel) {
+    case core::TransientPanel::Focus:
+        return focus_sidebar_ && focus_sidebar_->IsVisible();
+    case core::TransientPanel::Library:
+        return library_panel_ && library_panel_->IsVisible();
+    case core::TransientPanel::Downloads:
+        return downloads_panel_ && downloads_panel_->IsVisible();
+    case core::TransientPanel::Settings:
+        return settings_panel_ && settings_panel_->IsVisible();
+    case core::TransientPanel::NetworkLab:
+        return network_lab_panel_ && network_lab_panel_->IsVisible();
+    case core::TransientPanel::None:
+        return false;
+    }
+    return false;
+}
+
+void DesktopApp::OnTransientPanelVisibilityChanged(
+    const core::TransientPanel panel,
+    const bool visible) {
+    CEF_REQUIRE_UI_THREAD();
+    if (synchronizing_transient_panel_state_) {
+        return;
+    }
+    if (visible) {
+        transient_panel_state_.Open(panel);
+    } else if (transient_panel_state_.IsOpen(panel)) {
+        transient_panel_state_.Close();
     }
 }
 
@@ -947,11 +1040,7 @@ void DesktopApp::ToggleFocusPanel() {
         return;
     }
 
-    const bool show = !focus_sidebar_->IsVisible();
-    HideTransientPanels();
-    if (show) {
-        focus_sidebar_->SetVisible(true);
-    }
+    ToggleTransientPanel(core::TransientPanel::Focus);
 }
 
 void DesktopApp::ApplyFocusChromeState(const bool enabled) {
@@ -1016,14 +1105,7 @@ void DesktopApp::RelayoutBrowserWindow() {
 
 void DesktopApp::ToggleNetworkLab() {
     CEF_REQUIRE_UI_THREAD();
-    if (!network_lab_panel_) {
-        return;
-    }
-    const bool show = !network_lab_panel_->IsVisible();
-    HideTransientPanels();
-    if (show) {
-        network_lab_panel_->SetVisible(true);
-    }
+    ToggleTransientPanel(core::TransientPanel::NetworkLab);
 }
 
 void DesktopApp::ToggleCommandPalette() {
@@ -1045,38 +1127,17 @@ void DesktopApp::ToggleBookmarksBar() {
 
 void DesktopApp::ToggleDownloadsPanel() {
     CEF_REQUIRE_UI_THREAD();
-    if (!downloads_panel_) {
-        return;
-    }
-    const bool show = !downloads_panel_->IsVisible();
-    HideTransientPanels();
-    if (show) {
-        downloads_panel_->SetVisible(true);
-    }
+    ToggleTransientPanel(core::TransientPanel::Downloads);
 }
 
 void DesktopApp::ToggleLibraryPanel() {
     CEF_REQUIRE_UI_THREAD();
-    if (!library_panel_) {
-        return;
-    }
-    const bool show = !library_panel_->IsVisible();
-    HideTransientPanels();
-    if (show) {
-        library_panel_->SetVisible(true);
-    }
+    ToggleTransientPanel(core::TransientPanel::Library);
 }
 
 void DesktopApp::ToggleSettingsPanel() {
     CEF_REQUIRE_UI_THREAD();
-    if (!settings_panel_) {
-        return;
-    }
-    const bool show = !settings_panel_->IsVisible();
-    HideTransientPanels();
-    if (show) {
-        settings_panel_->SetVisible(true);
-    }
+    ToggleTransientPanel(core::TransientPanel::Settings);
 }
 
 void DesktopApp::ApplySettings(const core::BrowserSettings& settings) {
@@ -1105,12 +1166,12 @@ void DesktopApp::ToggleProfile() {
     if (privacy_orchestrator_->IsPrivateModeActive()) {
         privacy_orchestrator_->ExitPrivateMode();
         if (chrome_) {
-            chrome_->SetProfileLabel("[👤 Default]");
+            chrome_->SetProfileLabel("Default");
         }
     } else {
         if (privacy_orchestrator_->EnterPrivateMode()) {
             if (chrome_) {
-                chrome_->SetProfileLabel("[🕶 Private]");
+                chrome_->SetProfileLabel("Private");
             }
         }
     }

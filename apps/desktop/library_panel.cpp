@@ -132,6 +132,7 @@ void LibraryPanel::SetVisible(const bool visible) {
     if (!panel_) {
         return;
     }
+    const bool was_visible = panel_->IsVisible();
     if (visible) {
         Refresh();
     }
@@ -141,6 +142,13 @@ void LibraryPanel::SetVisible(const bool visible) {
             parent_panel->Layout();
         }
     }
+    if (was_visible != panel_->IsVisible() && on_visibility_changed_) {
+        on_visibility_changed_(panel_->IsVisible());
+    }
+}
+
+void LibraryPanel::SetVisibilityChangedCallback(VisibilityChangedCallback callback) {
+    on_visibility_changed_ = std::move(callback);
 }
 
 bool LibraryPanel::IsVisible() const {
@@ -291,7 +299,7 @@ void LibraryPanel::AddHistoryRows() {
 
         std::string label = entry.title.empty() ? entry.url : entry.title;
         label = TruncateLabel(std::move(label));
-        label += "  ·  " + std::to_string(entry.visit_count) + " visit";
+        label += "  -  " + std::to_string(entry.visit_count) + " visit";
         if (entry.visit_count != 1) {
             label += "s";
         }
@@ -328,9 +336,9 @@ void LibraryPanel::AddBookmarkRows() {
     const auto bookmarks = bookmark_manager_.ListBookmarks(workspace);
     const bool read_only = IsPrivateContext();
 
-    std::string heading = "Bookmarks · workspace: " + workspace;
+    std::string heading = "Bookmarks - workspace: " + workspace;
     if (read_only) {
-        heading += " · read-only in Private mode";
+        heading += " - read-only in Private mode";
     }
     body_->AddChildView(MakeLabel(heading, body_delegates_));
 

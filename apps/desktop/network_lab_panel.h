@@ -10,6 +10,7 @@
 #include "include/views/cef_panel.h"
 
 #include <memory>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -29,6 +30,7 @@ namespace openbrowser::desktop {
 class NetworkLabPanel final : public devtools::network::NetworkTraceObserver,
                               public core::BrowserSessionObserver {
 public:
+    using VisibilityChangedCallback = std::function<void(bool)>;
     NetworkLabPanel(
         devtools::network::NetworkTraceBuffer& trace_buffer,
         core::BrowserSession& session,
@@ -43,6 +45,7 @@ public:
     [[nodiscard]] CefRefPtr<CefPanel> View() const noexcept;
 
     void SetVisible(bool visible);
+    void SetVisibilityChangedCallback(VisibilityChangedCallback callback);
     [[nodiscard]] bool IsVisible() const;
     void ToggleVisibility();
 
@@ -105,6 +108,7 @@ private:
     CefRefPtr<CefTextfieldDelegate> query_delegate_;
     CefRefPtr<CefTextfield> query_field_;
     std::vector<CefRefPtr<CefButtonDelegate>> delegates_;
+    VisibilityChangedCallback on_visibility_changed_;
 };
 
 }  // namespace openbrowser::desktop
