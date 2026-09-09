@@ -497,9 +497,6 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
 
 void BrowserChrome::SetProfileLabel(const std::string& label) {
     private_mode_ = label.find("Private") != std::string::npos;
-    if (profile_button_) {
-        profile_button_->SetText(label);
-    }
     UpdatePrivatePresentation();
     SyncAddressFromSession(session_);
     UpdateSecurityDetails();
@@ -520,7 +517,12 @@ void BrowserChrome::SetPrivateMode(const bool enabled) {
 }
 
 void BrowserChrome::UpdatePrivatePresentation() {
+    const auto chrome_surface = private_mode_ ? aura::kPrivateChromeSurface : aura::kChromeSurface;
+    aura::StyleSurface(container_, chrome_surface);
+    aura::StyleSurface(toolbar_, chrome_surface);
     if (profile_button_) {
+        profile_button_->SetText("");
+        aura::StyleIconButton(profile_button_, private_mode_);
         SetIcon(profile_button_, private_mode_ ? IconId::PrivateProfile : IconId::Profile);
         profile_button_->SetAccessibleName(private_mode_ ? "Private profile" : "Default profile");
         profile_button_->SetTooltipText(private_mode_ ? "Private profile" : "Default profile");

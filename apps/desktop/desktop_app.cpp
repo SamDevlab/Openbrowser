@@ -1,5 +1,6 @@
 #include "desktop_app.h"
 
+#include "aura_design_tokens.h"
 #include "core/navigation/internal_urls.h"
 #include "core/session/session_persistence.h"
 
@@ -74,6 +75,7 @@ public:
     void OnWindowCreated(CefRefPtr<CefWindow> window) override {
         CEF_REQUIRE_UI_THREAD();
         window->SetTitle("Openbrowser");
+        window->SetBackgroundColor(aura::kCanvas);
 
         // Register window keyboard accelerators.
         window->SetAccelerator(ID_NEW_TAB, 'T', false, true, false, false);
@@ -103,6 +105,7 @@ public:
         root_settings.between_child_spacing = 0;
         root_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
         CefRefPtr<CefBoxLayout> root_layout = root_panel->SetToBoxLayout(root_settings);
+        aura::StyleSurface(root_panel, aura::kCanvas);
 
         if (tab_strip_panel_) {
             root_panel->AddChildView(tab_strip_panel_);
@@ -127,6 +130,7 @@ public:
         body_settings.between_child_spacing = 0;
         body_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
         CefRefPtr<CefBoxLayout> body_layout = body_panel->SetToBoxLayout(body_settings);
+        aura::StyleSurface(body_panel, aura::kCanvas);
 
         if (aura_sidebar_panel_) {
             body_panel->AddChildView(aura_sidebar_panel_);
@@ -285,6 +289,7 @@ void DesktopApp::OnContextInitialized() {
 
     browser_host_ = CefPanel::CreatePanel(nullptr);
     browser_host_->SetToFillLayout();
+    aura::StyleSurface(browser_host_, aura::kCanvas);
 
     engine_ = new CefBrowserEngine(browser_host_);
     engine_->SetStorageRoot(storage_dir);

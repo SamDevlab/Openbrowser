@@ -11,18 +11,19 @@ namespace openbrowser::desktop::aura {
 // Aura visual tokens are intentionally browser-owned and dependency-free. Keep
 // product chrome restrained: deep neutral canvas, slightly elevated surfaces,
 // quiet borders, one accent family, and predictable control geometry.
-inline constexpr cef_color_t kCanvas = static_cast<cef_color_t>(0xFF0D1016u);
-inline constexpr cef_color_t kChromeSurface = static_cast<cef_color_t>(0xFF131821u);
-inline constexpr cef_color_t kSurface = static_cast<cef_color_t>(0xFF181E29u);
-inline constexpr cef_color_t kSurfaceRaised = static_cast<cef_color_t>(0xFF202735u);
-inline constexpr cef_color_t kSurfaceSelected = static_cast<cef_color_t>(0xFF292F43u);
-inline constexpr cef_color_t kInputSurface = static_cast<cef_color_t>(0xFF10151Du);
-inline constexpr cef_color_t kBorderSubtle = static_cast<cef_color_t>(0xFF303849u);
-inline constexpr cef_color_t kTextPrimary = static_cast<cef_color_t>(0xFFF3F6FBu);
-inline constexpr cef_color_t kTextSecondary = static_cast<cef_color_t>(0xFFB7C0CDu);
-inline constexpr cef_color_t kTextMuted = static_cast<cef_color_t>(0xFF7F8A9Au);
-inline constexpr cef_color_t kAccent = static_cast<cef_color_t>(0xFF8C82FFu);
-inline constexpr cef_color_t kAccentSoft = static_cast<cef_color_t>(0xFF343053u);
+inline constexpr cef_color_t kCanvas = static_cast<cef_color_t>(0xFF0F1016u);
+inline constexpr cef_color_t kChromeSurface = static_cast<cef_color_t>(0xFF14151Du);
+inline constexpr cef_color_t kPrivateChromeSurface = static_cast<cef_color_t>(0xFF181528u);
+inline constexpr cef_color_t kSurface = static_cast<cef_color_t>(0xFF1B1C26u);
+inline constexpr cef_color_t kSurfaceRaised = static_cast<cef_color_t>(0xFF20212Du);
+inline constexpr cef_color_t kSurfaceSelected = static_cast<cef_color_t>(0xFF292A3Au);
+inline constexpr cef_color_t kInputSurface = static_cast<cef_color_t>(0xFF0E0F16u);
+inline constexpr cef_color_t kBorderSubtle = static_cast<cef_color_t>(0xFF31323Fu);
+inline constexpr cef_color_t kTextPrimary = static_cast<cef_color_t>(0xFFF5F5F7u);
+inline constexpr cef_color_t kTextSecondary = static_cast<cef_color_t>(0xFFA8A9B4u);
+inline constexpr cef_color_t kTextMuted = static_cast<cef_color_t>(0xFF777987u);
+inline constexpr cef_color_t kAccent = static_cast<cef_color_t>(0xFF7567FFu);
+inline constexpr cef_color_t kAccentSoft = static_cast<cef_color_t>(0xFF2F2A51u);
 inline constexpr cef_color_t kDanger = static_cast<cef_color_t>(0xFFFF7A8Au);
 
 inline constexpr int kSpace2 = 2;
@@ -81,6 +82,7 @@ inline void StyleIconButton(
     StyleButton(button, selected, true);
     if (button) {
         button->SetMinimumSize(CefSize(kIconControlSize, kIconControlSize));
+        button->SetMaximumSize(CefSize(kIconControlSize, kIconControlSize));
     }
 }
 
