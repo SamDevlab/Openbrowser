@@ -1,6 +1,7 @@
 #include "browser_chrome.h"
 
 #include "cef_browser_engine.h"
+#include "aura_design_tokens.h"
 #include "find_bar.h"
 #include "icon_system.h"
 #include "core/capabilities/capability_policy.h"
@@ -116,17 +117,19 @@ BrowserChrome::BrowserChrome(
     container_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings container_settings{};
     container_settings.horizontal = 0;
-    container_settings.between_child_spacing = 1;
+    container_settings.between_child_spacing = aura::kSpace2;
     container_layout_ = container_->SetToBoxLayout(container_settings);
+    aura::StyleSurface(container_, aura::kChromeSurface);
 
     toolbar_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings toolbar_settings{};
     toolbar_settings.horizontal = 1;
-    toolbar_settings.between_child_spacing = 6;
-    toolbar_settings.inside_border_horizontal_spacing = 10;
-    toolbar_settings.inside_border_vertical_spacing = 6;
+    toolbar_settings.between_child_spacing = aura::kSpace4;
+    toolbar_settings.inside_border_horizontal_spacing = aura::kSpace8;
+    toolbar_settings.inside_border_vertical_spacing = aura::kSpace6;
     toolbar_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     toolbar_layout_ = toolbar_->SetToBoxLayout(toolbar_settings);
+    aura::StyleSurface(toolbar_, aura::kChromeSurface);
 
     back_button_ = CefLabelButton::CreateLabelButton(make_delegate(ChromeAction::Back), "");
     ConfigureIconButton(back_button_, IconId::Back, "", "Back", "Go back");
@@ -140,6 +143,8 @@ BrowserChrome::BrowserChrome(
         security_badge_, IconId::Security, "", "Connection security", "Show connection security details");
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter an address");
+    address_bar_->SetAccessibleName("Address and search bar");
+    aura::StyleTextField(address_bar_, true);
     bookmarks_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ToggleBookmarksBar), "");
     ConfigureIconButton(
@@ -156,6 +161,15 @@ BrowserChrome::BrowserChrome(
         make_delegate(ChromeAction::ToggleCommandPalette), "");
     ConfigureIconButton(
         palette_button_, IconId::More, "", "Command palette", "Open command palette");
+
+    aura::StyleIconButton(back_button_);
+    aura::StyleIconButton(forward_button_);
+    aura::StyleIconButton(reload_button_);
+    aura::StyleIconButton(security_badge_);
+    aura::StyleIconButton(bookmarks_button_);
+    aura::StyleIconButton(downloads_button_);
+    aura::StyleIconButton(profile_button_);
+    aura::StyleIconButton(palette_button_);
 
     // Aura keeps the permanent chrome intentionally small. Find and zoom remain
     // first-class browser actions through shortcuts/Command Palette, but no
@@ -190,6 +204,7 @@ BrowserChrome::BrowserChrome(
     prompt_settings.inside_border_vertical_spacing = 3;
     prompt_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     prompt_layout_ = prompt_panel_->SetToBoxLayout(prompt_settings);
+    aura::StyleSurface(prompt_panel_, aura::kSurfaceRaised);
 
     prompt_label_ = CefLabelButton::CreateLabelButton(
         new PassiveButtonDelegate(), "Permission request");
@@ -200,6 +215,12 @@ BrowserChrome::BrowserChrome(
         make_delegate(ChromeAction::AlwaysAllowPermission), "Always allow");
     block_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::BlockPermission), "Block");
+    aura::StylePassiveLabel(prompt_label_);
+    aura::StyleButton(allow_once_button_, true);
+    aura::StyleButton(always_allow_button_);
+    aura::StyleButton(block_button_);
+    block_button_->SetTextColor(CEF_BUTTON_STATE_NORMAL, aura::kDanger);
+    block_button_->SetTextColor(CEF_BUTTON_STATE_HOVERED, aura::kDanger);
 
     prompt_panel_->AddChildView(prompt_label_);
     prompt_layout_->SetFlexForView(prompt_label_, 1);
@@ -222,12 +243,15 @@ BrowserChrome::BrowserChrome(
     details_settings.inside_border_vertical_spacing = 3;
     details_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     security_details_layout_ = security_details_panel_->SetToBoxLayout(details_settings);
+    aura::StyleSurface(security_details_panel_, aura::kSurfaceRaised);
 
     security_details_label_ = CefLabelButton::CreateLabelButton(
         new PassiveButtonDelegate(), "Site security");
     security_details_label_->SetEnabled(false);
     reset_permissions_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ResetOriginPermissions), "Reset rules");
+    aura::StylePassiveLabel(security_details_label_);
+    aura::StyleButton(reset_permissions_button_);
 
     security_details_panel_->AddChildView(security_details_label_);
     security_details_layout_->SetFlexForView(security_details_label_, 1);
@@ -473,9 +497,6 @@ void BrowserChrome::HandleAction(const ChromeAction action) {
 
 void BrowserChrome::SetProfileLabel(const std::string& label) {
     private_mode_ = label.find("Private") != std::string::npos;
-    if (profile_button_) {
-        profile_button_->SetText(label);
-    }
     UpdatePrivatePresentation();
     SyncAddressFromSession(session_);
     UpdateSecurityDetails();
@@ -496,7 +517,12 @@ void BrowserChrome::SetPrivateMode(const bool enabled) {
 }
 
 void BrowserChrome::UpdatePrivatePresentation() {
+    const auto chrome_surface = private_mode_ ? aura::kPrivateChromeSurface : aura::kChromeSurface;
+    aura::StyleSurface(container_, chrome_surface);
+    aura::StyleSurface(toolbar_, chrome_surface);
     if (profile_button_) {
+        profile_button_->SetText("");
+        aura::StyleIconButton(profile_button_, private_mode_);
         SetIcon(profile_button_, private_mode_ ? IconId::PrivateProfile : IconId::Profile);
         profile_button_->SetAccessibleName(private_mode_ ? "Private profile" : "Default profile");
         profile_button_->SetTooltipText(private_mode_ ? "Private profile" : "Default profile");

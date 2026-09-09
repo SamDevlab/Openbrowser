@@ -2,6 +2,7 @@
 
 #include "aura_accessibility.h"
 #include "aura_motion.h"
+#include "aura_design_tokens.h"
 #include "core/navigation/internal_urls.h"
 #include "core/profiles/profile_manager.h"
 #include "core/session/browser_session.h"
@@ -97,11 +98,12 @@ TabStrip::TabStrip(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 1;
-    settings.between_child_spacing = 4;
-    settings.inside_border_horizontal_spacing = 10;
-    settings.inside_border_vertical_spacing = 5;
+    settings.between_child_spacing = aura::kSpace2;
+    settings.inside_border_horizontal_spacing = aura::kSpace8;
+    settings.inside_border_vertical_spacing = aura::kSpace4;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     layout_ = panel_->SetToBoxLayout(settings);
+    aura::StyleSurface(panel_, aura::kChromeSurface);
 
     // WorkspacesManager is restored before BrowserSession. Honor its persisted
     // active workspace even if the session snapshot happened to restore a tab
@@ -311,20 +313,7 @@ void TabStrip::RebuildTabs() {
         const bool is_discarded = tab.lifecycle == core::TabLifecycle::Discarded;
         const std::string title_text = tab.title.empty() ? tab.url : tab.title;
 
-        std::string status_suffix;
-        if (is_active) {
-            status_suffix += " (active)";
-        }
-        if (is_discarded) {
-            status_suffix += " (sleeping)";
-        }
-        if (tab.navigation_state == core::NavigationState::Loading) {
-            status_suffix += " (loading)";
-        } else if (tab.navigation_state == core::NavigationState::Failed) {
-            status_suffix += " (load failed)";
-        }
-
-        std::string label = title_text + status_suffix;
+        std::string label = title_text;
         if (label.size() > 28) {
             label = label.substr(0, 25) + "...";
         }
@@ -352,6 +341,7 @@ void TabStrip::RebuildTabs() {
             accessible_name,
             is_active ? title_text + " - Active tab" : title_text,
             aura::kTabAccessibilityGroupId);
+        aura::StyleTabButton(tab_btn, is_active);
         panel_->AddChildView(tab_btn);
         layout_->SetFlexForView(tab_btn, 0);
 
@@ -375,6 +365,10 @@ void TabStrip::RebuildTabs() {
                 "Close active tab " + title_text,
                 "Close active tab - Ctrl+W",
                 aura::kTabAccessibilityGroupId);
+            aura::StyleIconButton(close_btn, true);
+            close_btn->SetMinimumSize(CefSize(
+                aura::kCompactIconControlSize,
+                aura::kCompactIconControlSize));
             panel_->AddChildView(close_btn);
             layout_->SetFlexForView(close_btn, 0);
         }
@@ -397,6 +391,7 @@ void TabStrip::RebuildTabs() {
         "New tab",
         "New tab - Ctrl+T",
         aura::kTabAccessibilityGroupId);
+    aura::StyleIconButton(new_tab_btn);
     panel_->AddChildView(new_tab_btn);
     layout_->SetFlexForView(new_tab_btn, 0);
 

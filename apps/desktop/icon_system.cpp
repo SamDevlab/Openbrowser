@@ -1,5 +1,7 @@
 #include "icon_system.h"
 
+#include "aura_design_tokens.h"
+
 #include "include/views/cef_label_button.h"
 
 #include <algorithm>
@@ -16,7 +18,7 @@ namespace openbrowser::desktop {
 namespace {
 
 constexpr int kIconDip = 20;
-constexpr float kStroke = 1.8F;
+constexpr float kStroke = 2.2F;
 
 struct Point {
     float x;
@@ -313,19 +315,53 @@ IconCache& Cache() {
     return static_cast<std::size_t>(id);
 }
 
+std::vector<Pixel> DownsampleIcon(const Raster& source, const int factor) {
+    const int source_size = source.Size();
+    const int target_size = source_size / factor;
+    const auto& source_pixels = source.Pixels();
+    std::vector<Pixel> output(
+        static_cast<std::size_t>(target_size) * static_cast<std::size_t>(target_size));
+
+    for (int y = 0; y < target_size; ++y) {
+        for (int x = 0; x < target_size; ++x) {
+            std::uint32_t alpha_sum = 0;
+            for (int sample_y = 0; sample_y < factor; ++sample_y) {
+                for (int sample_x = 0; sample_x < factor; ++sample_x) {
+                    const int source_x = x * factor + sample_x;
+                    const int source_y = y * factor + sample_y;
+                    alpha_sum += source_pixels[
+                        static_cast<std::size_t>(source_y * source_size + source_x)].alpha;
+                }
+            }
+
+            const auto samples = static_cast<std::uint32_t>(factor * factor);
+            const auto alpha = static_cast<std::uint8_t>(alpha_sum / samples);
+            auto& pixel = output[static_cast<std::size_t>(y * target_size + x)];
+            pixel.alpha = alpha;
+            pixel.blue = static_cast<std::uint8_t>((0xF0u * alpha) / 0xFFu);
+            pixel.green = static_cast<std::uint8_t>((0xE8u * alpha) / 0xFFu);
+            pixel.red = static_cast<std::uint8_t>((0xE1u * alpha) / 0xFFu);
+        }
+    }
+    return output;
+}
+
 CefRefPtr<CefImage> BuildIcon(const IconId id) {
+    constexpr int kSupersample = 4;
     auto image = CefImage::CreateImage();
     for (const int scale : {1, 2}) {
-        Raster raster(scale);
+        Raster raster(scale * kSupersample);
         DrawIcon(raster, id);
+        auto pixels = DownsampleIcon(raster, kSupersample);
+        const int target_size = kIconDip * scale;
         image->AddBitmap(
             static_cast<float>(scale),
-            raster.Size(),
-            raster.Size(),
+            target_size,
+            target_size,
             CEF_COLOR_TYPE_BGRA_8888,
             CEF_ALPHA_TYPE_PREMULTIPLIED,
-            raster.Pixels().data(),
-            raster.Pixels().size() * sizeof(Pixel));
+            pixels.data(),
+            pixels.size() * sizeof(Pixel));
     }
     return image;
 }
@@ -367,7 +403,9 @@ void ConfigureIconButton(
     button->SetAccessibleName(std::string(accessible_name));
     button->SetTooltipText(std::string(tooltip));
     button->SetFocusable(true);
-    button->SetMinimumSize(CefSize(text.empty() ? 32 : 96, 30));
+    button->SetMinimumSize(CefSize(
+        text.empty() ? aura::kIconControlSize : 104,
+        aura::kControlHeight));
     if (group_id != 0) {
         button->SetGroupID(group_id);
     }

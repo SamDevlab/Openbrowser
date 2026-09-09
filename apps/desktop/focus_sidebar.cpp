@@ -1,5 +1,6 @@
 #include "focus_sidebar.h"
 
+#include "aura_design_tokens.h"
 #include "core/session/browser_session.h"
 #include "core/session/focus_session_controller.h"
 #include "deferred_ui_action.h"
@@ -122,11 +123,12 @@ FocusSidebar::FocusSidebar(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 0;
-    settings.between_child_spacing = 4;
-    settings.inside_border_horizontal_spacing = 6;
-    settings.inside_border_vertical_spacing = 6;
+    settings.between_child_spacing = aura::kPanelGap;
+    settings.inside_border_horizontal_spacing = aura::kPanelPadding;
+    settings.inside_border_vertical_spacing = aura::kPanelPadding;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     layout_ = panel_->SetToBoxLayout(settings);
+    aura::StyleSurface(panel_, aura::kSurface);
 
     RebuildQueueView();
     panel_->SetVisible(false);
@@ -373,6 +375,7 @@ void FocusSidebar::RebuildQueueView() {
     delegates_.push_back(title_delegate);
     auto title_btn = CefLabelButton::CreateLabelButton(title_delegate, "Focus");
     title_btn->SetEnabled(false);
+    aura::StylePassiveLabel(title_btn, true);
     panel_->AddChildView(title_btn);
     layout_->SetFlexForView(title_btn, 0);
 
@@ -384,12 +387,14 @@ void FocusSidebar::RebuildQueueView() {
     sprint_settings.inside_border_vertical_spacing = 4;
     sprint_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     auto sprint_layout = sprint_panel->SetToBoxLayout(sprint_settings);
+    aura::StyleSurface(sprint_panel, aura::kSurfaceRaised);
 
     CefRefPtr<CefButtonDelegate> state_delegate(new PassiveButtonDelegate());
     delegates_.push_back(state_delegate);
     auto state_btn = CefLabelButton::CreateLabelButton(
         state_delegate, "Focus session - " + SprintStateLabel(sprint_.State()));
     state_btn->SetEnabled(false);
+    aura::StylePassiveLabel(state_btn);
     sprint_panel->AddChildView(state_btn);
     sprint_layout->SetFlexForView(state_btn, 0);
 
@@ -397,6 +402,7 @@ void FocusSidebar::RebuildQueueView() {
     delegates_.push_back(timer_delegate);
     auto timer_btn = CefLabelButton::CreateLabelButton(timer_delegate, sprint_.FormattedTime());
     timer_btn->SetEnabled(false);
+    aura::StylePassiveLabel(timer_btn, true);
     sprint_panel->AddChildView(timer_btn);
     sprint_layout->SetFlexForView(timer_btn, 0);
 
@@ -449,6 +455,7 @@ void FocusSidebar::RebuildQueueView() {
     delegates_.push_back(metrics_delegate);
     auto metrics_btn = CefLabelButton::CreateLabelButton(metrics_delegate, sprint_.FormattedMetrics());
     metrics_btn->SetEnabled(false);
+    aura::StylePassiveLabel(metrics_btn, false, true);
     sprint_panel->AddChildView(metrics_btn);
     sprint_layout->SetFlexForView(metrics_btn, 0);
 
@@ -470,6 +477,7 @@ void FocusSidebar::RebuildQueueView() {
         auto empty_btn = CefLabelButton::CreateLabelButton(
             empty_delegate, "Add a tab to build your Focus queue");
         empty_btn->SetEnabled(false);
+        aura::StylePassiveLabel(empty_btn, false, true);
         panel_->AddChildView(empty_btn);
         layout_->SetFlexForView(empty_btn, 0);
     }
@@ -492,6 +500,7 @@ void FocusSidebar::RebuildQueueView() {
         }
 
         auto item_panel = CefPanel::CreatePanel(nullptr);
+        aura::StyleSurface(item_panel, aura::kChromeSurface);
         CefBoxLayoutSettings item_settings{};
         item_settings.horizontal = 1;
         item_settings.between_child_spacing = 2;
@@ -509,6 +518,7 @@ void FocusSidebar::RebuildQueueView() {
             new FocusActionDelegate(*this, FocusAction::ActivateItem, item.id));
         delegates_.push_back(activate_delegate);
         auto activate_btn = CefLabelButton::CreateLabelButton(activate_delegate, item_label);
+        aura::StyleButton(activate_btn, item.state == core::FocusState::Now);
         item_panel->AddChildView(activate_btn);
         item_layout->SetFlexForView(activate_btn, 1);
 

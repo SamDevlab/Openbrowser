@@ -1,5 +1,6 @@
 #include "find_bar.h"
 
+#include "aura_design_tokens.h"
 #include "core/session/browser_session.h"
 #include "icon_system.h"
 
@@ -67,16 +68,18 @@ FindBar::FindBar(core::BrowserSession& session, CefRefPtr<CefBrowserEngine> engi
     panel_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings settings{};
     settings.horizontal = 1;
-    settings.between_child_spacing = 5;
-    settings.inside_border_horizontal_spacing = 8;
-    settings.inside_border_vertical_spacing = 4;
+    settings.between_child_spacing = aura::kSpace6;
+    settings.inside_border_horizontal_spacing = aura::kSpace12;
+    settings.inside_border_vertical_spacing = aura::kSpace6;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     layout_ = panel_->SetToBoxLayout(settings);
+    aura::StyleSurface(panel_, aura::kSurfaceRaised);
 
     field_delegate_ = new FieldDelegate(*this);
     search_field_ = CefTextfield::CreateTextfield(field_delegate_);
     search_field_->SetPlaceholderText("Find in page");
     search_field_->SetAccessibleName("Find in page");
+    aura::StyleTextField(search_field_, true);
 
     CefRefPtr<CefButtonDelegate> previous_delegate(new ActionDelegate(*this, Action::Previous));
     CefRefPtr<CefButtonDelegate> next_delegate(new ActionDelegate(*this, Action::Next));
@@ -87,12 +90,16 @@ FindBar::FindBar(core::BrowserSession& session, CefRefPtr<CefBrowserEngine> engi
 
     result_label_ = CefLabelButton::CreateLabelButton(new PassiveButtonDelegate(), "0 / 0");
     result_label_->SetEnabled(false);
+    aura::StylePassiveLabel(result_label_, false, true);
     CefRefPtr<CefLabelButton> previous = CefLabelButton::CreateLabelButton(previous_delegate, "");
     ConfigureIconButton(previous, IconId::Previous, "", "Previous match", "Previous match");
+    aura::StyleIconButton(previous);
     CefRefPtr<CefLabelButton> next = CefLabelButton::CreateLabelButton(next_delegate, "");
     ConfigureIconButton(next, IconId::Next, "", "Next match", "Next match");
+    aura::StyleIconButton(next);
     CefRefPtr<CefLabelButton> close = CefLabelButton::CreateLabelButton(close_delegate, "");
     ConfigureIconButton(close, IconId::Close, "", "Close find bar", "Close find bar");
+    aura::StyleIconButton(close);
 
     panel_->AddChildView(search_field_);
     layout_->SetFlexForView(search_field_, 1);

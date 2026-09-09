@@ -1,6 +1,7 @@
 #include "downloads_panel.h"
 
 #include "deferred_ui_action.h"
+#include "aura_design_tokens.h"
 
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_label_button.h"
@@ -107,11 +108,12 @@ DownloadsPanel::DownloadsPanel(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 0;
-    settings.between_child_spacing = 4;
-    settings.inside_border_horizontal_spacing = 10;
-    settings.inside_border_vertical_spacing = 6;
+    settings.between_child_spacing = aura::kPanelGap;
+    settings.inside_border_horizontal_spacing = aura::kPanelPadding;
+    settings.inside_border_vertical_spacing = aura::kPanelPadding;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     layout_ = panel_->SetToBoxLayout(settings);
+    aura::StyleSurface(panel_, aura::kSurface);
 
     list_panel_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings list_settings{};
@@ -119,6 +121,7 @@ DownloadsPanel::DownloadsPanel(
     list_settings.between_child_spacing = 4;
     list_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     list_layout_ = list_panel_->SetToBoxLayout(list_settings);
+    aura::StyleSurface(list_panel_, aura::kSurface);
 
     panel_->SetVisible(false);
     RebuildView();
@@ -210,22 +213,26 @@ void DownloadsPanel::RebuildView() {
     header_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     header->SetToBoxLayout(header_settings);
 
-    auto title_btn = CefLabelButton::CreateLabelButton(nullptr, "Downloads & Transfers");
+    auto title_btn = CefLabelButton::CreateLabelButton(nullptr, "Downloads");
+    aura::StylePassiveLabel(title_btn, true);
     header->AddChildView(title_btn);
 
     auto close_delegate = new ActionDelegate(*this, TransferAction::Close);
     button_delegates_.push_back(close_delegate);
-    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "[Close]");
+    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "Close");
+    aura::StyleButton(close_btn);
     header->AddChildView(close_btn);
     panel_->AddChildView(header);
 
     const auto items = transfer_broker_.ListTransfers();
     if (items.empty()) {
         auto empty_label = CefLabelButton::CreateLabelButton(nullptr, "No active or recent downloads.");
+        aura::StylePassiveLabel(empty_label, false, true);
         panel_->AddChildView(empty_label);
     } else {
         for (const auto& item : items) {
             auto row = CefPanel::CreatePanel(nullptr);
+            aura::StyleSurface(row, aura::kChromeSurface);
             CefBoxLayoutSettings row_settings{};
             row_settings.horizontal = 1;
             row_settings.between_child_spacing = 6;
@@ -252,40 +259,47 @@ void DownloadsPanel::RebuildView() {
             }
 
             auto item_label = CefLabelButton::CreateLabelButton(nullptr, oss.str());
+            aura::StylePassiveLabel(item_label);
             row->AddChildView(item_label);
 
             if (item.state == core::TransferState::InProgress) {
                 auto pause_delegate = new ActionDelegate(*this, TransferAction::Pause, item.id);
                 button_delegates_.push_back(pause_delegate);
-                auto pause_btn = CefLabelButton::CreateLabelButton(pause_delegate, "[Pause]");
+                auto pause_btn = CefLabelButton::CreateLabelButton(pause_delegate, "Pause");
+                aura::StyleButton(pause_btn);
                 row->AddChildView(pause_btn);
 
                 auto cancel_delegate = new ActionDelegate(*this, TransferAction::Cancel, item.id);
                 button_delegates_.push_back(cancel_delegate);
-                auto cancel_btn = CefLabelButton::CreateLabelButton(cancel_delegate, "[Cancel]");
+                auto cancel_btn = CefLabelButton::CreateLabelButton(cancel_delegate, "Cancel");
+                aura::StyleButton(cancel_btn);
                 row->AddChildView(cancel_btn);
             } else if (item.state == core::TransferState::Paused) {
                 auto resume_delegate = new ActionDelegate(*this, TransferAction::Resume, item.id);
                 button_delegates_.push_back(resume_delegate);
-                auto resume_btn = CefLabelButton::CreateLabelButton(resume_delegate, "[Resume]");
+                auto resume_btn = CefLabelButton::CreateLabelButton(resume_delegate, "Resume");
+                aura::StyleButton(resume_btn, true);
                 row->AddChildView(resume_btn);
 
                 auto cancel_delegate = new ActionDelegate(*this, TransferAction::Cancel, item.id);
                 button_delegates_.push_back(cancel_delegate);
-                auto cancel_btn = CefLabelButton::CreateLabelButton(cancel_delegate, "[Cancel]");
+                auto cancel_btn = CefLabelButton::CreateLabelButton(cancel_delegate, "Cancel");
+                aura::StyleButton(cancel_btn);
                 row->AddChildView(cancel_btn);
             } else if (item.state == core::TransferState::Completed && !item.target_path.empty()) {
 #if defined(_WIN32)
                 if (risk == core::FileRiskLevel::Safe) {
                     auto open_delegate = new ActionDelegate(*this, TransferAction::Open, item.id);
                     button_delegates_.push_back(open_delegate);
-                    auto open_btn = CefLabelButton::CreateLabelButton(open_delegate, "[Open]");
+                    auto open_btn = CefLabelButton::CreateLabelButton(open_delegate, "Open");
+                    aura::StyleButton(open_btn, true);
                     row->AddChildView(open_btn);
                 }
 
                 auto folder_delegate = new ActionDelegate(*this, TransferAction::ShowInFolder, item.id);
                 button_delegates_.push_back(folder_delegate);
-                auto folder_btn = CefLabelButton::CreateLabelButton(folder_delegate, "[Show Folder]");
+                auto folder_btn = CefLabelButton::CreateLabelButton(folder_delegate, "Show folder");
+                aura::StyleButton(folder_btn);
                 row->AddChildView(folder_btn);
 #endif
             }

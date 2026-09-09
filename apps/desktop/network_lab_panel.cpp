@@ -1,5 +1,6 @@
 #include "network_lab_panel.h"
 
+#include "aura_design_tokens.h"
 #include "core/network/network_filter_query.h"
 #include "core/session/browser_session.h"
 #include "deferred_ui_action.h"
@@ -147,11 +148,12 @@ NetworkLabPanel::NetworkLabPanel(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 0;
-    settings.between_child_spacing = 2;
-    settings.inside_border_horizontal_spacing = 6;
-    settings.inside_border_vertical_spacing = 4;
+    settings.between_child_spacing = aura::kSpace6;
+    settings.inside_border_horizontal_spacing = aura::kPanelPadding;
+    settings.inside_border_vertical_spacing = aura::kSpace10;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     layout_ = panel_->SetToBoxLayout(settings);
+    aura::StyleSurface(panel_, aura::kCanvas);
 
     RebuildView();
 }
@@ -333,34 +335,40 @@ void NetworkLabPanel::BuildTableView(
     tool_settings.between_child_spacing = 6;
     tool_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     auto tool_layout = toolbar->SetToBoxLayout(tool_settings);
+    aura::StyleSurface(toolbar, aura::kSurfaceRaised);
 
     auto title_btn = CefLabelButton::CreateLabelButton(
-        nullptr, "Network Lab (" + std::to_string(requests.size()) + " reqs)");
+        nullptr, "Network Lab · " + std::to_string(requests.size()) + " requests");
+    aura::StylePassiveLabel(title_btn, true);
     toolbar->AddChildView(title_btn);
     tool_layout->SetFlexForView(title_btn, 0);
 
     auto scope_delegate = CefRefPtr<CefButtonDelegate>(new PanelActionDelegate(*this, PanelAction::ToggleScope));
     delegates_.push_back(scope_delegate);
     auto scope_btn = CefLabelButton::CreateLabelButton(
-        scope_delegate, filter_active_tab_ ? "[Scope: Tab]" : "[Scope: All]");
+        scope_delegate, filter_active_tab_ ? "Scope: Tab" : "Scope: All");
+    aura::StyleButton(scope_btn, filter_active_tab_);
     toolbar->AddChildView(scope_btn);
     tool_layout->SetFlexForView(scope_btn, 0);
 
     auto method_delegate = CefRefPtr<CefButtonDelegate>(new PanelActionDelegate(*this, PanelAction::CycleMethod));
     delegates_.push_back(method_delegate);
-    auto method_btn = CefLabelButton::CreateLabelButton(method_delegate, "[Method: " + method_filter_ + "]");
+    auto method_btn = CefLabelButton::CreateLabelButton(method_delegate, "Method: " + method_filter_);
+    aura::StyleButton(method_btn, method_filter_ != "ALL");
     toolbar->AddChildView(method_btn);
     tool_layout->SetFlexForView(method_btn, 0);
 
     auto status_delegate = CefRefPtr<CefButtonDelegate>(new PanelActionDelegate(*this, PanelAction::CycleStatus));
     delegates_.push_back(status_delegate);
-    auto status_btn = CefLabelButton::CreateLabelButton(status_delegate, "[Status: " + status_filter_ + "]");
+    auto status_btn = CefLabelButton::CreateLabelButton(status_delegate, "Status: " + status_filter_);
+    aura::StyleButton(status_btn, status_filter_ != "ALL");
     toolbar->AddChildView(status_btn);
     tool_layout->SetFlexForView(status_btn, 0);
 
     auto clear_delegate = CefRefPtr<CefButtonDelegate>(new PanelActionDelegate(*this, PanelAction::Clear));
     delegates_.push_back(clear_delegate);
     auto clear_btn = CefLabelButton::CreateLabelButton(clear_delegate, "Clear");
+    aura::StyleButton(clear_btn);
     toolbar->AddChildView(clear_btn);
     tool_layout->SetFlexForView(clear_btn, 0);
 
@@ -371,16 +379,20 @@ void NetworkLabPanel::BuildTableView(
     query_field_->SetPlaceholderText(
         "Filter: method:POST status:>=400 host:github.com blocked:true is:failed (Enter to apply)");
     query_field_->SetText(structured_query_);
+    query_field_->SetAccessibleName("Network request filter");
+    aura::StyleTextField(query_field_, true);
     panel_->AddChildView(query_field_);
     layout_->SetFlexForView(query_field_, 0);
 
     auto columns = CefLabelButton::CreateLabelButton(
-        nullptr, "Method/Status | Host | URL | Size | Observed | Blocked | Attribution");
+        nullptr, "Method / Status     Host     URL     Size     Time     Filter     Attribution");
+    aura::StylePassiveLabel(columns, false, true);
     panel_->AddChildView(columns);
     layout_->SetFlexForView(columns, 0);
 
     if (requests.empty()) {
         auto empty_btn = CefLabelButton::CreateLabelButton(nullptr, "No requests match active filters.");
+        aura::StylePassiveLabel(empty_btn, false, true);
         panel_->AddChildView(empty_btn);
         layout_->SetFlexForView(empty_btn, 0);
     } else {
@@ -390,6 +402,7 @@ void NetworkLabPanel::BuildTableView(
         for (std::size_t i = requests.size(); i > start_idx; --i) {
             const auto& req = requests[i - 1];
             auto row = CefPanel::CreatePanel(nullptr);
+            aura::StyleSurface(row, aura::kChromeSurface);
             CefBoxLayoutSettings row_settings{};
             row_settings.horizontal = 1;
             row_settings.between_child_spacing = 4;
@@ -540,31 +553,36 @@ void NetworkLabPanel::BuildTabBar() {
     settings.between_child_spacing = 4;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     auto tab_layout = tab_bar->SetToBoxLayout(settings);
+    aura::StyleSurface(tab_bar, aura::kSurfaceRaised);
 
     auto req_delegate = CefRefPtr<CefButtonDelegate>(new PanelActionDelegate(*this, PanelAction::SwitchToRequests));
     delegates_.push_back(req_delegate);
     auto req_btn = CefLabelButton::CreateLabelButton(
-        req_delegate, active_tab_ == ActiveTab::Requests ? "[Requests]" : "Requests");
+        req_delegate, "Requests");
+    aura::StyleButton(req_btn, active_tab_ == ActiveTab::Requests);
     tab_bar->AddChildView(req_btn);
     tab_layout->SetFlexForView(req_btn, 0);
 
     auto conn_delegate = CefRefPtr<CefButtonDelegate>(new PanelActionDelegate(*this, PanelAction::SwitchToConnections));
     delegates_.push_back(conn_delegate);
     auto conn_btn = CefLabelButton::CreateLabelButton(
-        conn_delegate, active_tab_ == ActiveTab::Connections ? "[Connections]" : "Connections");
+        conn_delegate, "Connections");
+    aura::StyleButton(conn_btn, active_tab_ == ActiveTab::Connections);
     tab_bar->AddChildView(conn_btn);
     tab_layout->SetFlexForView(conn_btn, 0);
 
     auto dec_delegate = CefRefPtr<CefButtonDelegate>(new PanelActionDelegate(*this, PanelAction::SwitchToDecisions));
     delegates_.push_back(dec_delegate);
     auto dec_btn = CefLabelButton::CreateLabelButton(
-        dec_delegate, active_tab_ == ActiveTab::Decisions ? "[Decisions]" : "Decisions");
+        dec_delegate, "Decisions");
+    aura::StyleButton(dec_btn, active_tab_ == ActiveTab::Decisions);
     tab_bar->AddChildView(dec_btn);
     tab_layout->SetFlexForView(dec_btn, 0);
 
     auto close_delegate = CefRefPtr<CefButtonDelegate>(new PanelActionDelegate(*this, PanelAction::Close));
     delegates_.push_back(close_delegate);
-    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "x");
+    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "Close");
+    aura::StyleButton(close_btn);
     tab_bar->AddChildView(close_btn);
     tab_layout->SetFlexForView(close_btn, 0);
 

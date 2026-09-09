@@ -1,6 +1,7 @@
 #include "settings_panel.h"
 
 #include "aura_sidebar.h"
+#include "aura_design_tokens.h"
 #include "cef_browser_engine.h"
 #include "core/navigation/internal_urls.h"
 
@@ -103,26 +104,32 @@ SettingsPanel::SettingsPanel(
     panel_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings panel_settings{};
     panel_settings.horizontal = 0;
-    panel_settings.between_child_spacing = 6;
-    panel_settings.inside_border_horizontal_spacing = 10;
-    panel_settings.inside_border_vertical_spacing = 8;
+    panel_settings.between_child_spacing = aura::kPanelGap;
+    panel_settings.inside_border_horizontal_spacing = aura::kPanelPadding;
+    panel_settings.inside_border_vertical_spacing = aura::kPanelPadding;
     panel_settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
     layout_ = panel_->SetToBoxLayout(panel_settings);
+    aura::StyleSurface(panel_, aura::kSurface);
 
     const auto make_button = [this](const Action action, const std::string& text) {
         CefRefPtr<CefButtonDelegate> delegate(new ActionDelegate(*this, action));
         delegates_.push_back(delegate);
-        return CefLabelButton::CreateLabelButton(delegate, text);
+        auto button = CefLabelButton::CreateLabelButton(delegate, text);
+        aura::StyleButton(button);
+        button->SetMinimumSize(CefSize(112, aura::kControlHeight));
+        return button;
     };
     const auto make_passive = [](const std::string& text) {
         auto label = CefLabelButton::CreateLabelButton(new PassiveButtonDelegate(), text);
         label->SetEnabled(false);
+        aura::StylePassiveLabel(label);
         return label;
     };
 
     CefRefPtr<CefPanel> header = CreateRow();
     CefRefPtr<CefBoxLayout> header_layout = header->GetLayout()->AsBoxLayout();
-    CefRefPtr<CefLabelButton> title = make_passive("Settings - Personalization");
+    CefRefPtr<CefLabelButton> title = make_passive("Personalization");
+    aura::StylePassiveLabel(title, true);
     CefRefPtr<CefLabelButton> close = make_button(Action::Close, "Close");
     header->AddChildView(title);
     if (header_layout) {
@@ -136,6 +143,7 @@ SettingsPanel::SettingsPanel(
     layout_->SetFlexForView(header, 0);
 
     CefRefPtr<CefLabelButton> appearance_label = make_passive("Appearance");
+    aura::StylePassiveLabel(appearance_label, true);
     panel_->AddChildView(appearance_label);
     layout_->SetFlexForView(appearance_label, 0);
 
@@ -172,6 +180,7 @@ SettingsPanel::SettingsPanel(
     layout_->SetFlexForView(new_tab_row, 0);
 
     CefRefPtr<CefLabelButton> browser_label = make_passive("Browser behavior");
+    aura::StylePassiveLabel(browser_label, true);
     panel_->AddChildView(browser_label);
     layout_->SetFlexForView(browser_label, 0);
 
@@ -183,6 +192,7 @@ SettingsPanel::SettingsPanel(
     CefRefPtr<CefBoxLayout> home_layout = home_row->GetLayout()->AsBoxLayout();
     home_page_field_ = CefTextfield::CreateTextfield(nullptr);
     home_page_field_->SetPlaceholderText("Startup home page URL");
+    aura::StyleTextField(home_page_field_);
     CefRefPtr<CefLabelButton> save_home = make_button(Action::SaveHomePage, "Save home");
     home_row->AddChildView(home_page_field_);
     if (home_layout) {
@@ -199,6 +209,7 @@ SettingsPanel::SettingsPanel(
     CefRefPtr<CefBoxLayout> search_name_layout = search_name_row->GetLayout()->AsBoxLayout();
     search_provider_field_ = CefTextfield::CreateTextfield(nullptr);
     search_provider_field_->SetPlaceholderText("Search provider name");
+    aura::StyleTextField(search_provider_field_);
     search_name_row->AddChildView(search_provider_field_);
     if (search_name_layout) {
         search_name_layout->SetFlexForView(search_provider_field_, 1);
@@ -210,6 +221,7 @@ SettingsPanel::SettingsPanel(
     CefRefPtr<CefBoxLayout> search_url_layout = search_url_row->GetLayout()->AsBoxLayout();
     search_url_field_ = CefTextfield::CreateTextfield(nullptr);
     search_url_field_->SetPlaceholderText("Search URL template, e.g. https://duckduckgo.com/?q=%s");
+    aura::StyleTextField(search_url_field_);
     CefRefPtr<CefLabelButton> save_search = make_button(Action::SaveSearchProvider, "Save search");
     search_url_row->AddChildView(search_url_field_);
     if (search_url_layout) {
@@ -226,6 +238,7 @@ SettingsPanel::SettingsPanel(
     CefRefPtr<CefBoxLayout> downloads_layout = downloads_row->GetLayout()->AsBoxLayout();
     downloads_directory_field_ = CefTextfield::CreateTextfield(nullptr);
     downloads_directory_field_->SetPlaceholderText("Downloads directory (empty = Openbrowser default)");
+    aura::StyleTextField(downloads_directory_field_);
     CefRefPtr<CefLabelButton> save_downloads = make_button(Action::SaveDownloadsDirectory, "Save downloads");
     downloads_row->AddChildView(downloads_directory_field_);
     if (downloads_layout) {
@@ -241,6 +254,7 @@ SettingsPanel::SettingsPanel(
     CefRefPtr<CefPanel> footer = CreateRow();
     CefRefPtr<CefBoxLayout> footer_layout = footer->GetLayout()->AsBoxLayout();
     status_label_ = make_passive("Settings are stored locally");
+    aura::StylePassiveLabel(status_label_, false, true);
     CefRefPtr<CefLabelButton> reset = make_button(Action::ResetDefaults, "Reset defaults");
     footer->AddChildView(status_label_);
     if (footer_layout) {

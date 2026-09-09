@@ -1,5 +1,6 @@
 #include "bookmarks_bar.h"
 
+#include "aura_design_tokens.h"
 #include "core/session/browser_session.h"
 #include "deferred_ui_action.h"
 #include "icon_system.h"
@@ -61,16 +62,18 @@ BookmarksBar::BookmarksBar(
 
     CefBoxLayoutSettings settings{};
     settings.horizontal = 1;
-    settings.between_child_spacing = 4;
-    settings.inside_border_horizontal_spacing = 8;
-    settings.inside_border_vertical_spacing = 2;
+    settings.between_child_spacing = aura::kSpace6;
+    settings.inside_border_horizontal_spacing = aura::kSpace12;
+    settings.inside_border_vertical_spacing = aura::kSpace4;
     settings.cross_axis_alignment = CEF_AXIS_ALIGNMENT_CENTER;
     layout_ = panel_->SetToBoxLayout(settings);
+    aura::StyleSurface(panel_, aura::kChromeSurface);
 
     add_delegate_ = new AddBookmarkDelegate(*this);
     add_button_ = CefLabelButton::CreateLabelButton(add_delegate_, "Add bookmark");
     ConfigureIconButton(
         add_button_, IconId::Bookmark, "Add bookmark", "Add bookmark", "Bookmark the current page");
+    aura::StyleButton(add_button_);
 
     RebuildBar();
     panel_->SetVisible(false);
@@ -153,6 +156,7 @@ void BookmarksBar::RebuildBar() {
         auto btn = CefLabelButton::CreateLabelButton(delegate, display_title);
         ConfigureIconButton(
             btn, IconId::Bookmark, display_title, "Open bookmark " + display_title, "Open bookmark");
+        aura::StyleButton(btn, false, true);
         panel_->AddChildView(btn);
     }
 
