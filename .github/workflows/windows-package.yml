@@ -52,7 +52,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 / Node 24
 
       - name: Resolve Openbrowser package version
         shell: pwsh
@@ -80,7 +80,7 @@ jobs:
 
       - name: Restore CEF archive cache
         id: cef-cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5 / Node 24
         with:
           path: .cache/cef/*.tar.bz2
           key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
@@ -166,7 +166,7 @@ jobs:
 
       - name: Save verified CEF archive cache
         if: steps.cef-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5 / Node 24
         with:
           path: .cache/cef/*.tar.bz2
           key: cef-${{ runner.os }}-${{ runner.arch }}-${{ env.CEF_VERSION }}-${{ env.CEF_PLATFORM }}
@@ -314,7 +314,7 @@ jobs:
           }
 
       - name: Upload Windows portable package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6 / Node 24
         with:
           name: Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64
           path: |
@@ -330,7 +330,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 / Node 24
 
       - name: Resolve Openbrowser package version
         shell: pwsh
@@ -344,7 +344,7 @@ jobs:
           "PACKAGE_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV
 
       - name: Download packaged Windows artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7 / Node 24
         with:
           name: Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64
           path: product-artifact
@@ -358,7 +358,7 @@ jobs:
 
       - name: Upload product smoke diagnostics
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6 / Node 24
         with:
           name: Openbrowser-product-smoke-diagnostics
           path: product-smoke-diagnostics
@@ -376,7 +376,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 / Node 24
 
       - name: Resolve and validate release version
         shell: bash
@@ -396,7 +396,7 @@ jobs:
           echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Download tested Windows package
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7 / Node 24
         with:
           name: Openbrowser-${{ env.PACKAGE_VERSION }}-windows-x64
           path: release-artifact
