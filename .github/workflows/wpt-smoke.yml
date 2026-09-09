@@ -59,7 +59,20 @@ jobs:
           fi
           printf 'Pinned WPT revision: %s\n' "$actual"
 
-      - name: Download exact Chrome for Testing and ChromeDriver
+      - name: Install WPT Linux bootstrap dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev \
+            libffi-dev \
+            libgirepository1.0-dev \
+            libglib2.0-dev \
+            pkg-config \
+            python3-dev
+
+      - name: Download and verify pinned Chrome for Testing and ChromeDriver
         shell: bash
         run: |
           set -euo pipefail
@@ -68,6 +81,18 @@ jobs:
           driver_archive=".cache/chrome-reference/chromedriver-${CHROME_PLATFORM}.zip"
           chrome_url="${CHROME_FOR_TESTING_BASE_URL}/${CHROME_VERSION}/${CHROME_PLATFORM}/chrome-${CHROME_PLATFORM}.zip"
           driver_url="${CHROME_FOR_TESTING_BASE_URL}/${CHROME_VERSION}/${CHROME_PLATFORM}/chromedriver-${CHROME_PLATFORM}.zip"
+          checksum_file="third_party/wpt/chromium-checksums.sha256"
+
+          expected_chrome_sha="$(awk '$2 == "chrome-linux64.zip" {print $1}' "$checksum_file")"
+          expected_driver_sha="$(awk '$2 == "chromedriver-linux64.zip" {print $1}' "$checksum_file")"
+          if [[ ! "$expected_chrome_sha" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Pinned Chrome SHA-256 is missing or invalid." >&2
+            exit 1
+          fi
+          if [[ ! "$expected_driver_sha" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Pinned ChromeDriver SHA-256 is missing or invalid." >&2
+            exit 1
+          fi
 
           curl --fail --location --retry 3 --retry-delay 2 "$chrome_url" --output "$chrome_archive"
           curl --fail --location --retry 3 --retry-delay 2 "$driver_url" --output "$driver_archive"
@@ -76,6 +101,14 @@ jobs:
           driver_sha="$(sha256sum "$driver_archive" | awk '{print $1}')"
           echo "Chrome archive SHA-256: $chrome_sha"
           echo "ChromeDriver archive SHA-256: $driver_sha"
+          if [[ "$chrome_sha" != "$expected_chrome_sha" ]]; then
+            echo "Chrome archive checksum mismatch: expected=$expected_chrome_sha actual=$chrome_sha" >&2
+            exit 1
+          fi
+          if [[ "$driver_sha" != "$expected_driver_sha" ]]; then
+            echo "ChromeDriver archive checksum mismatch: expected=$expected_driver_sha actual=$driver_sha" >&2
+            exit 1
+          fi
           echo "WPT_CHROME_ARCHIVE_SHA256=$chrome_sha" >> "$GITHUB_ENV"
           echo "WPT_CHROMEDRIVER_ARCHIVE_SHA256=$driver_sha" >> "$GITHUB_ENV"
 
@@ -113,6 +146,7 @@ jobs:
           python ./wpt.py run \
             --yes \
             --headless \
+            --no-manifest-download \
             --no-restart-on-unexpected \
             --binary="$WPT_CHROME_BIN" \
             --webdriver-binary="$WPT_CHROMEDRIVER_BIN" \
