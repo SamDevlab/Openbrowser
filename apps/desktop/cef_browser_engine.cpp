@@ -715,6 +715,11 @@ void CefBrowserEngine::DeliverNetworkEventOnUi(devtools::network::NetworkEvent e
     }
 }
 
+bool CefBrowserEngine::ShouldSuppressTopLevelCloseForTab() const {
+    CEF_REQUIRE_UI_THREAD();
+    return !window_close_requested_;
+}
+
 void CefBrowserEngine::BeginWindowClose() {
     CEF_REQUIRE_UI_THREAD();
     AppendLifecycleTrace(

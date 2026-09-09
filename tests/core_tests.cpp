@@ -162,6 +162,27 @@ void TestBrowserSessionNavigationAndCloseFallback() {
     Require(session.FindTab("c")->lifecycle == openbrowser::core::TabLifecycle::Active, "fallback tab becomes active");
 }
 
+void TestBrowserSessionClosingFirstTabKeepsRemainingTabsAlive() {
+    openbrowser::tests::FakeBrowserEngine engine;
+    openbrowser::core::BrowserSession session(engine);
+
+    Require(session.OpenTab(MakeTab("first", "https://first.test", "First")), "open first tab");
+    Require(session.OpenTab(MakeTab("second", "https://second.test", "Second"), false), "open second tab in background");
+    Require(session.OpenTab(MakeTab("third", "https://third.test", "Third"), false), "open third tab in background");
+    Require(session.ActiveTabId() == std::optional<openbrowser::core::TabId>{"first"}, "first tab remains active before close");
+
+    Require(session.CloseTab("first"), "close first active tab");
+    Require(session.Tabs().size() == 2, "closing first tab keeps the remaining tabs");
+    Require(session.FindTab("first") == nullptr, "closed first tab leaves the model");
+    Require(session.ActiveTabId() == std::optional<openbrowser::core::TabId>{"second"}, "next tab becomes active after closing first tab");
+    Require(session.FindTab("second") != nullptr && session.FindTab("second")->lifecycle == openbrowser::core::TabLifecycle::Active, "fallback tab is active");
+
+    Require(session.OpenTab(MakeTab("fourth", "https://fourth.test", "Fourth")), "open another active tab");
+    Require(session.CloseTab("second"), "close a non-active earlier tab");
+    Require(session.Tabs().size() == 2, "closing non-active tab keeps session alive");
+    Require(session.ActiveTabId() == std::optional<openbrowser::core::TabId>{"fourth"}, "closing non-active tab preserves active tab");
+}
+
 void TestBrowserSessionNormalizesNewTabLifecycle() {
     openbrowser::tests::FakeBrowserEngine engine;
     openbrowser::core::BrowserSession session(engine);
@@ -271,6 +292,7 @@ int main() {
     TestBrowserSessionActivationInvariant();
     TestBrowserSessionBackgroundAndSuspension();
     TestBrowserSessionNavigationAndCloseFallback();
+    TestBrowserSessionClosingFirstTabKeepsRemainingTabsAlive();
     TestBrowserSessionNormalizesNewTabLifecycle();
     TestEngineNavigationEventsAreAuthoritative();
     TestEngineFailureTitleAndCrashEvents();

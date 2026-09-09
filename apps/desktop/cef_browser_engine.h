@@ -165,6 +165,11 @@ public:
     void PostNetworkEvent(devtools::network::NetworkEvent event);
     void DeliverNetworkEventOnUi(devtools::network::NetworkEvent event);
 
+    // A browser tab closes inside the shared top-level window. CEF's
+    // default DoClose behavior forwards a close notification to that parent
+    // window; suppress it unless a real window shutdown is already underway.
+    [[nodiscard]] bool ShouldSuppressTopLevelCloseForTab() const;
+
     void BeginWindowClose();
     [[nodiscard]] bool CanCloseWindow();
     void NotifyWindowDestroyed();
