@@ -1,0 +1,300 @@
+name: Aura Panel Polish Migration
+
+on:
+  push:
+    branches:
+      - design/aura-full-visual-polish
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[aura-panels]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout design branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 / Node 24
+        with:
+          ref: design/aura-full-visual-polish
+          fetch-depth: 0
+
+      - name: Apply Aura panel polish
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def r(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected one anchor in {path}, found {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # Settings / Personalization.
+          p = "apps/desktop/settings_panel.cpp"
+          r(p, '#include "aura_sidebar.h"\n', '#include "aura_sidebar.h"\n#include "aura_design_tokens.h"\n')
+          r(p,
+            "    panel_settings.between_child_spacing = 6;\n"
+            "    panel_settings.inside_border_horizontal_spacing = 10;\n"
+            "    panel_settings.inside_border_vertical_spacing = 8;",
+            "    panel_settings.between_child_spacing = aura::kPanelGap;\n"
+            "    panel_settings.inside_border_horizontal_spacing = aura::kPanelPadding;\n"
+            "    panel_settings.inside_border_vertical_spacing = aura::kPanelPadding;")
+          r(p, '    layout_ = panel_->SetToBoxLayout(panel_settings);\n',
+               '    layout_ = panel_->SetToBoxLayout(panel_settings);\n    aura::StyleSurface(panel_, aura::kSurface);\n')
+          r(p,
+            "        delegates_.push_back(delegate);\n"
+            "        return CefLabelButton::CreateLabelButton(delegate, text);",
+            "        delegates_.push_back(delegate);\n"
+            "        auto button = CefLabelButton::CreateLabelButton(delegate, text);\n"
+            "        aura::StyleButton(button);\n"
+            "        button->SetMinimumSize(CefSize(112, aura::kControlHeight));\n"
+            "        return button;")
+          r(p,
+            "        auto label = CefLabelButton::CreateLabelButton(new PassiveButtonDelegate(), text);\n"
+            "        label->SetEnabled(false);\n"
+            "        return label;",
+            "        auto label = CefLabelButton::CreateLabelButton(new PassiveButtonDelegate(), text);\n"
+            "        label->SetEnabled(false);\n"
+            "        aura::StylePassiveLabel(label);\n"
+            "        return label;")
+          r(p, '    CefRefPtr<CefLabelButton> title = make_passive("Settings - Personalization");\n',
+               '    CefRefPtr<CefLabelButton> title = make_passive("Personalization");\n    aura::StylePassiveLabel(title, true);\n')
+          r(p, '    CefRefPtr<CefLabelButton> appearance_label = make_passive("Appearance");\n',
+               '    CefRefPtr<CefLabelButton> appearance_label = make_passive("Appearance");\n    aura::StylePassiveLabel(appearance_label, true);\n')
+          r(p, '    CefRefPtr<CefLabelButton> browser_label = make_passive("Browser behavior");\n',
+               '    CefRefPtr<CefLabelButton> browser_label = make_passive("Browser behavior");\n    aura::StylePassiveLabel(browser_label, true);\n')
+          for anchor in [
+              '    home_page_field_->SetPlaceholderText("Startup home page URL");\n',
+              '    search_provider_field_->SetPlaceholderText("Search provider name");\n',
+              '    search_url_field_->SetPlaceholderText("Search URL template, e.g. https://duckduckgo.com/?q=%s");\n',
+              '    downloads_directory_field_->SetPlaceholderText("Downloads directory (empty = Openbrowser default)");\n',
+          ]:
+              var = {
+                  '    home_page_field_->SetPlaceholderText("Startup home page URL");\n': 'home_page_field_',
+                  '    search_provider_field_->SetPlaceholderText("Search provider name");\n': 'search_provider_field_',
+                  '    search_url_field_->SetPlaceholderText("Search URL template, e.g. https://duckduckgo.com/?q=%s");\n': 'search_url_field_',
+                  '    downloads_directory_field_->SetPlaceholderText("Downloads directory (empty = Openbrowser default)");\n': 'downloads_directory_field_',
+              }[anchor]
+              r(p, anchor, anchor + f'    aura::StyleTextField({var});\n')
+          r(p, '    status_label_ = make_passive("Settings are stored locally");\n',
+               '    status_label_ = make_passive("Settings are stored locally");\n    aura::StylePassiveLabel(status_label_, false, true);\n')
+
+          # Downloads.
+          p = "apps/desktop/downloads_panel.cpp"
+          r(p, '#include "deferred_ui_action.h"\n', '#include "deferred_ui_action.h"\n#include "aura_design_tokens.h"\n')
+          r(p,
+            "    settings.between_child_spacing = 4;\n"
+            "    settings.inside_border_horizontal_spacing = 10;\n"
+            "    settings.inside_border_vertical_spacing = 6;",
+            "    settings.between_child_spacing = aura::kPanelGap;\n"
+            "    settings.inside_border_horizontal_spacing = aura::kPanelPadding;\n"
+            "    settings.inside_border_vertical_spacing = aura::kPanelPadding;")
+          r(p, '    layout_ = panel_->SetToBoxLayout(settings);\n',
+               '    layout_ = panel_->SetToBoxLayout(settings);\n    aura::StyleSurface(panel_, aura::kSurface);\n')
+          r(p, '    list_layout_ = list_panel_->SetToBoxLayout(list_settings);\n',
+               '    list_layout_ = list_panel_->SetToBoxLayout(list_settings);\n    aura::StyleSurface(list_panel_, aura::kSurface);\n')
+          r(p, '    auto title_btn = CefLabelButton::CreateLabelButton(nullptr, "Downloads & Transfers");\n',
+               '    auto title_btn = CefLabelButton::CreateLabelButton(nullptr, "Downloads");\n    aura::StylePassiveLabel(title_btn, true);\n')
+          r(p, '    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "[Close]");\n',
+               '    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "Close");\n    aura::StyleButton(close_btn);\n')
+          r(p, '        auto empty_label = CefLabelButton::CreateLabelButton(nullptr, "No active or recent downloads.");\n',
+               '        auto empty_label = CefLabelButton::CreateLabelButton(nullptr, "No active or recent downloads.");\n        aura::StylePassiveLabel(empty_label, false, true);\n')
+          r(p, '            auto row = CefPanel::CreatePanel(nullptr);\n',
+               '            auto row = CefPanel::CreatePanel(nullptr);\n            aura::StyleSurface(row, aura::kChromeSurface);\n')
+          r(p, '            auto item_label = CefLabelButton::CreateLabelButton(nullptr, oss.str());\n',
+               '            auto item_label = CefLabelButton::CreateLabelButton(nullptr, oss.str());\n            aura::StylePassiveLabel(item_label);\n')
+          for old, new in [
+              ('                auto pause_btn = CefLabelButton::CreateLabelButton(pause_delegate, "[Pause]");\n', '                auto pause_btn = CefLabelButton::CreateLabelButton(pause_delegate, "Pause");\n                aura::StyleButton(pause_btn);\n'),
+              ('                auto resume_btn = CefLabelButton::CreateLabelButton(resume_delegate, "[Resume]");\n', '                auto resume_btn = CefLabelButton::CreateLabelButton(resume_delegate, "Resume");\n                aura::StyleButton(resume_btn, true);\n'),
+              ('                    auto open_btn = CefLabelButton::CreateLabelButton(open_delegate, "[Open]");\n', '                    auto open_btn = CefLabelButton::CreateLabelButton(open_delegate, "Open");\n                    aura::StyleButton(open_btn, true);\n'),
+              ('                auto folder_btn = CefLabelButton::CreateLabelButton(folder_delegate, "[Show Folder]");\n', '                auto folder_btn = CefLabelButton::CreateLabelButton(folder_delegate, "Show folder");\n                aura::StyleButton(folder_btn);\n'),
+          ]:
+              r(p, old, new)
+          # Cancel occurs in two state branches; style both without changing action flow.
+          text = Path(p).read_text(encoding="utf-8")
+          old = '                auto cancel_btn = CefLabelButton::CreateLabelButton(cancel_delegate, "[Cancel]");\n'
+          if text.count(old) != 2:
+              raise SystemExit(f"Expected two Cancel buttons in {p}")
+          text = text.replace(old, '                auto cancel_btn = CefLabelButton::CreateLabelButton(cancel_delegate, "Cancel");\n                aura::StyleButton(cancel_btn);\n')
+          Path(p).write_text(text, encoding="utf-8")
+
+          # Library.
+          p = "apps/desktop/library_panel.cpp"
+          r(p, '#include "core/session/browser_session.h"\n', '#include "aura_design_tokens.h"\n#include "core/session/browser_session.h"\n')
+          r(p, '    settings.between_child_spacing = 6;\n', '    settings.between_child_spacing = aura::kSpace6;\n')
+          r(p,
+            "    panel_settings.between_child_spacing = 6;\n"
+            "    panel_settings.inside_border_horizontal_spacing = 10;\n"
+            "    panel_settings.inside_border_vertical_spacing = 8;",
+            "    panel_settings.between_child_spacing = aura::kPanelGap;\n"
+            "    panel_settings.inside_border_horizontal_spacing = aura::kPanelPadding;\n"
+            "    panel_settings.inside_border_vertical_spacing = aura::kPanelPadding;")
+          r(p, '    layout_ = panel_->SetToBoxLayout(panel_settings);\n',
+               '    layout_ = panel_->SetToBoxLayout(panel_settings);\n    aura::StyleSurface(panel_, aura::kSurface);\n')
+          r(p, '    CefRefPtr<CefLabelButton> title = MakeLabel("Library", static_delegates_);\n',
+               '    CefRefPtr<CefLabelButton> title = MakeLabel("Library", static_delegates_);\n    aura::StylePassiveLabel(title, true);\n')
+          r(p, '    body_layout_ = body_->SetToBoxLayout(body_settings);\n',
+               '    body_layout_ = body_->SetToBoxLayout(body_settings);\n    aura::StyleSurface(body_, aura::kSurface);\n')
+          r(p,
+            "    owner.push_back(delegate);\n"
+            "    return CefLabelButton::CreateLabelButton(delegate, text);",
+            "    owner.push_back(delegate);\n"
+            "    auto button = CefLabelButton::CreateLabelButton(delegate, text);\n"
+            "    aura::StyleButton(button);\n"
+            "    return button;")
+          r(p, '    label->SetEnabled(false);\n    return label;\n',
+               '    label->SetEnabled(false);\n    aura::StylePassiveLabel(label);\n    return label;\n')
+          r(p,
+            '        history_button_->SetText(section_ == Section::History ? "History *" : "History");\n',
+            '        history_button_->SetText("History");\n        aura::StyleButton(history_button_, section_ == Section::History);\n')
+          r(p,
+            '        bookmarks_button_->SetText(section_ == Section::Bookmarks ? "Bookmarks *" : "Bookmarks");\n',
+            '        bookmarks_button_->SetText("Bookmarks");\n        aura::StyleButton(bookmarks_button_, section_ == Section::Bookmarks);\n')
+
+          # Focus drawer.
+          p = "apps/desktop/focus_sidebar.cpp"
+          r(p, '#include "core/session/browser_session.h"\n', '#include "aura_design_tokens.h"\n#include "core/session/browser_session.h"\n')
+          r(p,
+            "    settings.between_child_spacing = 4;\n"
+            "    settings.inside_border_horizontal_spacing = 6;\n"
+            "    settings.inside_border_vertical_spacing = 6;",
+            "    settings.between_child_spacing = aura::kPanelGap;\n"
+            "    settings.inside_border_horizontal_spacing = aura::kPanelPadding;\n"
+            "    settings.inside_border_vertical_spacing = aura::kPanelPadding;")
+          r(p, '    layout_ = panel_->SetToBoxLayout(settings);\n',
+               '    layout_ = panel_->SetToBoxLayout(settings);\n    aura::StyleSurface(panel_, aura::kSurface);\n')
+          r(p, '    title_btn->SetEnabled(false);\n',
+               '    title_btn->SetEnabled(false);\n    aura::StylePassiveLabel(title_btn, true);\n')
+          r(p, '    auto sprint_layout = sprint_panel->SetToBoxLayout(sprint_settings);\n',
+               '    auto sprint_layout = sprint_panel->SetToBoxLayout(sprint_settings);\n    aura::StyleSurface(sprint_panel, aura::kSurfaceRaised);\n')
+          r(p, '    state_btn->SetEnabled(false);\n',
+               '    state_btn->SetEnabled(false);\n    aura::StylePassiveLabel(state_btn);\n')
+          r(p, '    timer_btn->SetEnabled(false);\n',
+               '    timer_btn->SetEnabled(false);\n    aura::StylePassiveLabel(timer_btn, true);\n')
+          r(p, '    metrics_btn->SetEnabled(false);\n',
+               '    metrics_btn->SetEnabled(false);\n    aura::StylePassiveLabel(metrics_btn, false, true);\n')
+          r(p, '        empty_btn->SetEnabled(false);\n',
+               '        empty_btn->SetEnabled(false);\n        aura::StylePassiveLabel(empty_btn, false, true);\n')
+          r(p, '        auto item_panel = CefPanel::CreatePanel(nullptr);\n',
+               '        auto item_panel = CefPanel::CreatePanel(nullptr);\n        aura::StyleSurface(item_panel, aura::kChromeSurface);\n')
+          r(p, '        auto activate_btn = CefLabelButton::CreateLabelButton(activate_delegate, item_label);\n',
+               '        auto activate_btn = CefLabelButton::CreateLabelButton(activate_delegate, item_label);\n        aura::StyleButton(activate_btn, item.state == core::FocusState::Now);\n')
+
+          # Find bar.
+          p = "apps/desktop/find_bar.cpp"
+          r(p, '#include "core/session/browser_session.h"\n', '#include "aura_design_tokens.h"\n#include "core/session/browser_session.h"\n')
+          r(p,
+            "    settings.between_child_spacing = 5;\n"
+            "    settings.inside_border_horizontal_spacing = 8;\n"
+            "    settings.inside_border_vertical_spacing = 4;",
+            "    settings.between_child_spacing = aura::kSpace6;\n"
+            "    settings.inside_border_horizontal_spacing = aura::kSpace12;\n"
+            "    settings.inside_border_vertical_spacing = aura::kSpace6;")
+          r(p, '    layout_ = panel_->SetToBoxLayout(settings);\n',
+               '    layout_ = panel_->SetToBoxLayout(settings);\n    aura::StyleSurface(panel_, aura::kSurfaceRaised);\n')
+          r(p, '    search_field_->SetAccessibleName("Find in page");\n',
+               '    search_field_->SetAccessibleName("Find in page");\n    aura::StyleTextField(search_field_, true);\n')
+          r(p, '    result_label_->SetEnabled(false);\n',
+               '    result_label_->SetEnabled(false);\n    aura::StylePassiveLabel(result_label_, false, true);\n')
+          r(p, '    ConfigureIconButton(previous, IconId::Previous, "", "Previous match", "Previous match");\n',
+               '    ConfigureIconButton(previous, IconId::Previous, "", "Previous match", "Previous match");\n    aura::StyleIconButton(previous);\n')
+          r(p, '    ConfigureIconButton(next, IconId::Next, "", "Next match", "Next match");\n',
+               '    ConfigureIconButton(next, IconId::Next, "", "Next match", "Next match");\n    aura::StyleIconButton(next);\n')
+          r(p, '    ConfigureIconButton(close, IconId::Close, "", "Close find bar", "Close find bar");\n',
+               '    ConfigureIconButton(close, IconId::Close, "", "Close find bar", "Close find bar");\n    aura::StyleIconButton(close);\n')
+
+          # Bookmarks bar.
+          p = "apps/desktop/bookmarks_bar.cpp"
+          r(p, '#include "core/session/browser_session.h"\n', '#include "aura_design_tokens.h"\n#include "core/session/browser_session.h"\n')
+          r(p,
+            "    settings.between_child_spacing = 4;\n"
+            "    settings.inside_border_horizontal_spacing = 8;\n"
+            "    settings.inside_border_vertical_spacing = 2;",
+            "    settings.between_child_spacing = aura::kSpace6;\n"
+            "    settings.inside_border_horizontal_spacing = aura::kSpace12;\n"
+            "    settings.inside_border_vertical_spacing = aura::kSpace4;")
+          r(p, '    layout_ = panel_->SetToBoxLayout(settings);\n',
+               '    layout_ = panel_->SetToBoxLayout(settings);\n    aura::StyleSurface(panel_, aura::kChromeSurface);\n')
+          r(p,
+            '        add_button_, IconId::Bookmark, "Add bookmark", "Add bookmark", "Bookmark the current page");\n',
+            '        add_button_, IconId::Bookmark, "Add bookmark", "Add bookmark", "Bookmark the current page");\n    aura::StyleButton(add_button_);\n')
+          r(p,
+            '            btn, IconId::Bookmark, display_title, "Open bookmark " + display_title, "Open bookmark");\n',
+            '            btn, IconId::Bookmark, display_title, "Open bookmark " + display_title, "Open bookmark");\n        aura::StyleButton(btn, false, true);\n')
+
+          # Network Lab shell, filter controls and section tabs.
+          p = "apps/desktop/network_lab_panel.cpp"
+          r(p, '#include "core/network/network_filter_query.h"\n', '#include "aura_design_tokens.h"\n#include "core/network/network_filter_query.h"\n')
+          r(p,
+            "    settings.between_child_spacing = 2;\n"
+            "    settings.inside_border_horizontal_spacing = 6;\n"
+            "    settings.inside_border_vertical_spacing = 4;",
+            "    settings.between_child_spacing = aura::kSpace6;\n"
+            "    settings.inside_border_horizontal_spacing = aura::kPanelPadding;\n"
+            "    settings.inside_border_vertical_spacing = aura::kSpace10;")
+          r(p, '    layout_ = panel_->SetToBoxLayout(settings);\n',
+               '    layout_ = panel_->SetToBoxLayout(settings);\n    aura::StyleSurface(panel_, aura::kCanvas);\n')
+          r(p, '    auto tool_layout = toolbar->SetToBoxLayout(tool_settings);\n',
+               '    auto tool_layout = toolbar->SetToBoxLayout(tool_settings);\n    aura::StyleSurface(toolbar, aura::kSurfaceRaised);\n')
+          r(p, '        nullptr, "Network Lab (" + std::to_string(requests.size()) + " reqs)");\n',
+               '        nullptr, "Network Lab · " + std::to_string(requests.size()) + " requests");\n    aura::StylePassiveLabel(title_btn, true);\n')
+          r(p, '        scope_delegate, filter_active_tab_ ? "[Scope: Tab]" : "[Scope: All]");\n',
+               '        scope_delegate, filter_active_tab_ ? "Scope: Tab" : "Scope: All");\n    aura::StyleButton(scope_btn, filter_active_tab_);\n')
+          r(p, '    auto method_btn = CefLabelButton::CreateLabelButton(method_delegate, "[Method: " + method_filter_ + "]");\n',
+               '    auto method_btn = CefLabelButton::CreateLabelButton(method_delegate, "Method: " + method_filter_);\n    aura::StyleButton(method_btn, method_filter_ != "ALL");\n')
+          r(p, '    auto status_btn = CefLabelButton::CreateLabelButton(status_delegate, "[Status: " + status_filter_ + "]");\n',
+               '    auto status_btn = CefLabelButton::CreateLabelButton(status_delegate, "Status: " + status_filter_);\n    aura::StyleButton(status_btn, status_filter_ != "ALL");\n')
+          r(p, '    auto clear_btn = CefLabelButton::CreateLabelButton(clear_delegate, "Clear");\n',
+               '    auto clear_btn = CefLabelButton::CreateLabelButton(clear_delegate, "Clear");\n    aura::StyleButton(clear_btn);\n')
+          r(p, '    query_field_->SetText(structured_query_);\n',
+               '    query_field_->SetText(structured_query_);\n    query_field_->SetAccessibleName("Network request filter");\n    aura::StyleTextField(query_field_, true);\n')
+          r(p,
+            '        nullptr, "Method/Status | Host | URL | Size | Observed | Blocked | Attribution");\n',
+            '        nullptr, "Method / Status     Host     URL     Size     Time     Filter     Attribution");\n    aura::StylePassiveLabel(columns, false, true);\n')
+          r(p, '        auto empty_btn = CefLabelButton::CreateLabelButton(nullptr, "No requests match active filters.");\n',
+               '        auto empty_btn = CefLabelButton::CreateLabelButton(nullptr, "No requests match active filters.");\n        aura::StylePassiveLabel(empty_btn, false, true);\n')
+          r(p, '            auto row = CefPanel::CreatePanel(nullptr);\n',
+               '            auto row = CefPanel::CreatePanel(nullptr);\n            aura::StyleSurface(row, aura::kChromeSurface);\n')
+          r(p, '    auto tab_layout = tab_bar->SetToBoxLayout(settings);\n',
+               '    auto tab_layout = tab_bar->SetToBoxLayout(settings);\n    aura::StyleSurface(tab_bar, aura::kSurfaceRaised);\n')
+          r(p,
+            '        req_delegate, active_tab_ == ActiveTab::Requests ? "[Requests]" : "Requests");\n',
+            '        req_delegate, "Requests");\n    aura::StyleButton(req_btn, active_tab_ == ActiveTab::Requests);\n')
+          r(p,
+            '        conn_delegate, active_tab_ == ActiveTab::Connections ? "[Connections]" : "Connections");\n',
+            '        conn_delegate, "Connections");\n    aura::StyleButton(conn_btn, active_tab_ == ActiveTab::Connections);\n')
+          r(p,
+            '        dec_delegate, active_tab_ == ActiveTab::Decisions ? "[Decisions]" : "Decisions");\n',
+            '        dec_delegate, "Decisions");\n    aura::StyleButton(dec_btn, active_tab_ == ActiveTab::Decisions);\n')
+          r(p, '    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "x");\n',
+               '    auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "Close");\n    aura::StyleButton(close_btn);\n')
+
+      - name: Validate panel patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          grep -F 'aura::StyleSurface(panel_, aura::kSurface);' apps/desktop/settings_panel.cpp
+          grep -F 'auto close_btn = CefLabelButton::CreateLabelButton(close_delegate, "Close");' apps/desktop/downloads_panel.cpp
+          grep -F 'aura::StyleButton(history_button_, section_ == Section::History);' apps/desktop/library_panel.cpp
+          grep -F 'aura::StylePassiveLabel(title_btn, true);' apps/desktop/focus_sidebar.cpp
+          grep -F 'aura::StyleTextField(search_field_, true);' apps/desktop/find_bar.cpp
+          grep -F 'aura::StyleSurface(panel_, aura::kChromeSurface);' apps/desktop/bookmarks_bar.cpp
+          grep -F 'aura::StyleButton(req_btn, active_tab_ == ActiveTab::Requests);' apps/desktop/network_lab_panel.cpp
+
+      - name: Commit panel polish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/desktop/settings_panel.cpp apps/desktop/downloads_panel.cpp \
+            apps/desktop/library_panel.cpp apps/desktop/focus_sidebar.cpp \
+            apps/desktop/find_bar.cpp apps/desktop/bookmarks_bar.cpp \
+            apps/desktop/network_lab_panel.cpp
+          git diff --cached --check
+          git commit -m "feat(design): unify Aura panels and utility surfaces [aura-panels]"
+          git push origin HEAD:design/aura-full-visual-polish
