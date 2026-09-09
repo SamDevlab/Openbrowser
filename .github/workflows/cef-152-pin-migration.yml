@@ -68,28 +68,6 @@ jobs:
           if missing:
               raise SystemExit(f"Expected pin replacements missing in: {missing}")
 
-          # Update version-specific reference hashes that were already derived
-          # from the official archives in the review lane.
-          replacements = {
-              Path("docs/m8.1-real-browser-differential.md"): {
-                  "714f4b9d17cb82a41ee10734dde15fd8c27c08b3229ce799c0c6a7dcc7730e1e":
-                      "296be51c38ffd882fdff3af76817510a0894a2aa0d8274694f5cb802f8589b93",
-              },
-              Path("docs/m8.2-wpt-smoke.md"): {
-                  "f2c1d48c310a2fc79aad59e985103902f27b70fd186b3f663ee67c4c722f5566":
-                      "ecae8b71d4890cf5f32577ab5ea1b3840c2b5e05f51490b1666674cf1f5b0c37",
-                  "5f956ac30d5c78453f5eb578fea14cb09caf62bb05141429be43af0b0c9922f8":
-                      "6871c2e3d3e8b56736f066b9d22f19a04e1ac4360d15e6555a76af5f4083b68a",
-              },
-          }
-          for path, mapping in replacements.items():
-              text = path.read_text(encoding="utf-8")
-              for old, new in mapping.items():
-                  if old not in text:
-                      raise SystemExit(f"Expected hash {old} missing in {path}")
-                  text = text.replace(old, new)
-              path.write_text(text, encoding="utf-8")
-
           print("Updated engine pins in:")
           for path in changed:
               print(f"- {path}")
