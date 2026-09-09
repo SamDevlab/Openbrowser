@@ -16,6 +16,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -80,6 +81,25 @@ private:
     IMPLEMENT_REFCOUNTING(PassiveButtonDelegate);
 };
 
+class DeferredUiTask final : public CefTask {
+public:
+    explicit DeferredUiTask(std::function<void()> callback)
+        : callback_(std::move(callback)) {}
+
+    void Execute() override {
+        CEF_REQUIRE_UI_THREAD();
+        if (callback_) {
+            callback_();
+            callback_ = nullptr;
+        }
+    }
+
+private:
+    std::function<void()> callback_;
+
+    IMPLEMENT_REFCOUNTING(DeferredUiTask);
+};
+
 }  // namespace
 
 void ApplyGlobalAuraSidebarState(const std::string_view state) {
@@ -124,7 +144,23 @@ public:
 
     void OnButtonPressed(CefRefPtr<CefButton> /*button*/) override {
         CEF_REQUIRE_UI_THREAD();
-        sidebar_.HandleAction(action_, target_id_);
+
+        // Several Aura actions rebuild the sidebar as part of state/feedback
+        // updates. Defer dispatch until this native button callback returns so
+        // the currently dispatching CefLabelButton/delegate cannot be removed
+        // from the view tree while CEF is still processing its press event.
+        AuraSidebar* sidebar = &sidebar_;
+        std::weak_ptr<bool> alive_token = sidebar_.alive_token_;
+        const Action action = action_;
+        const std::string target_id = target_id_;
+        CefPostTask(
+            TID_UI,
+            new DeferredUiTask([sidebar, alive_token, action, target_id]() {
+                const auto alive = alive_token.lock();
+                if (alive && *alive && sidebar != nullptr) {
+                    sidebar->HandleAction(action, target_id);
+                }
+            }));
     }
 
 private:
@@ -270,40 +306,40 @@ void AuraSidebar::HandleAction(const Action action, const std::string& target_id
             Refresh();
             return;
         case Action::ToggleFocus:
-            ShowTransientFeedback("Focus");
             if (on_toggle_focus_) {
                 on_toggle_focus_();
             }
+            ShowTransientFeedback("Focus");
             return;
         case Action::ToggleLibrary:
-            ShowTransientFeedback("History & Bookmarks");
             if (on_toggle_library_) {
                 on_toggle_library_();
             }
+            ShowTransientFeedback("History & Bookmarks");
             return;
         case Action::ToggleDownloads:
-            ShowTransientFeedback("Downloads");
             if (on_toggle_downloads_) {
                 on_toggle_downloads_();
             }
+            ShowTransientFeedback("Downloads");
             return;
         case Action::ToggleSettings:
-            ShowTransientFeedback("Settings");
             if (on_toggle_settings_) {
                 on_toggle_settings_();
             }
+            ShowTransientFeedback("Settings");
             return;
         case Action::ToggleNetworkLab:
-            ShowTransientFeedback("Network Lab");
             if (on_toggle_network_lab_) {
                 on_toggle_network_lab_();
             }
+            ShowTransientFeedback("Network Lab");
             return;
         case Action::ToggleCommands:
-            ShowTransientFeedback("Commands");
             if (on_toggle_commands_) {
                 on_toggle_commands_();
             }
+            ShowTransientFeedback("Commands");
             return;
         case Action::Hide:
             SetVisible(false);
