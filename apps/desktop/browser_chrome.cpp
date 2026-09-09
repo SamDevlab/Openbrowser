@@ -144,7 +144,6 @@ BrowserChrome::BrowserChrome(
     address_bar_ = CefTextfield::CreateTextfield(address_delegate_);
     address_bar_->SetPlaceholderText("Search or enter an address");
     address_bar_->SetAccessibleName("Address and search bar");
-    address_bar_->SetMinimumSize(CefSize(320, aura::kOmniboxHeight));
     aura::StyleTextField(address_bar_, true);
     bookmarks_button_ = CefLabelButton::CreateLabelButton(
         make_delegate(ChromeAction::ToggleBookmarksBar), "");
